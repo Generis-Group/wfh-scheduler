@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 
-import { DailyReportApp } from "@/components/reports/daily-report-app";
+import { ReviewerDashboard } from "@/components/reports/reviewer-dashboard";
 import { auth } from "@/lib/auth";
 import { todayDateString } from "@/lib/dates";
 import { serialize } from "@/lib/serializers";
-import { getDailyReport } from "@/lib/services/reports";
+import { getDashboardMetrics, listReportsForDate } from "@/lib/services/reports";
 
-export default async function HomePage({
+export default async function ReviewPage({
   searchParams
 }: {
   searchParams?: {
@@ -27,23 +27,20 @@ export default async function HomePage({
     redirect("/change-password");
   }
 
-  if (session.user.role === "REVIEWER" || session.user.role === "ADMIN") {
-    redirect("/review");
+  if (session.user.role !== "REVIEWER" && session.user.role !== "ADMIN") {
+    redirect("/");
   }
 
   const date = searchParams?.date ?? todayDateString(session.user.timezone);
-  const report = await getDailyReport(session.user.id, date);
-
-  if (!report) {
-    throw new Error("Unable to create daily report.");
-  }
+  const [rows, metrics] = await Promise.all([listReportsForDate(date), getDashboardMetrics(date)]);
 
   return (
-    <DailyReportApp
-      initialReport={serialize(report)}
+    <ReviewerDashboard
+      rows={serialize(rows)}
+      metrics={serialize(metrics)}
       date={date}
       userName={session.user.name ?? session.user.email}
-      userRole="Employee"
+      userRole={session.user.role === "ADMIN" ? "Admin" : "Reviewer"}
     />
   );
 }

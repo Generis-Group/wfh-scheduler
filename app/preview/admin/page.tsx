@@ -1,5 +1,6 @@
-import { CooDashboard } from "@/components/reports/coo-dashboard";
+import { ReviewerDashboard } from "@/components/reports/reviewer-dashboard";
 import { todayDateString } from "@/lib/dates";
+import { requirePreviewBypass } from "@/lib/preview";
 
 function isoWithHour(date: string, hour: number) {
   return `${date}T${String(hour).padStart(2, "0")}:15:00.000Z`;
@@ -12,6 +13,8 @@ export default function PreviewAdminPage({
     date?: string;
   };
 }) {
+  requirePreviewBypass();
+
   const date = searchParams?.date ?? todayDateString();
   const nextDay = new Date(`${date}T00:00:00.000Z`);
   nextDay.setUTCDate(nextDay.getUTCDate() + 1);
@@ -68,14 +71,22 @@ export default function PreviewAdminPage({
   ];
 
   return (
-    <CooDashboard
+    <ReviewerDashboard
       isPreview
       rows={rows}
       metrics={{
         users: rows.length,
         submitted: rows.filter((row) => row.report?.status === "SUBMITTED").length,
         blockers: rows.filter((row) => row.report?.blockers).length,
-        sourceMix: []
+        blockerTrend: [
+          { date, count: rows.filter((row) => row.report?.blockers).length }
+        ],
+        sourceMix: [
+          { source: "JIRA", count: 1 },
+          { source: "GOOGLE_CALENDAR", count: 1 },
+          { source: "GOOGLE_TASKS", count: 1 },
+          { source: "MANUAL", count: 1 }
+        ]
       }}
       date={date}
       userName="Admin Preview"

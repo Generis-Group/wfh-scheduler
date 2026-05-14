@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   CalendarDays,
   CheckCircle2,
@@ -55,8 +56,12 @@ type Metrics = {
   users: number;
   submitted: number;
   blockers: number;
+  blockerTrend: Array<{ date: string; count: number }>;
   sourceMix: Array<{ source: string; count: number }>;
 };
+
+const rowsPerPage = 25;
+const sourceColors = ["#2563eb", "#16a34a", "#f59e0b", "#8b5cf6"];
 
 function toDate(value?: string | Date | null) {
   if (!value) {
@@ -206,7 +211,7 @@ function StatCard({
   );
 }
 
-export function CooDashboard({
+export function ReviewerDashboard({
   rows,
   metrics,
   date,
@@ -226,26 +231,84 @@ export function CooDashboard({
   const [commentBody, setCommentBody] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const selected = items.find((row) => row.user.id === selectedId) ?? items[0] ?? null;
-  const total = metrics.users || items.length;
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [locationFilter, setLocationFilter] = useState("ALL");
+  const [page, setPage] = useState(1);
+  const filteredItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return items.filter((row) => {
+      const status = reportStatus(row, date);
+      const location = row.report?.workLocation ?? "MISSING";
+      const employee = `${row.user.name ?? ""} ${row.user.email ?? ""}`.toLowerCase();
+      const matchesSearch = !query || employee.includes(query);
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        (statusFilter === "MISSING" && !row.report) ||
+        (statusFilter === "SUBMITTED" && row.report?.status === "SUBMITTED" && !status.includes("Late") && !status.includes("Edited")) ||
+        (statusFilter === "DRAFT" && row.report?.status === "DRAFT") ||
+        (statusFilter === "LATE" && status.includes("Late")) ||
+        (statusFilter === "EDITED" && status.includes("Edited"));
+      const matchesLocation = locationFilter === "ALL" || location === locationFilter;
+
+      return matchesSearch && matchesStatus && matchesLocation;
+    });
+  }, [date, items, locationFilter, search, statusFilter]);
+  const pageCount = Math.max(1, Math.ceil(filteredItems.length / rowsPerPage));
+  const currentPage = Math.min(page, pageCount);
+  const pageItems = filteredItems.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  const selected = filteredItems.find((row) => row.user.id === selectedId) ?? filteredItems[0] ?? null;
+  const total = filteredItems.length;
 
   const counts = useMemo(() => {
-    const submitted = items.filter((row) => row.report?.status === "SUBMITTED").length;
-    const missing = items.filter((row) => !row.report).length;
-    const late = items.filter((row) => isLate(row.report, date) && !editedAfterDate(row.report, date)).length;
-    const edited = items.filter((row) => editedAfterDate(row.report, date)).length;
-    const blockers = items.filter((row) => hasBlockers(row.report)).length;
+    const submitted = filteredItems.filter((row) => row.report?.status === "SUBMITTED").length;
+    const missing = filteredItems.filter((row) => !row.report).length;
+    const late = filteredItems.filter((row) => isLate(row.report, date) && !editedAfterDate(row.report, date)).length;
+    const edited = filteredItems.filter((row) => editedAfterDate(row.report, date)).length;
+    const blockers = filteredItems.filter((row) => hasBlockers(row.report)).length;
 
     return {
-      submitted: metrics.submitted || submitted,
+      submitted,
       missing,
       late,
       edited,
-      blockers: metrics.blockers || blockers
+      blockers
     };
-  }, [date, items, metrics.blockers, metrics.submitted]);
+  }, [date, filteredItems]);
 
   const coverage = total ? Math.round((counts.submitted / total) * 100) : 0;
+  const sourceMix = metrics.sourceMix.length ? metrics.sourceMix : [{ source: "No activity", count: 1 }];
+  const blockerTrend = metrics.blockerTrend ?? [];
+
+  function exportCsv() {
+    const rows = filteredItems.map((row) => ({
+      employee: row.user.name ?? row.user.email ?? "Unassigned employee",
+      date: formatShortDate(row.report?.reportDate ?? date),
+      status: reportStatus(row, date),
+      workLocation: row.report ? titleCase(row.report.workLocation) : "",
+      submittedAt: formatTimestamp(row.report?.submittedAt),
+      lastEdited: formatTimestamp(row.report?.updatedAt),
+      blockers: hasBlockers(row.report) ? "Yes" : "No",
+      activities: row.report?.activities.filter((activity) => activity.selected).length ?? 0
+    }));
+    const headers = ["employee", "date", "status", "workLocation", "submittedAt", "lastEdited", "blockers", "activities"];
+    const csv = [
+      headers.join(","),
+      ...rows.map((row) =>
+        headers
+          .map((header) => `"${String(row[header as keyof typeof row]).replace(/"/g, '""')}"`)
+          .join(",")
+      )
+    ].join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `generis-reports-${date}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setNotice(`Exported ${rows.length} visible rows.`);
+  }
 
   async function addComment() {
     if (!selected?.report || !commentBody.trim()) {
@@ -297,7 +360,7 @@ export function CooDashboard({
   }
 
   return (
-    <ReferenceAppShell active="coo" variant="admin" userName={userName} userRole={userRole ?? "Reviewer"} preview={isPreview}>
+    <ReferenceAppShell active="review" variant="admin" userName={userName} userRole={userRole ?? "Reviewer"} preview={isPreview}>
       <main className="w-full px-[clamp(16px,2vw,30px)] pb-8 pt-5">
         <ReferencePanel className="mb-5 grid gap-5 p-5 md:grid-cols-[minmax(220px,280px)_minmax(200px,280px)_minmax(200px,280px)_1fr]">
           <div>
@@ -310,7 +373,7 @@ export function CooDashboard({
                 value={dateInputValue(date)}
                 className="h-full border-0 bg-transparent opacity-0"
                 onChange={(event) => {
-                  window.location.href = isPreview ? `/preview/admin?date=${event.target.value}` : `/coo?date=${event.target.value}`;
+                  window.location.href = isPreview ? `/preview/admin?date=${event.target.value}` : `/review?date=${event.target.value}`;
                 }}
                 aria-label="Report date"
               />
@@ -331,26 +394,29 @@ export function CooDashboard({
           <div>
             <div className="mb-2 text-xs font-medium text-[#64748b]">Work Location</div>
             <Select
+              value={locationFilter}
               className="h-10 border-[#d9e1ec]"
-              onChange={() => {
+              onChange={(event) => {
+                setLocationFilter(event.target.value);
+                setPage(1);
                 setFilterOpen(false);
-                setNotice("Work location filtering will apply once live report data is connected.");
+                setNotice(null);
               }}
             >
-              <option>All Locations</option>
-              <option>Office</option>
-              <option>WFH</option>
-              <option>Hybrid</option>
+              <option value="ALL">All Locations</option>
+              <option value="OFFICE">Office</option>
+              <option value="WFH">WFH</option>
+              <option value="HYBRID">Hybrid</option>
+              <option value="PTO">PTO</option>
+              <option value="OUT_OF_OFFICE">Out of office</option>
+              <option value="UNKNOWN">Unspecified</option>
             </Select>
           </div>
           <div className="flex items-end justify-end">
             <Button
               variant="outline"
               className="h-11 border-[#d9e1ec]"
-              onClick={() => {
-                setFilterOpen(false);
-                setNotice("Export will be available once report data is connected.");
-              }}
+              onClick={exportCsv}
             >
               <Download className="mr-2 h-4 w-4" />
               Export
@@ -378,12 +444,72 @@ export function CooDashboard({
           </ReferencePanel>
         </div>
 
+        <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <ReferencePanel className="min-h-[220px] p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-[#0f172a]">Activity Source Mix</h2>
+                <p className="mt-1 text-xs text-[#64748b]">Selected activities by imported source.</p>
+              </div>
+            </div>
+            <div className="h-36">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={sourceMix} dataKey="count" nameKey="source" innerRadius={42} outerRadius={68} paddingAngle={3}>
+                    {sourceMix.map((item, index) => (
+                      <Cell key={item.source} fill={sourceColors[index % sourceColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value, name) => [value, sourceLabel(String(name))]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-3 text-xs text-[#475569]">
+              {metrics.sourceMix.length ? (
+                metrics.sourceMix.map((item, index) => (
+                  <span key={item.source} className="inline-flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: sourceColors[index % sourceColors.length] }} />
+                    {sourceLabel(item.source)} ({item.count})
+                  </span>
+                ))
+              ) : (
+                <span>No selected activity yet.</span>
+              )}
+            </div>
+          </ReferencePanel>
+
+          <ReferencePanel className="min-h-[220px] p-5">
+            <div className="mb-3">
+              <h2 className="text-sm font-semibold text-[#0f172a]">Blocker Trend</h2>
+              <p className="mt-1 text-xs text-[#64748b]">Reports with blockers over the last seven report dates.</p>
+            </div>
+            <div className="h-44">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={blockerTrend}>
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(value) => String(value).slice(5)} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={28} />
+                  <Tooltip labelFormatter={(value) => `Date: ${value}`} />
+                  <Bar dataKey="count" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ReferencePanel>
+        </div>
+
         <div className="grid gap-5 min-[1180px]:grid-cols-[minmax(0,1fr)_400px] min-[1500px]:grid-cols-[minmax(0,1fr)_420px]">
           <ReferencePanel className="overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e2e8f0] p-4">
               <div className="relative w-full max-w-[340px]">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b]" />
-                <Input className="h-10 border-[#d9e1ec] pl-10" placeholder="Search employees..." />
+                <Input
+                  className="h-10 border-[#d9e1ec] pl-10"
+                  placeholder="Search employees..."
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setPage(1);
+                  }}
+                />
               </div>
               <Button
                 variant="outline"
@@ -399,7 +525,38 @@ export function CooDashboard({
             </div>
             {filterOpen || notice ? (
               <div className="border-b border-[#e2e8f0] bg-[#f8fafc] px-4 py-3 text-sm text-[#475569]">
-                {notice ?? "Additional filters are ready to configure once teams, projects, and saved views are connected."}
+                {notice ?? (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="font-medium text-[#334155]">Status</span>
+                    <Select
+                      value={statusFilter}
+                      className="h-9 w-44 border-[#d9e1ec]"
+                      onChange={(event) => {
+                        setStatusFilter(event.target.value);
+                        setPage(1);
+                      }}
+                    >
+                      <option value="ALL">All statuses</option>
+                      <option value="SUBMITTED">Submitted</option>
+                      <option value="DRAFT">Draft</option>
+                      <option value="MISSING">Missing</option>
+                      <option value="LATE">Late</option>
+                      <option value="EDITED">Edited after date</option>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setStatusFilter("ALL");
+                        setLocationFilter("ALL");
+                        setSearch("");
+                        setPage(1);
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : null}
 
@@ -427,14 +584,14 @@ export function CooDashboard({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e2e8f0]">
-                  {items.length === 0 ? (
+                  {filteredItems.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="px-5 py-8">
                         <EmptyReferenceState>No employee reports for this date yet.</EmptyReferenceState>
                       </td>
                     </tr>
                   ) : (
-                    items.map((row) => {
+                    pageItems.map((row) => {
                       const status = reportStatus(row, date);
                       const selectedRow = selected?.user.id === row.user.id;
                       const includedCount = row.report?.activities.filter((activity) => activity.selected).length ?? 0;
@@ -482,25 +639,27 @@ export function CooDashboard({
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e2e8f0] p-4 text-sm text-[#64748b]">
-              <span>Showing {items.length} employees</span>
+              <span>Showing {pageItems.length} of {filteredItems.length} employees</span>
               <div className="flex items-center gap-4">
                 <span>Rows per page:</span>
                 <Select className="h-9 w-20 border-[#d9e1ec]">
                   <option>25</option>
                 </Select>
-                <span>1-{items.length} of {items.length}</span>
+                <span>
+                  {filteredItems.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1}-{Math.min(currentPage * rowsPerPage, filteredItems.length)} of {filteredItems.length}
+                </span>
                 <div className="flex items-center gap-2">
-                  <button aria-label="First page" onClick={() => setNotice("Pagination is ready for larger employee lists.")}>
+                  <button aria-label="First page" onClick={() => setPage(1)} disabled={currentPage === 1}>
                     <ChevronsLeft className="h-4 w-4" />
                   </button>
-                  <button aria-label="Previous page" onClick={() => setNotice("Pagination is ready for larger employee lists.")}>
+                  <button aria-label="Previous page" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1}>
                     <ChevronLeft className="h-4 w-4" />
                   </button>
-                  <span className="flex h-9 w-9 items-center justify-center rounded-[6px] border border-[#93c5fd] text-[#2563eb]">1</span>
-                  <button aria-label="Next page" onClick={() => setNotice("Pagination is ready for larger employee lists.")}>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-[6px] border border-[#93c5fd] text-[#2563eb]">{currentPage}</span>
+                  <button aria-label="Next page" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage === pageCount}>
                     <ChevronRight className="h-4 w-4" />
                   </button>
-                  <button aria-label="Last page" onClick={() => setNotice("Pagination is ready for larger employee lists.")}>
+                  <button aria-label="Last page" onClick={() => setPage(pageCount)} disabled={currentPage === pageCount}>
                     <ChevronsRight className="h-4 w-4" />
                   </button>
                 </div>

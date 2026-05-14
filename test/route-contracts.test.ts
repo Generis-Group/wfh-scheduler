@@ -24,7 +24,7 @@ vi.mock("@/lib/access", () => ({
 vi.mock("@/lib/services/reports", () => ({
   getDailyReport: vi.fn(async () => ({ id: "report-1" })),
   listReportsForDate: vi.fn(async () => []),
-  getDashboardMetrics: vi.fn(async () => ({ users: 1, submitted: 0, blockers: 0, sourceMix: [] })),
+  getDashboardMetrics: vi.fn(async () => ({ users: 1, submitted: 0, blockers: 0, blockerTrend: [], sourceMix: [] })),
   getReportById: vi.fn(async () => ({ id: "report-1", userId: "user-1" })),
   updateReport: vi.fn(async () => ({ id: "report-1" })),
   submitReport: vi.fn(async () => ({ id: "report-1", status: "SUBMITTED" })),
@@ -44,7 +44,8 @@ vi.mock("@/lib/services/sync", () => ({
 vi.mock("@/lib/services/admin", () => ({
   createAppUser: vi.fn(async () => ({ user: { id: "user-2" }, temporaryPassword: "temporary123" })),
   updateAppUser: vi.fn(async () => ({ id: "user-2" })),
-  resetAppUserPassword: vi.fn(async () => ({ user: { id: "user-2" }, temporaryPassword: "temporary456" }))
+  resetAppUserPassword: vi.fn(async () => ({ user: { id: "user-2" }, temporaryPassword: "temporary456" })),
+  changeOwnPassword: vi.fn(async () => ({ id: "user-1" }))
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -102,5 +103,21 @@ describe("route contracts", () => {
     );
 
     expect(response.status).toBe(201);
+  });
+
+  it("changes a temporary credentials password", async () => {
+    const { PATCH } = await import("@/app/api/account/password/route");
+    const response = await PATCH(
+      new Request("http://localhost/api/account/password", {
+        method: "PATCH",
+        body: JSON.stringify({
+          currentPassword: "temporary123",
+          newPassword: "permanent123"
+        })
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true });
   });
 });

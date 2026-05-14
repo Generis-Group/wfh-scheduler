@@ -9,7 +9,7 @@ datasource db {
 
 enum UserRole {
   EMPLOYEE
-  COO
+  REVIEWER
   ADMIN
 }
 

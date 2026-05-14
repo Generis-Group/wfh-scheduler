@@ -11,7 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 
-export function LoginForm({ oauthConfig }: { oauthConfig: OAuthProviderConfig }) {
+export function LoginForm({
+  oauthConfig,
+  previewEnabled
+}: {
+  oauthConfig: OAuthProviderConfig;
+  previewEnabled: boolean;
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +106,7 @@ export function LoginForm({ oauthConfig }: { oauthConfig: OAuthProviderConfig })
             OAuth buttons are enabled after client IDs and secrets are added to `.env.local`.
           </p>
         ) : null}
-        {process.env.NODE_ENV !== "production" ? (
+        {previewEnabled ? (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Button asChild variant="secondary">
               <Link href="/preview/employee">View as Employee</Link>

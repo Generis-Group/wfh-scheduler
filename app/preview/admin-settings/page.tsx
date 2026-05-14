@@ -1,6 +1,9 @@
 import { EmptyReferencePage } from "@/components/reports/empty-reference-page";
+import { requirePreviewBypass } from "@/lib/preview";
 
 export default function PreviewAdminSettingsPage() {
+  requirePreviewBypass();
+
   return (
     <EmptyReferencePage
       preview

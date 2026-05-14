@@ -12,6 +12,14 @@ export default async function AdminPage() {
     redirect("/login");
   }
 
+  if (session.user.status === "DISABLED") {
+    redirect("/api/auth/signout?callbackUrl=/login");
+  }
+
+  if (session.user.mustChangePassword) {
+    redirect("/change-password");
+  }
+
   if (session.user.role !== "ADMIN") {
     redirect("/");
   }

@@ -97,13 +97,13 @@ describe("provider normalizers", () => {
       normalizeCalendarEvent(
         {
           id: "meeting-1",
-          summary: "COO check-in",
+          summary: "Reviewer check-in",
           htmlLink: "https://calendar.google.com/event",
           start: { dateTime: "2026-05-13T09:00:00-04:00" },
           end: { dateTime: "2026-05-13T09:30:00-04:00" },
           attendees: [
             { email: "employee@generis.com", responseStatus: "accepted" },
-            { email: "coo@generis.com", responseStatus: "accepted" }
+            { email: "reviewer@generis.com", responseStatus: "accepted" }
           ]
         },
         "employee@generis.com"

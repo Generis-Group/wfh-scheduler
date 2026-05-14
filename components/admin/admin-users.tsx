@@ -15,7 +15,7 @@ type User = {
   id: string;
   email?: string | null;
   name?: string | null;
-  role: "EMPLOYEE" | "COO" | "ADMIN";
+  role: "EMPLOYEE" | "REVIEWER" | "ADMIN";
   status: "INVITED" | "ACTIVE" | "DISABLED";
   timezone: string;
 };
@@ -134,7 +134,7 @@ export function AdminUsers({
                     <TableCell>
                       <Select value={user.role} onChange={(event) => updateUser(user, { role: event.target.value as User["role"] })}>
                         <option value="EMPLOYEE">Employee</option>
-                        <option value="COO">Reviewer</option>
+                        <option value="REVIEWER">Reviewer</option>
                         <option value="ADMIN">Admin</option>
                       </Select>
                     </TableCell>
@@ -181,7 +181,7 @@ export function AdminUsers({
                   <Label htmlFor="role">Role</Label>
                   <Select id="role" value={role} onChange={(event) => setRole(event.target.value as User["role"])}>
                     <option value="EMPLOYEE">Employee</option>
-                    <option value="COO">Reviewer</option>
+                    <option value="REVIEWER">Reviewer</option>
                     <option value="ADMIN">Admin</option>
                   </Select>
                 </div>

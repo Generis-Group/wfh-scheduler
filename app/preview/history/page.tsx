@@ -1,6 +1,9 @@
 import { EmptyReferencePage } from "@/components/reports/empty-reference-page";
+import { requirePreviewBypass } from "@/lib/preview";
 
 export default function PreviewHistoryPage() {
+  requirePreviewBypass();
+
   return (
     <EmptyReferencePage
       preview

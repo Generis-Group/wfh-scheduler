@@ -44,20 +44,25 @@ export const commentSchema = z.object({
 export const createUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(200).optional(),
-  role: z.enum(["EMPLOYEE", "COO", "ADMIN"]).default("EMPLOYEE"),
+  role: z.enum(["EMPLOYEE", "REVIEWER", "ADMIN"]).default("EMPLOYEE"),
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).default("INVITED"),
   temporaryPassword: z.string().min(8).optional()
 });
 
 export const updateUserSchema = z.object({
   name: z.string().min(1).max(200).nullable().optional(),
-  role: z.enum(["EMPLOYEE", "COO", "ADMIN"]).optional(),
+  role: z.enum(["EMPLOYEE", "REVIEWER", "ADMIN"]).optional(),
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).optional(),
   timezone: z.string().min(1).max(100).optional()
 });
 
 export const resetPasswordSchema = z.object({
   temporaryPassword: z.string().min(8).optional()
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8).max(200)
 });
 
 export const companySettingsSchema = z.object({

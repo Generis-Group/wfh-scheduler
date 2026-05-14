@@ -197,8 +197,28 @@ export async function listReportsForDate(dateString: string) {
   }));
 }
 
+export async function listReportHistory(userId: string, limit = 30) {
+  return prisma.dailyReport.findMany({
+    where: { userId },
+    orderBy: { reportDate: "desc" },
+    take: limit,
+    include: {
+      activities: {
+        where: { selected: true },
+        select: { id: true }
+      },
+      revisions: {
+        include: { editedBy: true },
+        orderBy: { createdAt: "desc" }
+      }
+    }
+  });
+}
+
 export async function getDashboardMetrics(dateString: string) {
   const reportDate = parseReportDate(dateString);
+  const trendStart = new Date(reportDate);
+  trendStart.setUTCDate(trendStart.getUTCDate() - 6);
   const users = await prisma.user.count({ where: { status: { not: "DISABLED" } } });
   const submitted = await prisma.dailyReport.count({ where: { reportDate, status: "SUBMITTED" } });
   const activities = await prisma.activityItem.groupBy({
@@ -212,11 +232,34 @@ export async function getDashboardMetrics(dateString: string) {
       blockers: { not: "" }
     }
   });
+  const blockerTrendRows = await prisma.dailyReport.groupBy({
+    by: ["reportDate"],
+    where: {
+      reportDate: {
+        gte: trendStart,
+        lte: reportDate
+      },
+      blockers: { not: "" }
+    },
+    _count: true
+  });
+  const blockerCounts = new Map(blockerTrendRows.map((row) => [row.reportDate.toISOString().slice(0, 10), row._count]));
+  const blockerTrend = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(trendStart);
+    day.setUTCDate(trendStart.getUTCDate() + index);
+    const date = day.toISOString().slice(0, 10);
+
+    return {
+      date,
+      count: blockerCounts.get(date) ?? 0
+    };
+  });
 
   return {
     users,
     submitted,
     blockers,
+    blockerTrend,
     sourceMix: activities.map((activity) => ({
       source: activity.source,
       count: activity._count

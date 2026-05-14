@@ -64,6 +64,16 @@ function nextDateString(dateString: string) {
   return date.toISOString().slice(0, 10);
 }
 
+async function getJiraProjectFilter() {
+  const setting = await prisma.appSetting.findUnique({ where: { key: "company" } });
+  const value = setting?.value as { jiraProjectKeys?: unknown } | undefined;
+  const keys = Array.isArray(value?.jiraProjectKeys)
+    ? (value.jiraProjectKeys as unknown[]).filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+
+  return keys.map((key) => key.trim().toUpperCase());
+}
+
 async function runSync(
   provider: SyncProvider,
   userId: string,
@@ -121,11 +131,13 @@ export async function syncJira(userId: string, dateString: string, timezone: str
       create: { userId, jiraAccountId: myself.accountId, jiraCloudId: jira.resource.id, googleTaskListIds: [] }
     });
 
+    const projectKeys = await getJiraProjectFilter();
     const jql = `${[
+      projectKeys.length ? `project in (${projectKeys.map((key) => `"${key.replace(/"/g, '\\"')}"`).join(", ")})` : null,
       `updated >= "${dateString}"`,
       `updated < "${nextDateString(dateString)}"`,
       "(assignee = currentUser() OR reporter = currentUser() OR worklogAuthor = currentUser())"
-    ].join(" AND ")} ORDER BY updated ASC`;
+    ].filter(Boolean).join(" AND ")} ORDER BY updated ASC`;
 
     const search = await jira.fetch<JiraSearchResponse>("/rest/api/3/search/jql", {
       method: "POST",

@@ -1,5 +1,6 @@
 import { DailyReportApp } from "@/components/reports/daily-report-app";
 import { todayDateString } from "@/lib/dates";
+import { requirePreviewBypass } from "@/lib/preview";
 
 export default function PreviewEmployeePage({
   searchParams
@@ -8,6 +9,8 @@ export default function PreviewEmployeePage({
     date?: string;
   };
 }) {
+  requirePreviewBypass();
+
   const date = searchParams?.date ?? todayDateString();
   const now = new Date();
 

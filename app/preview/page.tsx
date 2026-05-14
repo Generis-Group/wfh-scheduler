@@ -3,8 +3,11 @@ import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { requirePreviewBypass } from "@/lib/preview";
 
 export default function PreviewPage() {
+  requirePreviewBypass();
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f8fafc] px-6">
       <Card className="w-full max-w-lg border-[#d9e1ec]">

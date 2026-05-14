@@ -1,7 +1,9 @@
 import { google } from "googleapis";
 
+import { encryptSecret } from "@/lib/crypto";
 import { getOptionalEnv } from "@/lib/env";
 import { getProviderAccount } from "@/lib/integrations/provider-accounts";
+import { prisma } from "@/lib/prisma";
 
 export async function getGoogleClient(userId: string) {
   const account = await getProviderAccount(userId, "google");
@@ -14,6 +16,17 @@ export async function getGoogleClient(userId: string) {
     access_token: account.accessToken,
     refresh_token: account.refreshToken ?? undefined,
     expiry_date: account.expires_at ? account.expires_at * 1000 : undefined
+  });
+  client.on("tokens", async (tokens) => {
+    await prisma.account.updateMany({
+      where: { userId, provider: "google" },
+      data: {
+        access_token: encryptSecret(tokens.access_token) ?? undefined,
+        refresh_token: tokens.refresh_token ? encryptSecret(tokens.refresh_token) : undefined,
+        expires_at: tokens.expiry_date ? Math.floor(tokens.expiry_date / 1000) : undefined,
+        id_token: tokens.id_token ? encryptSecret(tokens.id_token) : undefined
+      }
+    });
   });
 
   return client;

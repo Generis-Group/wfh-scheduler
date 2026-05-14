@@ -12,7 +12,7 @@ export async function GET(request: Request) {
       userId: url.searchParams.get("userId") ?? undefined
     });
 
-    if (!query.userId && (session.user.role === "COO" || session.user.role === "ADMIN")) {
+    if (!query.userId && (session.user.role === "REVIEWER" || session.user.role === "ADMIN")) {
       const [reports, metrics] = await Promise.all([
         listReportsForDate(query.date),
         getDashboardMetrics(query.date)

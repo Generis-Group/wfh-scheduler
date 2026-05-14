@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 
-import { EmptyReferencePage } from "@/components/reports/empty-reference-page";
+import { ReportHistory } from "@/components/reports/report-history";
 import { auth } from "@/lib/auth";
+import { serialize } from "@/lib/serializers";
+import { listReportHistory } from "@/lib/services/reports";
 
 export default async function HistoryPage() {
   const session = await auth();
@@ -10,14 +12,25 @@ export default async function HistoryPage() {
     redirect("/login");
   }
 
+  if (session.user.status === "DISABLED") {
+    redirect("/api/auth/signout?callbackUrl=/login");
+  }
+
+  if (session.user.mustChangePassword) {
+    redirect("/change-password");
+  }
+
+  if (session.user.role !== "EMPLOYEE") {
+    redirect("/review");
+  }
+
+  const reports = await listReportHistory(session.user.id);
+
   return (
-    <EmptyReferencePage
-      active="history"
-      variant="employee"
-      title="Report History"
-      description="Past daily reports will appear here once report history is connected."
+    <ReportHistory
+      reports={serialize(reports)}
       userName={session.user.name ?? session.user.email}
-      userRole={session.user.role === "ADMIN" ? "Admin" : session.user.role === "COO" ? "Reviewer" : "Employee"}
+      userRole="Employee"
     />
   );
 }

@@ -11,7 +11,7 @@ type Context = {
 
 export async function POST(request: Request, { params }: Context) {
   try {
-    const session = await requireRole(["COO", "ADMIN"]);
+    const session = await requireRole(["REVIEWER", "ADMIN"]);
     const input = commentSchema.parse(await request.json());
     const report = await addReportComment(params.id, session.user.id, input.body);
 

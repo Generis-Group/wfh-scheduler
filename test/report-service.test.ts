@@ -4,7 +4,7 @@ describe.runIf(process.env.TEST_DATABASE_URL)("report revisions", () => {
   it("keeps a revision when editing an already-submitted report", async () => {
     process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
     const { prisma } = await import("@/lib/prisma");
-    const { getDailyReport, submitReport, updateReport } = await import("@/lib/services/reports");
+    const { getDailyReport, listReportHistory, submitReport, updateReport } = await import("@/lib/services/reports");
 
     const user = await prisma.user.create({
       data: {
@@ -21,8 +21,11 @@ describe.runIf(process.env.TEST_DATABASE_URL)("report revisions", () => {
     await updateReport(report!.id, user.id, { summary: "Initial summary" });
     await submitReport(report!.id, user.id);
     const updated = await updateReport(report!.id, user.id, { summary: "Edited summary" });
+    const history = await listReportHistory(user.id);
 
     expect(updated?.revisions.length).toBeGreaterThan(0);
+    expect(history[0]?.summary).toBe("Edited summary");
+    expect(history[0]?.revisions.length).toBeGreaterThan(0);
 
     await prisma.user.delete({ where: { id: user.id } });
   });

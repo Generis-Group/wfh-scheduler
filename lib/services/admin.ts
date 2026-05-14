@@ -1,10 +1,12 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 
+import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import type { createUserSchema, resetPasswordSchema, updateUserSchema } from "@/lib/validation";
+import type { changePasswordSchema, createUserSchema, resetPasswordSchema, updateUserSchema } from "@/lib/validation";
 import type { z } from "zod";
 
+type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 type CreateUserInput = z.infer<typeof createUserSchema>;
 type UpdateUserInput = z.infer<typeof updateUserSchema>;
 type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
@@ -35,6 +37,31 @@ export async function updateAppUser(userId: string, input: UpdateUserInput) {
   return prisma.user.update({
     where: { id: userId },
     data: input
+  });
+}
+
+export async function changeOwnPassword(userId: string, input: ChangePasswordInput) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+
+  if (!user?.passwordHash) {
+    throw new HttpError(400, "This account does not have a credentials password.");
+  }
+
+  const isValid = await bcrypt.compare(input.currentPassword, user.passwordHash);
+
+  if (!isValid) {
+    throw new HttpError(400, "Current password was not accepted.");
+  }
+
+  const passwordHash = await bcrypt.hash(input.newPassword, 12);
+
+  return prisma.user.update({
+    where: { id: userId },
+    data: {
+      passwordHash,
+      mustChangePassword: false,
+      status: user.status === "INVITED" ? "ACTIVE" : user.status
+    }
   });
 }
 

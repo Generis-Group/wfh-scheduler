@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 import { useState } from "react";
 import type { ElementType, ReactNode } from "react";
 import {
@@ -32,7 +33,7 @@ const employeeNav: NavItem[] = [
 ];
 
 const adminNav: NavItem[] = [
-  { href: "/coo", label: "Review Dashboard", icon: BarChart3, key: "coo" },
+  { href: "/review", label: "Review Dashboard", icon: BarChart3, key: "review" },
   { href: "/admin", label: "Employees", icon: Users, key: "employees" },
   { href: "/settings", label: "Settings", icon: Settings, key: "settings" }
 ];
@@ -140,10 +141,17 @@ export function ReferenceAppShell({
                 </Link>
                 <button
                   className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-sm text-[#94a3b8]"
-                  onClick={() => setProfileNotice(preview ? "Sign out is not connected in the preview shell yet." : "Sign out will be wired into the account menu later.")}
+                  onClick={() => {
+                    if (preview) {
+                      setProfileNotice("Sign out is not connected in the preview shell yet.");
+                      return;
+                    }
+
+                    signOut({ callbackUrl: "/login" });
+                  }}
                 >
                   <LogOut className="h-4 w-4" />
-                  {preview ? "Sign out unavailable in preview" : "Sign out coming soon"}
+                  {preview ? "Sign out unavailable in preview" : "Sign out"}
                 </button>
                 {profileNotice ? <p className="px-3 pb-2 pt-1 text-xs text-[#64748b]">{profileNotice}</p> : null}
               </div>
@@ -187,7 +195,7 @@ function getNavHref(item: NavItem, preview: boolean, variant: "employee" | "admi
     return "/preview/employee";
   }
 
-  if (item.key === "coo") {
+  if (item.key === "review") {
     return "/preview/admin";
   }
 
