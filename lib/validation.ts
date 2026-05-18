@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { generisEmailMessage, isGenerisEmail } from "@/lib/auth-domain";
+
 export const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.");
 
 export const reportQuerySchema = z.object({
@@ -22,6 +24,7 @@ export const updateReportSchema = z.object({
       })
     )
     .optional(),
+  deletedActivityIds: z.array(z.string()).optional(),
   manualActivities: z
     .array(
       z.object({
@@ -37,12 +40,20 @@ export const updateReportSchema = z.object({
     .optional()
 });
 
+export const createReportSchema = updateReportSchema.extend({
+  date: dateStringSchema
+});
+
 export const commentSchema = z.object({
   body: z.string().min(1).max(4000)
 });
 
+export const reportReadStateSchema = z.object({
+  read: z.boolean()
+});
+
 export const createUserSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().refine(isGenerisEmail, generisEmailMessage()),
   name: z.string().min(1).max(200).optional(),
   role: z.enum(["EMPLOYEE", "REVIEWER", "ADMIN"]).default("EMPLOYEE"),
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).default("INVITED"),
@@ -65,8 +76,12 @@ export const changePasswordSchema = z.object({
   newPassword: z.string().min(8).max(200)
 });
 
+export const accountProfileSchema = z.object({
+  name: z.string().max(200).nullable().optional(),
+  timezone: z.string().min(1).max(100)
+});
+
 export const companySettingsSchema = z.object({
-  emailDomains: z.array(z.string().min(1)).default([]),
   jiraProjectKeys: z.array(z.string().min(1)).default([])
 });
 
@@ -78,4 +93,16 @@ export const userIntegrationSettingsSchema = z.object({
 
 export const syncSchema = z.object({
   date: dateStringSchema
+});
+
+export const reviewDigestSchema = z.object({
+  date: dateStringSchema,
+  filters: z
+    .object({
+      groupFilter: z.enum(["EMPLOYEES", "SUBMITTED", "MISSING", "BLOCKERS"]).optional(),
+      statusFilter: z.string().max(100).optional(),
+      locationFilter: z.string().max(100).optional(),
+      search: z.string().max(200).optional()
+    })
+    .optional()
 });

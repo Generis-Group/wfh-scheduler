@@ -52,6 +52,18 @@ enum SyncStatus {
   FAILED
 }
 
+enum EmailRunTrigger {
+  MANUAL
+  SCHEDULED
+}
+
+enum EmailRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+}
+
 model User {
   id                   String                   @id @default(cuid())
   name                 String?
@@ -71,6 +83,7 @@ model User {
   activities           ActivityItem[]
   comments             ReportComment[]          @relation("CommentAuthor")
   revisions            ReportRevision[]         @relation("RevisionEditor")
+  reportReadReceipts   ReportReadReceipt[]      @relation("ReadReceiptReviewer")
   syncRuns             SyncRun[]
   integrationSettings  UserIntegrationSettings?
 }
@@ -136,6 +149,7 @@ model DailyReport {
   activities   ActivityItem[]
   comments     ReportComment[]
   revisions    ReportRevision[]
+  readReceipts ReportReadReceipt[]
 
   @@unique([userId, reportDate])
   @@index([reportDate, status])
@@ -193,6 +207,20 @@ model ReportComment {
   @@index([reportId, createdAt])
 }
 
+model ReportReadReceipt {
+  id         String      @id @default(cuid())
+  reportId   String
+  reviewerId String
+  readAt     DateTime    @default(now())
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  report     DailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  reviewer   User        @relation("ReadReceiptReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, reviewerId])
+  @@index([reviewerId, readAt])
+}
+
 model SyncRun {
   id            String       @id @default(cuid())
   userId        String
@@ -208,6 +236,24 @@ model SyncRun {
   user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, provider, createdAt])
+}
+
+model EmailRun {
+  id                String          @id @default(cuid())
+  reportDate        DateTime        @db.Date
+  trigger           EmailRunTrigger
+  status            EmailRunStatus  @default(RUNNING)
+  recipientEmails   String[]
+  subject           String
+  providerMessageId String?
+  errorMessage      String?         @db.Text
+  filters           Json?
+  dedupeKey         String?         @unique
+  createdAt         DateTime        @default(now())
+  completedAt       DateTime?
+
+  @@index([reportDate, trigger, createdAt])
+  @@index([status, createdAt])
 }
 
 model AppSetting {

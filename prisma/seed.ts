@@ -39,7 +39,6 @@ async function main() {
     create: {
       key: "company",
       value: {
-        emailDomains: ["generis.com"],
         jiraProjectKeys: []
       }
     }

@@ -1,30 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import type { MouseEvent } from "react";
+import { signIn } from "next-auth/react";
 import {
+  Ban,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CircleAlert,
-  Clock3,
+  Copy,
+  Download,
   Edit3,
-  FilePenLine,
-  ListChecks,
-  LockKeyhole,
-  MoreVertical,
+  ExternalLink,
+  Lightbulb,
+  MoreHorizontal,
   PenLine,
-  Plus,
-  Send
+  Save,
+  Send,
+  Sparkles,
+  Trash2
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { EmptyReferenceState, ReferenceAppShell, ReferenceBadge, ReferencePanel } from "@/components/reports/reference-shell";
-import { cn, titleCase } from "@/lib/utils";
+import { EmptyReferenceState, ReferenceAppShell, ReferenceBadge } from "@/components/reports/reference-shell";
+import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
+import type { OAuthProviderConfig } from "@/lib/oauth-config";
+import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
+import { cn } from "@/lib/utils";
 
 type ActivitySource = "JIRA" | "GOOGLE_CALENDAR" | "GOOGLE_TASKS" | "MANUAL";
 
@@ -51,13 +60,14 @@ type Report = {
   submittedAt?: string | Date | null;
   updatedAt?: string | Date | null;
   activities: Activity[];
+  revisions?: Array<{ id: string; createdAt: string | Date }>;
 };
 
-type HistoryItem = {
-  id: string;
-  reportDate: string | Date;
-  status: "DRAFT" | "SUBMITTED" | "MISSING";
-  editedAfterDate?: boolean;
+type WorkLocation = Report["workLocation"];
+
+type IntegrationStatus = {
+  google: boolean;
+  atlassian: boolean;
 };
 
 const sourceLabels: Record<ActivitySource, string> = {
@@ -70,9 +80,24 @@ const sourceLabels: Record<ActivitySource, string> = {
 const sourceStyles: Record<ActivitySource, string> = {
   JIRA: "bg-[#2563eb]",
   GOOGLE_CALENDAR: "bg-[#facc15]",
-  GOOGLE_TASKS: "bg-white border border-[#2563eb]",
-  MANUAL: "bg-white border border-[#2563eb]"
+  GOOGLE_TASKS: "bg-white border border-[#2563eb] dark:bg-[#0b1523]",
+  MANUAL: "bg-white border border-[#2563eb] dark:bg-[#0b1523]"
 };
+
+const syncProviderLabels = {
+  jira: "Jira",
+  "google-calendar": "Calendar",
+  "google-tasks": "Tasks"
+} as const;
+
+const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
+  { value: "UNKNOWN", label: "Unspecified" },
+  { value: "OFFICE", label: "Office" },
+  { value: "WFH", label: "WFH" },
+  { value: "HYBRID", label: "Hybrid" },
+  { value: "PTO", label: "PTO" },
+  { value: "OUT_OF_OFFICE", label: "Out of office" }
+];
 
 function toDate(value?: string | Date | null) {
   if (!value) {
@@ -88,15 +113,11 @@ function toDate(value?: string | Date | null) {
 }
 
 function dateInputValue(value: string | Date) {
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return value;
-  }
-
-  return (toDate(value) ?? new Date()).toISOString().slice(0, 10);
+  return dateOnlyString(value);
 }
 
 function formatReportDate(value: string | Date) {
-  const date = toDate(value) ?? new Date();
+  const date = dateOnlyDisplayDate(value);
   const formatted = new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
@@ -172,77 +193,163 @@ function sourceIcon(source: ActivitySource) {
   return <div className="h-2.5 w-2.5 rotate-45 rounded-[2px] bg-white" />;
 }
 
+function sameActivityState(left: Activity[], right: Activity[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((activity, index) => {
+    const other = right[index];
+    return Boolean(
+      other &&
+        activity.id === other.id &&
+        activity.selected === other.selected &&
+        (activity.employeeNote ?? "") === (other.employeeNote ?? "")
+    );
+  });
+}
+
+function extractBlockerLines(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.match(/^\s*blockers?:\s*(.*)$/i)?.[1])
+    .filter((line): line is string => line !== undefined && line.trim().length > 0)
+    .join("\n");
+}
+
 export function DailyReportApp({
   initialReport,
   date,
   userName,
+  userEmail,
   userRole,
-  history = [],
-  isPreview = false
+  userStatus,
+  timezone,
+  mustChangePassword,
+  isPreview = false,
+  integrationStatus = { google: false, atlassian: false },
+  oauthConfig = { google: true, atlassian: true }
 }: {
   initialReport: Report;
   date: string;
   userName?: string | null;
+  userEmail?: string | null;
   userRole?: string | null;
-  history?: HistoryItem[];
+  userStatus?: string | null;
+  timezone?: string | null;
+  mustChangePassword?: boolean;
   isPreview?: boolean;
+  integrationStatus?: IntegrationStatus;
+  oauthConfig?: OAuthProviderConfig;
 }) {
+  const router = useRouter();
   const [report, setReport] = useState(initialReport);
   const [summary, setSummary] = useState(initialReport.summary);
-  const [blockers, setBlockers] = useState(initialReport.blockers);
-  const [workLocation, setWorkLocation] = useState(initialReport.workLocation);
+  const [workLocation, setWorkLocation] = useState<WorkLocation>(initialReport.workLocation);
   const [activities, setActivities] = useState(initialReport.activities);
-  const [manualTitle, setManualTitle] = useState("");
-  const [manualNote, setManualNote] = useState("");
-  const [showManual, setShowManual] = useState(false);
+  const [deletedActivityIds, setDeletedActivityIds] = useState<string[]>([]);
+  const [openActivityMenu, setOpenActivityMenu] = useState<{ id: string; top: number; left: number } | null>(null);
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
-  const selectedCount = useMemo(() => activities.filter((activity) => activity.selected).length, [activities]);
   const reportDate = dateInputValue(date);
-  const submittedAt = toDate(report.submittedAt);
-  const updatedAt = toDate(report.updatedAt);
-  const dayEnd = new Date(`${reportDate}T23:59:59.999`);
-  const isLate = Boolean(submittedAt && submittedAt > dayEnd);
-  const editedAfterDate = Boolean(updatedAt && updatedAt > dayEnd);
+  const blockers = extractBlockerLines(summary);
+
+  useEffect(() => {
+    setReport(initialReport);
+    setSummary(initialReport.summary);
+    setWorkLocation(initialReport.workLocation);
+    setActivities(initialReport.activities);
+    setDeletedActivityIds([]);
+    setOpenActivityMenu(null);
+    setImportMenuOpen(false);
+    setMessage(null);
+  }, [initialReport, date]);
 
   function setActivity(id: string, patch: Partial<Activity>) {
     setActivities((items) => items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
 
-  function shiftReportDate(days: number) {
-    const nextDate = toDate(reportDate) ?? new Date();
-    nextDate.setDate(nextDate.getDate() + days);
-    const nextValue = nextDate.toISOString().slice(0, 10);
-    window.location.href = isPreview ? `/preview/employee?date=${nextValue}` : `/?date=${nextValue}`;
+  function updateSummary(nextSummary: string) {
+    setSummary(nextSummary);
   }
+
+  function removeActivity(activity: Activity) {
+    if (activity.source !== "MANUAL") {
+      setActivity(activity.id, { selected: false });
+      setOpenActivityMenu(null);
+      setMessage("Work item removed from this report. Save the draft to keep this change.");
+      return;
+    }
+
+    setActivities((items) => items.filter((item) => item.id !== activity.id));
+    if (!activity.id.startsWith("manual-new-")) {
+      setDeletedActivityIds((current) => [...new Set([...current, activity.id])]);
+    }
+    setOpenActivityMenu(null);
+    setMessage("Manual work item deleted. Save the draft to keep this change.");
+  }
+
+  function toggleActivityMenu(activityId: string, event: MouseEvent<HTMLButtonElement>) {
+    if (openActivityMenu?.id === activityId) {
+      setOpenActivityMenu(null);
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const menuWidth = 240;
+    const menuHeight = 204;
+    const gap = 8;
+    const top = Math.min(window.innerHeight - menuHeight - 12, Math.max(12, rect.bottom + gap));
+    const left = Math.min(window.innerWidth - menuWidth - 12, Math.max(12, rect.right - menuWidth));
+
+    setOpenActivityMenu({ id: activityId, top, left });
+  }
+
+  useEffect(() => {
+    if (!openActivityMenu) {
+      return;
+    }
+
+    function closeMenu() {
+      setOpenActivityMenu(null);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+    };
+  }, [openActivityMenu]);
 
   async function saveReport(submit = false) {
     setIsBusy(true);
     setMessage(null);
 
-    const manualActivities = manualTitle.trim()
-      ? [
-          {
-            title: manualTitle.trim(),
-            employeeNote: manualNote.trim() || null
-          }
-        ]
-      : [];
+    const manualActivities = activities
+      .filter((activity) => activity.id.startsWith("manual-new-"))
+      .map((activity) => ({
+        title: activity.title,
+        employeeNote: activity.employeeNote ?? null,
+        status: activity.status,
+        durationMinutes: activity.durationMinutes ?? null
+      }));
 
     if (isPreview) {
-      const nextActivities = manualActivities.length
-        ? [
-            ...activities,
-            {
-              id: `manual-${Date.now()}`,
-              source: "MANUAL" as const,
-              title: manualActivities[0].title,
-              selected: true,
-              employeeNote: manualActivities[0].employeeNote
-            }
-          ]
-        : activities;
+      const nextActivities = activities.map((activity) =>
+        activity.id.startsWith("manual-new-") ? { ...activity, id: `manual-${Date.now()}-${activity.id}` } : activity
+      );
 
       setActivities(nextActivities);
       setReport((current) => ({
@@ -255,28 +362,31 @@ export function DailyReportApp({
         updatedAt: new Date().toISOString(),
         activities: nextActivities
       }));
-      setManualTitle("");
-      setManualNote("");
-      setShowManual(false);
+      setDeletedActivityIds([]);
       setMessage(submit ? "Preview submitted." : "Preview saved.");
       setIsBusy(false);
       return;
     }
 
-    const response = await fetch(`/api/reports/${report.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        summary,
-        blockers,
-        workLocation,
-        activityUpdates: activities.map((activity) => ({
+    const reportPayload = {
+      summary,
+      blockers,
+      workLocation,
+      activityUpdates: activities
+        .map((activity) => ({
           id: activity.id,
           selected: activity.selected,
           employeeNote: activity.employeeNote ?? null
-        })),
-        manualActivities
-      })
+        }))
+        .filter((activity) => !activity.id.startsWith("manual-new-")),
+      deletedActivityIds,
+      manualActivities
+    };
+
+    const response = await fetch(report.id ? `/api/reports/${report.id}` : "/api/reports", {
+      method: report.id ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(report.id ? reportPayload : { ...reportPayload, date: reportDate })
     });
 
     if (!response.ok) {
@@ -300,19 +410,75 @@ export function DailyReportApp({
 
     setReport(nextReport);
     setActivities(nextReport.activities);
-    setManualTitle("");
-    setManualNote("");
-    setShowManual(false);
-    setMessage(submit ? "Submitted for review." : "Draft saved.");
+      setDeletedActivityIds([]);
+      setWorkLocation(nextReport.workLocation);
+      setMessage(submit ? "Submitted for review." : "Draft saved.");
+      setIsBusy(false);
+    }
+
+  async function deleteDraft() {
+    if (!report.id || report.status !== "DRAFT") {
+      return;
+    }
+
+    if (!window.confirm("Delete this draft? This cannot be undone.")) {
+      return;
+    }
+
+    setIsBusy(true);
+    setMessage(null);
+
+    if (isPreview) {
+      setReport((current) => ({
+        ...current,
+        id: "",
+        summary: "",
+        blockers: "",
+        workLocation: "UNKNOWN",
+        activities: [],
+        updatedAt: null
+      }));
+      setSummary("");
+      setWorkLocation("UNKNOWN");
+      setActivities([]);
+      setDeletedActivityIds([]);
+      setMessage("Preview draft deleted.");
+      setIsBusy(false);
+      return;
+    }
+
+    const response = await fetch(`/api/reports/${report.id}`, { method: "DELETE" });
+
+    if (!response.ok) {
+      setMessage((await response.json()).error ?? "Unable to delete draft.");
+      setIsBusy(false);
+      return;
+    }
+
+    setReport((current) => ({
+      ...current,
+      id: "",
+      summary: "",
+      blockers: "",
+      workLocation: "UNKNOWN",
+      activities: [],
+      updatedAt: null
+    }));
+    setSummary("");
+    setWorkLocation("UNKNOWN");
+    setActivities([]);
+    setDeletedActivityIds([]);
+    setMessage("Draft deleted.");
     setIsBusy(false);
   }
 
   async function sync(provider: "jira" | "google-calendar" | "google-tasks") {
     setIsBusy(true);
     setMessage(null);
+    const providerLabel = syncProviderLabels[provider];
 
     if (isPreview) {
-      setMessage(`${provider.replace("-", " ")} preview refresh complete.`);
+      setMessage(`${providerLabel} preview import complete.`);
       setIsBusy(false);
       return;
     }
@@ -329,299 +495,488 @@ export function DailyReportApp({
       return;
     }
 
-    window.location.reload();
+    const result = (await response.json()) as { importedCount: number; skippedCount: number };
+    const activityResponse = await fetch(`/api/activity?date=${encodeURIComponent(reportDate)}`);
+
+    if (activityResponse.ok) {
+      const data = (await activityResponse.json()) as { activities: Activity[] };
+      setActivities(data.activities);
+      setReport((current) => ({ ...current, activities: data.activities }));
+    }
+
+    setMessage(
+      result.importedCount > 0
+        ? `${providerLabel} import complete: ${result.importedCount} work item${result.importedCount === 1 ? "" : "s"} found.`
+        : `No ${providerLabel.toLowerCase()} work items found for this date.`
+    );
+    setIsBusy(false);
   }
 
-  return (
-    <ReferenceAppShell active="report" variant="employee" userName={userName} userRole={userRole} preview={isPreview}>
-      <main className="w-full px-[clamp(16px,2vw,34px)] pb-8 pt-8">
-        <h1 className="mb-5 text-[26px] font-semibold tracking-normal text-[#0f172a]">Daily Report</h1>
+  function connectProvider(provider: "google" | "atlassian") {
+    if (isPreview) {
+      setMessage(`${provider === "google" ? "Google" : "Atlassian"} connection opens from Settings in the real app.`);
+      return;
+    }
 
-        <ReferencePanel className="mb-5 grid gap-0 divide-y divide-[#e2e8f0] p-4 min-[1120px]:grid-cols-[300px_220px_300px_1fr] min-[1120px]:divide-x min-[1120px]:divide-y-0">
-          <div className="px-2 py-1">
-            <div className="mb-3 text-xs font-medium text-[#64748b]">Report Date</div>
-            <div className="flex items-center gap-1">
+    signIn(
+      provider,
+      { callbackUrl: "/" },
+      provider === "google"
+        ? { access_type: "offline", prompt: "consent select_account", scope: GOOGLE_OAUTH_SCOPE }
+        : {
+            audience: "api.atlassian.com",
+            prompt: "consent",
+            scope: ATLASSIAN_OAUTH_SCOPE
+          }
+    );
+  }
+
+  async function copyActivityTitle(activity: Activity) {
+    await navigator.clipboard?.writeText(activity.title);
+    setOpenActivityMenu(null);
+    setMessage("Activity title copied.");
+  }
+
+  function openActivitySource(activity: Activity) {
+    if (!activity.sourceUrl || activity.sourceUrl === "#") {
+      setMessage("This activity does not have a source link.");
+      setOpenActivityMenu(null);
+      return;
+    }
+
+    window.open(activity.sourceUrl, "_blank", "noopener,noreferrer");
+    setOpenActivityMenu(null);
+  }
+
+  const canSyncJira = isPreview || integrationStatus.atlassian;
+  const canSyncGoogle = isPreview || integrationStatus.google;
+  const hasPendingManual = activities.some((activity) => activity.id.startsWith("manual-new-"));
+  const selectedCount = activities.filter((activity) => activity.selected).length;
+  const totalSelectedMinutes = activities
+    .filter((activity) => activity.selected)
+    .reduce((total, activity) => total + (activity.durationMinutes ?? 0), 0);
+  const lastSavedLabel = formatTimestamp(report.updatedAt);
+  const hasBlockers = blockers.trim().length > 0;
+  const hasUnsavedChanges =
+    summary !== report.summary ||
+    blockers !== report.blockers ||
+    workLocation !== report.workLocation ||
+    !sameActivityState(activities, report.activities) ||
+    deletedActivityIds.length > 0 ||
+    hasPendingManual;
+  function appendToSummary(text: string) {
+    const trimmed = summary.trimEnd();
+    updateSummary(trimmed ? `${trimmed}\n${text}` : text);
+  }
+
+  function insertSelectedWork() {
+    const selected = activities.filter((activity) => activity.selected);
+
+    if (selected.length === 0) {
+      setMessage("Select at least one work item first.");
+      return;
+    }
+
+    appendToSummary(
+      selected
+        .map((activity) => {
+          const note = activity.employeeNote?.trim();
+          return `Task: ${activity.title}${note ? ` - ${note}` : ""}`;
+        })
+        .join("\n")
+    );
+    setMessage("Selected work added to the summary.");
+  }
+
+  function updateBlockerSummary(nextBlockers: string) {
+    const withoutBlockers = summary
+      .split(/\r?\n/)
+      .filter((line) => !/^\s*blockers?:\s*/i.test(line))
+      .join("\n")
+      .trimEnd();
+    const blockerLines = nextBlockers
+      .split(/\r?\n|;/)
+      .filter((line) => line.trim().length > 0)
+      .map((line) => `Blocker: ${line}`)
+      .join("\n");
+
+    updateSummary([withoutBlockers, blockerLines].filter(Boolean).join("\n"));
+  }
+
+  function goToReportDate(nextDate: string) {
+    if (!nextDate) {
+      return;
+    }
+
+    if (nextDate !== reportDate && hasUnsavedChanges && !window.confirm("You have unsaved changes. Leave this date without saving?")) {
+      return;
+    }
+
+    router.push(isPreview ? `/preview/employee?date=${nextDate}` : `/?date=${nextDate}`);
+  }
+
+  function shiftReportDate(days: number) {
+    const nextDate = toDate(reportDate) ?? new Date();
+    nextDate.setDate(nextDate.getDate() + days);
+    goToReportDate(nextDate.toISOString().slice(0, 10));
+  }
+
+  const menuActivity = openActivityMenu ? activities.find((activity) => activity.id === openActivityMenu.id) : null;
+
+  return (
+    <ReferenceAppShell
+      active="report"
+      variant="employee"
+      userName={userName}
+      userEmail={userEmail}
+      userRole={userRole}
+      userStatus={userStatus}
+      timezone={timezone}
+      mustChangePassword={mustChangePassword}
+      currentReportDate={reportDate}
+      preview={isPreview}
+    >
+      <main className="reference-page !pb-4 !pt-3">
+        <section className="overflow-visible rounded-[18px] bg-white shadow-[0_14px_38px_rgba(15,23,42,0.09)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
+          <div className="flex flex-col gap-4 px-6 pb-5 pt-6 min-[900px]:flex-row min-[900px]:items-start min-[900px]:justify-between min-[1200px]:px-8">
+            <div>
+              <h1 className="text-[28px] font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">Daily Update</h1>
+              <p className="mt-1.5 text-sm text-[#667085] dark:text-muted-foreground">Share what you worked on today.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {report.id && report.status === "DRAFT" ? (
+                <Button
+                  variant="outline"
+                  className="h-11 rounded-[8px] bg-white px-5 text-sm font-medium text-[#b42318] shadow-[0_2px_7px_rgba(15,23,42,0.06)] ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
+                  disabled={isBusy}
+                  onClick={deleteDraft}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete draft
+                </Button>
+              ) : null}
               <Button
-                size="icon"
                 variant="outline"
-                className="h-11 w-11 border-[#d9e1ec]"
+                className="h-11 rounded-[8px] bg-white px-6 text-sm font-medium text-[#111827] shadow-[0_2px_7px_rgba(15,23,42,0.06)] ring-1 ring-[#d9dee8] hover:bg-[#f8fafc] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]"
+                disabled={isBusy}
+                onClick={() => saveReport(false)}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {isBusy ? "Saving..." : "Save draft"}
+              </Button>
+              <Button
+                className="h-11 rounded-[8px] bg-gradient-to-br from-[#4f6dfd] to-[#4a28df] px-6 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(79,109,253,0.34)] hover:from-[#4663ed] hover:to-[#3f21c8]"
+                disabled={isBusy || (report.status === "SUBMITTED" && !hasUnsavedChanges)}
+                onClick={() => saveReport(true)}
+              >
+                <Send className="mr-2 h-4 w-4" />
+                {isBusy ? "Submitting..." : "Submit update"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="mx-6 h-px bg-[#e5e9f1] dark:bg-[#213149] min-[1200px]:mx-8" />
+
+          <div className="grid gap-3 px-6 py-4 min-[900px]:grid-cols-[minmax(320px,430px)_minmax(190px,240px)_minmax(260px,344px)] min-[900px]:items-center min-[900px]:justify-between min-[1200px]:px-8">
+            <div className="flex w-full items-center gap-2">
+              <button
+                type="button"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] bg-white text-[#475467] shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] transition hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#101d2e] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-[#132239] dark:hover:text-foreground"
+                aria-label="Previous day"
                 onClick={() => shiftReportDate(-1)}
-                aria-label="Previous report date"
               >
                 <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <label className="relative flex h-11 flex-1 items-center gap-3 rounded-[6px] border border-[#d9e1ec] bg-white px-3 text-sm font-medium text-[#0f172a]">
-                <CalendarDays className="h-4 w-4 text-[#475569]" />
-                <span className="pointer-events-none absolute left-10 whitespace-nowrap">{formatReportDate(date)}</span>
+              </button>
+              <label className="relative flex h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[8px] bg-white px-5 text-sm font-medium text-[#111827] shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]">
+                <CalendarDays className="h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
+                <span className="truncate">{formatReportDate(date)}</span>
                 <Input
                   type="date"
                   value={reportDate}
-                  onChange={(event) => {
-                    window.location.href = isPreview ? `/preview/employee?date=${event.target.value}` : `/?date=${event.target.value}`;
-                  }}
-                  className="h-full border-0 bg-transparent pl-0 pr-0 opacity-0"
-                  aria-label="Report date"
+                  onChange={(event) => goToReportDate(event.target.value)}
+                  className="absolute inset-0 h-full cursor-pointer border-0 bg-transparent opacity-0"
+                  aria-label="Select report date"
                 />
               </label>
-              <Button
-                size="icon"
-                variant="outline"
-                className="h-11 w-11 border-[#d9e1ec]"
+              <button
+                type="button"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] bg-white text-[#475467] shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] transition hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#101d2e] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-[#132239] dark:hover:text-foreground"
+                aria-label="Next day"
                 onClick={() => shiftReportDate(1)}
-                aria-label="Next report date"
               >
                 <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="px-7 py-1">
-            <div className="mb-3 text-xs font-medium text-[#64748b]">Report Status</div>
-            <ReferenceBadge tone={report.status === "SUBMITTED" ? "green" : "orange"}>{titleCase(report.status)}</ReferenceBadge>
-            <div className="mt-2 text-sm text-[#64748b]">
-              {report.submittedAt ? `Submitted ${formatTimestamp(report.submittedAt)}` : "Not submitted yet"}
-            </div>
-          </div>
-
-          <div className="px-7 py-1">
-            <div className="mb-3 text-xs font-medium text-[#64748b]">Work Location</div>
-            <Select value={workLocation} onChange={(event) => setWorkLocation(event.target.value as typeof workLocation)} className="h-12 border-[#d9e1ec]">
-              <option value="UNKNOWN">Unspecified</option>
-              <option value="OFFICE">Office</option>
-              <option value="WFH">WFH</option>
-              <option value="HYBRID">Hybrid</option>
-              <option value="PTO">PTO</option>
-              <option value="OUT_OF_OFFICE">Out of office</option>
-            </Select>
-          </div>
-
-          <div className="grid gap-4 px-7 py-1 sm:grid-cols-2">
-            <div className={cn("rounded-[6px] border p-4", isLate ? "border-[#fed7aa] bg-[#fffaf5]" : "border-[#d9e1ec] bg-[#f8fafc]")}>
-              <div className={cn("flex items-center gap-2 text-sm font-semibold", isLate ? "text-[#ea580c]" : "text-[#64748b]")}>
-                <Clock3 className="h-4 w-4" />
-                {isLate ? "Late submission" : "On-time status"}
-              </div>
-              <div className="mt-2 text-sm text-[#475569]">{isLate ? "Submitted after day end" : "No late submission recorded"}</div>
-            </div>
-            <div className={cn("rounded-[6px] border p-4", editedAfterDate ? "border-[#fed7aa] bg-[#fffaf5]" : "border-[#d9e1ec] bg-[#f8fafc]")}>
-              <div className={cn("flex items-center gap-2 text-sm font-semibold", editedAfterDate ? "text-[#ea580c]" : "text-[#64748b]")}>
-                <Edit3 className="h-4 w-4" />
-                {editedAfterDate ? "Edited after date" : "No later edits"}
-              </div>
-              <div className="mt-2 text-sm text-[#475569]">{editedAfterDate ? `Edited ${formatTimestamp(updatedAt)}` : "Latest version is current"}</div>
-            </div>
-          </div>
-        </ReferencePanel>
-
-        <div className="grid gap-4 min-[1120px]:grid-cols-[minmax(0,1fr)_390px] min-[1500px]:grid-cols-[minmax(0,1fr)_405px]">
-          <ReferencePanel className="overflow-hidden">
-            <div className="border-b border-[#e2e8f0] p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-[#0f172a]">Activity Review</h2>
-                  <p className="mt-1 text-sm text-[#475569]">Review and include activities for this report.</p>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={isBusy} onClick={() => sync("jira")}>Jira</Button>
-                  <Button variant="outline" size="sm" disabled={isBusy} onClick={() => sync("google-calendar")}>Calendar</Button>
-                  <Button variant="outline" size="sm" disabled={isBusy} onClick={() => sync("google-tasks")}>Tasks</Button>
-                </div>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] table-fixed text-sm">
-                <thead className="border-b border-[#e2e8f0] bg-white text-left text-xs font-semibold text-[#475569]">
-                  <tr>
-                    <th className="w-14 px-5 py-4">
-                      <input
-                        type="checkbox"
-                        className="h-5 w-5 rounded border-[#cbd5e1] accent-[#2563eb]"
-                        aria-label="Select all activities"
-                        checked={activities.length > 0 && activities.every((activity) => activity.selected)}
-                        onChange={(event) => {
-                          setActivities((items) => items.map((item) => ({ ...item, selected: event.target.checked })));
-                        }}
-                      />
-                    </th>
-                    <th className="w-[17%] px-2 py-4">Source</th>
-                    <th className="px-2 py-4">Title / Description</th>
-                    <th className="w-[12%] px-2 py-4">Status</th>
-                    <th className="w-[12%] px-2 py-4">Time / Duration</th>
-                    <th className="w-[23%] px-2 py-4">Note</th>
-                    <th className="w-10 px-4 py-4" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#e2e8f0]">
-                  {activities.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-5 py-8">
-                        <EmptyReferenceState>No activities yet. Sync integrations or add a manual activity.</EmptyReferenceState>
-                      </td>
-                    </tr>
-                  ) : (
-                    activities.map((activity) => (
-                      <tr key={activity.id} className="bg-white hover:bg-[#f8fafc]">
-                        <td className="px-5 py-4">
-                          <input
-                            type="checkbox"
-                            className="h-5 w-5 rounded border-[#cbd5e1] accent-[#2563eb]"
-                            checked={activity.selected}
-                            onChange={(event) => setActivity(activity.id, { selected: event.target.checked })}
-                            aria-label={`Include ${activity.title}`}
-                          />
-                        </td>
-                        <td className="px-2 py-4">
-                          <div className="flex min-w-0 items-center gap-3 text-[#334155]">
-                            <div className={cn("flex h-5 w-5 items-center justify-center rounded-[4px]", sourceStyles[activity.source])}>{sourceIcon(activity.source)}</div>
-                            <span className="leading-tight">{sourceLabels[activity.source]}</span>
-                          </div>
-                        </td>
-                        <td className="px-2 py-4">
-                          <div className="font-semibold text-[#0f172a]">
-                            {activity.sourceUrl && activity.sourceUrl !== "#" ? (
-                              <a href={activity.sourceUrl} target="_blank" rel="noreferrer" className="hover:text-[#2563eb]">
-                                {activity.title}
-                              </a>
-                            ) : (
-                              <span className="block truncate">{activity.title || "Untitled activity"}</span>
-                            )}
-                          </div>
-                          {activity.description ? <div className="mt-1 max-w-lg truncate text-xs text-[#64748b]">{activity.description}</div> : null}
-                        </td>
-                        <td className="px-2 py-4">
-                          <ReferenceBadge tone={statusTone(activity.status)}>{activity.status || "Not set"}</ReferenceBadge>
-                        </td>
-                        <td className="px-2 py-4 text-[#334155]">{formatDuration(activity.durationMinutes)}</td>
-                        <td className="px-2 py-4">
-                          <Input
-                            placeholder="Add a note"
-                            value={activity.employeeNote ?? ""}
-                            onChange={(event) => setActivity(activity.id, { employeeNote: event.target.value })}
-                            className="h-10 border-[#d9e1ec] text-sm"
-                          />
-                        </td>
-                        <td className="px-4 py-4 text-[#64748b]">
-                          <button
-                            className="rounded-[6px] p-1 hover:bg-[#eef2f7]"
-                            aria-label={`More actions for ${activity.title}`}
-                            onClick={() => setMessage("Activity actions will be available once integrations are connected.")}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-
-                  {showManual ? (
-                    <tr>
-                      <td className="px-5 py-4" />
-                      <td className="px-2 py-4">
-                        <div className="flex items-center gap-3 text-[#334155]">
-                          <div className="flex h-5 w-5 items-center justify-center rounded-[4px] border border-[#2563eb]">
-                            <PenLine className="h-3.5 w-3.5 text-[#2563eb]" />
-                          </div>
-                          Manual
-                        </div>
-                      </td>
-                      <td className="px-2 py-4">
-                        <Input placeholder="Activity title" value={manualTitle} onChange={(event) => setManualTitle(event.target.value)} />
-                      </td>
-                      <td className="px-2 py-4">
-                        <ReferenceBadge tone="neutral">Manual</ReferenceBadge>
-                      </td>
-                      <td className="px-2 py-4 text-[#64748b]">-</td>
-                      <td className="px-2 py-4">
-                        <Input placeholder="Optional note" value={manualNote} onChange={(event) => setManualNote(event.target.value)} />
-                      </td>
-                      <td className="px-4 py-4" />
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="p-5">
-              <button
-                className="flex h-16 w-full items-center justify-center gap-2 rounded-[8px] border border-dashed border-[#cbd5e1] text-sm font-semibold text-[#2563eb] hover:bg-[#f8fafc]"
-                onClick={() => setShowManual(true)}
-              >
-                <Plus className="h-5 w-5" />
-                Add manual activity
               </button>
             </div>
-          </ReferencePanel>
 
-          <aside className="space-y-4">
-            <ReferencePanel className="p-5">
-              <h2 className="mb-3 text-lg font-semibold text-[#0f172a]">Daily Summary</h2>
-              <Textarea
-                value={summary}
-                placeholder="No summary yet."
-                onChange={(event) => setSummary(event.target.value)}
-                className="min-h-[110px] border-[#d9e1ec]"
-              />
-            </ReferencePanel>
+            <label className="flex min-h-11 w-full items-center gap-3 rounded-[8px] bg-white px-4 text-sm shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]">
+              <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">Location</span>
+              <Select
+                value={workLocation}
+                onChange={(event) => setWorkLocation(event.target.value as WorkLocation)}
+                className="h-8 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm font-semibold text-[#111827] shadow-none focus-visible:ring-0 dark:bg-transparent dark:text-foreground"
+                aria-label="Work location"
+              >
+                {workLocationOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </label>
 
-            <ReferencePanel className="p-5">
-              <h2 className="mb-3 text-lg font-semibold text-[#0f172a]">Blockers</h2>
-              <Textarea
-                value={blockers}
-                placeholder="No blockers recorded."
-                onChange={(event) => setBlockers(event.target.value)}
-                className="min-h-[92px] border-[#d9e1ec]"
-              />
-            </ReferencePanel>
+            <div className="flex min-h-11 w-full items-center gap-4 rounded-[8px] bg-white px-4 text-sm shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]">
+              <span className={cn("inline-flex items-center gap-2 rounded-full px-2.5 py-1 font-medium", hasUnsavedChanges ? "bg-orange-50 text-orange-700 dark:bg-orange-400/10 dark:text-orange-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300")}>
+                <CheckCircle2 className="h-4 w-4" />
+                {hasUnsavedChanges ? "Unsaved changes" : report.status === "SUBMITTED" ? "Submitted" : report.id ? "Draft saved" : "No saved draft"}
+              </span>
+              <span className="text-[#667085] dark:text-muted-foreground">{lastSavedLabel === "-" ? "Not saved yet" : `Last saved ${lastSavedLabel}`}</span>
+            </div>
+          </div>
 
-            <ReferencePanel className="p-5">
-              <div className="mb-5 grid grid-cols-2 gap-3 text-xs text-[#64748b]">
-                <span>Last saved: {formatTimestamp(report.updatedAt)}</span>
-                <span>Last submitted: {formatTimestamp(report.submittedAt)}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Button variant="outline" className="h-11 border-[#d9e1ec] text-[#0f172a]" disabled={isBusy} onClick={() => saveReport(false)}>
-                  <FilePenLine className="mr-2 h-4 w-4" />
-                  Save Draft
-                </Button>
-                <Button className="h-11 bg-[#2563eb] hover:bg-[#1d4ed8]" disabled={isBusy} onClick={() => saveReport(true)}>
-                  <Send className="mr-2 h-4 w-4" />
-                  Submit to Review
-                </Button>
-              </div>
-              {message ? <p className="mt-3 text-sm text-[#64748b]">{message}</p> : null}
-            </ReferencePanel>
+          {message ? (
+            <div className="mx-6 mb-4 rounded-[10px] bg-[#f8fafc] px-4 py-3 text-sm text-[#475569] shadow-[0_8px_24px_rgba(15,23,42,0.05)] dark:bg-[#101d2e] dark:text-muted-foreground min-[1200px]:mx-8">
+              {message}
+            </div>
+          ) : null}
 
-            <ReferencePanel className="p-5">
-              <h2 className="mb-4 text-lg font-semibold text-[#0f172a]">Recent Report History</h2>
-              <div className="space-y-3">
-                {history.length === 0 ? (
-                  <EmptyReferenceState>No report history yet.</EmptyReferenceState>
-                ) : (
-                  history.slice(0, 5).map((item) => (
-                    <div key={item.id} className="flex items-center justify-between gap-4 text-sm">
-                      <span className="text-[#334155]">{formatReportDate(item.reportDate)}</span>
-                      <span className={cn("flex items-center gap-2 font-medium", item.editedAfterDate ? "text-[#ea580c]" : item.status === "SUBMITTED" ? "text-[#16a34a]" : "text-[#64748b]")}>
-                        {item.editedAfterDate ? <CircleAlert className="h-4 w-4" /> : item.status === "SUBMITTED" ? <CheckCircle2 className="h-4 w-4" /> : <ListChecks className="h-4 w-4" />}
-                        {item.editedAfterDate ? "Edited after date" : titleCase(item.status)}
-                      </span>
+          <div className="grid gap-4 border-t border-[#e8ecf3] px-6 py-5 dark:border-[#213149] min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)] min-[1200px]:px-8">
+            <section className="flex min-h-[468px] flex-col rounded-[12px] bg-white p-5 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-semibold tracking-normal text-[#111827] dark:text-foreground">Work items</h2>
+                    <ReferenceBadge tone="neutral" className="px-3 py-1.5 text-xs">{selectedCount} selected</ReferenceBadge>
+                  </div>
+                  <p className="mt-2 text-sm text-[#667085] dark:text-muted-foreground">Import and select work to include in your update.</p>
+                </div>
+                <div className="relative">
+                  <Button
+                    variant="outline"
+                    className="h-10 rounded-[8px] bg-white px-4 text-sm font-medium text-[#111827] shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55]"
+                    disabled={isBusy}
+                    onClick={() => setImportMenuOpen((open) => !open)}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Import
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+                  {importMenuOpen ? (
+                    <div className="absolute right-0 top-12 z-30 w-64 rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+                      <button
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+                        disabled={!canSyncJira && !oauthConfig.atlassian}
+                        onClick={() => {
+                          setImportMenuOpen(false);
+                          canSyncJira ? sync("jira") : connectProvider("atlassian");
+                        }}
+                      >
+                        {canSyncJira ? "Import Jira" : "Connect Jira"}
+                      </button>
+                      <button
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+                        disabled={!canSyncGoogle && !oauthConfig.google}
+                        onClick={() => {
+                          setImportMenuOpen(false);
+                          canSyncGoogle ? sync("google-calendar") : connectProvider("google");
+                        }}
+                      >
+                        {canSyncGoogle ? "Import Calendar" : "Connect Google"}
+                      </button>
+                      <button
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+                        disabled={!canSyncGoogle && !oauthConfig.google}
+                        onClick={() => {
+                          setImportMenuOpen(false);
+                          canSyncGoogle ? sync("google-tasks") : connectProvider("google");
+                        }}
+                      >
+                        {canSyncGoogle ? "Import Tasks" : "Connect Google Tasks"}
+                      </button>
+                      <Link
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#2563eb] hover:bg-[#eff6ff] dark:text-[#93c5fd] dark:hover:bg-white/5"
+                        href={isPreview ? "/preview/settings" : "/settings"}
+                        onClick={() => setImportMenuOpen(false)}
+                      >
+                        Manage integrations
+                      </Link>
                     </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-2.5">
+                {activities.length === 0 ? (
+                  <EmptyReferenceState>No activities yet. Import work from Jira, Calendar, or Tasks.</EmptyReferenceState>
+                ) : (
+                  activities.map((activity) => (
+                    <article
+                      key={activity.id}
+                      className="grid min-h-[74px] grid-cols-[28px_40px_minmax(0,1fr)_auto_68px_28px] items-center gap-3 rounded-[10px] bg-white px-4 py-3 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-5 w-5 rounded border-[#cbd5e1] accent-[#4f46e5]"
+                        checked={activity.selected}
+                        onChange={(event) => setActivity(activity.id, { selected: event.target.checked })}
+                        aria-label={`Include ${activity.title}`}
+                      />
+                      <div className={cn("flex h-8 w-8 items-center justify-center rounded-[8px]", sourceStyles[activity.source])}>{sourceIcon(activity.source)}</div>
+                      <div className="min-w-0">
+                        <div className="truncate text-base font-semibold text-[#111827] dark:text-foreground">
+                          {activity.sourceUrl && activity.sourceUrl !== "#" ? (
+                            <a href={activity.sourceUrl} target="_blank" rel="noreferrer" className="hover:text-[#2563eb]">
+                              {activity.title || "Untitled activity"}
+                            </a>
+                          ) : (
+                            activity.title || "Untitled activity"
+                          )}
+                        </div>
+                        <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-[#667085] dark:text-muted-foreground">
+                          <span className="shrink-0">{sourceLabels[activity.source]}</span>
+                          {activity.description ? (
+                            <>
+                              <span className="text-[#98a2b3]">•</span>
+                              <span className="truncate">{activity.description}</span>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+                      <ReferenceBadge tone={statusTone(activity.status)} className="justify-self-start px-2.5 py-1 text-xs">
+                        {activity.status || "Not set"}
+                      </ReferenceBadge>
+                      <div className="text-base font-medium text-[#111827] dark:text-foreground">{formatDuration(activity.durationMinutes)}</div>
+                      <button
+                        className="reference-menu-button"
+                        aria-label={`More actions for ${activity.title}`}
+                        onClick={(event) => toggleActivityMenu(activity.id, event)}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                    </article>
                   ))
                 )}
               </div>
-              <Link href={isPreview ? "/preview/history" : "/history"} className="mt-4 flex items-center gap-2 text-sm font-semibold text-[#2563eb]">
-                View full history
-                <ChevronRight className="h-4 w-4" />
-              </Link>
-            </ReferencePanel>
-          </aside>
-        </div>
 
-        <div className="mt-8 flex items-center justify-center gap-2 text-sm text-[#64748b]">
-          <LockKeyhole className="h-4 w-4" />
-          Reports are viewable by you and your managers.
-        </div>
+              <div className="mt-auto border-t border-[#e6eaf2] pt-4 dark:border-[#263a55]">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[#667085] dark:text-muted-foreground">
+                  <span>{selectedCount} of {activities.length} items selected</span>
+                  <span className="inline-flex items-center gap-5">
+                    <span>Total time</span>
+                    <strong className="font-semibold text-[#111827] dark:text-foreground">{formatDuration(totalSelectedMinutes)}</strong>
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            <aside className="min-h-[468px] rounded-[12px] bg-white p-5 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
+              <div>
+                <h2 className="text-xl font-semibold tracking-normal text-[#111827] dark:text-foreground">Summary</h2>
+                <p className="mt-2 text-sm text-[#667085] dark:text-muted-foreground">Add a brief summary of your work.</p>
+              </div>
+              <div className="relative mt-4">
+                <Textarea
+                  value={summary}
+                  placeholder="What did you work on today?"
+                  onChange={(event) => updateSummary(event.target.value)}
+                  className="min-h-[168px] resize-none rounded-[8px] bg-white px-4 py-4 text-sm leading-6 shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                />
+                <Button
+                  variant="outline"
+                  className="absolute bottom-4 right-4 h-9 rounded-[8px] bg-white px-4 text-xs font-medium text-[#344054] ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]"
+                  onClick={insertSelectedWork}
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Generate from selected
+                </Button>
+              </div>
+
+              <div className="mt-5">
+                <h3 className="text-lg font-semibold text-[#111827] dark:text-foreground">Blockers</h3>
+                <p className="mt-1.5 text-sm text-[#667085] dark:text-muted-foreground">Add any blockers or issues.</p>
+                <div className="relative mt-3">
+                  <Input
+                    value={blockers.replace(/\n/g, "; ")}
+                    placeholder="No blockers"
+                    onChange={(event) => updateBlockerSummary(event.target.value)}
+                    className="h-12 rounded-[8px] bg-white px-4 pr-12 text-sm shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                    aria-label="Blockers"
+                  />
+                  <Ban className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#98a2b3]" />
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-[10px] bg-[#f7f8ff] p-4 ring-1 ring-[#e0e6ff] dark:bg-blue-400/10 dark:ring-blue-300/15">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#edf2ff] text-[#4f46e5] dark:bg-blue-400/15 dark:text-blue-200">
+                    <Lightbulb className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <div className="text-sm font-semibold text-[#111827] dark:text-foreground">Tip</div>
+                    <p className="mt-1.5 text-sm leading-5 text-[#344054] dark:text-muted-foreground">Keep your update clear and concise. Focus on impact and outcomes.</p>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
       </main>
+      {menuActivity && openActivityMenu ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-40 cursor-default bg-transparent"
+            aria-label="Close work item menu"
+            onClick={() => setOpenActivityMenu(null)}
+          />
+          <div
+            className="fixed z-50 w-60 rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] dark:bg-[#0f1b2a]"
+            style={{ top: openActivityMenu.top, left: openActivityMenu.left }}
+            role="menu"
+          >
+            <button
+              className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+              onClick={() => openActivitySource(menuActivity)}
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open source
+            </button>
+            <button
+              className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+              onClick={() => {
+                setActivity(menuActivity.id, { selected: !menuActivity.selected });
+                setOpenActivityMenu(null);
+              }}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {menuActivity.selected ? "Exclude" : "Include"}
+            </button>
+            <button
+              className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+              onClick={() => {
+                setActivity(menuActivity.id, { employeeNote: "" });
+                setOpenActivityMenu(null);
+              }}
+            >
+              <Edit3 className="h-4 w-4" />
+              Clear note
+            </button>
+            <button
+              className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+              onClick={() => copyActivityTitle(menuActivity)}
+            >
+              <Copy className="h-4 w-4" />
+              Copy title
+            </button>
+            <button
+              className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#dc2626] hover:bg-[#fef2f2] dark:hover:bg-red-400/10"
+              onClick={() => removeActivity(menuActivity)}
+            >
+              <Trash2 className="h-4 w-4" />
+              {menuActivity.source === "MANUAL" ? "Delete item" : "Remove from report"}
+            </button>
+          </div>
+        </>
+      ) : null}
     </ReferenceAppShell>
   );
 }

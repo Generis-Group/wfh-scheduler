@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, Save, UserPlus } from "lucide-react";
+import { Copy, KeyRound, Save, UserPlus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,16 +21,17 @@ type User = {
 };
 
 type CompanySettings = {
-  emailDomains: string[];
   jiraProjectKeys: string[];
 };
 
 export function AdminUsers({
   initialUsers,
-  initialSettings
+  initialSettings,
+  isPreview = false
 }: {
   initialUsers: User[];
   initialSettings: CompanySettings;
+  isPreview?: boolean;
 }) {
   const [users, setUsers] = useState(initialUsers);
   const [settings, setSettings] = useState(initialSettings);
@@ -38,10 +39,34 @@ export function AdminUsers({
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<User["role"]>("EMPLOYEE");
   const [message, setMessage] = useState<string | null>(null);
+  const [temporaryCredentials, setTemporaryCredentials] = useState<{ email: string; password: string } | null>(null);
 
   async function createUser(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(null);
+    setTemporaryCredentials(null);
+
+    if (isPreview) {
+      const temporaryPassword = `preview-${Math.random().toString(36).slice(2, 10)}`;
+      const createdEmail = email;
+      setUsers((current) => [
+        ...current,
+        {
+          id: `preview-user-${Date.now()}`,
+          name: name || null,
+          email,
+          role,
+          status: "ACTIVE",
+          timezone: "America/Toronto"
+        }
+      ]);
+      setName("");
+      setEmail("");
+      setRole("EMPLOYEE");
+      setTemporaryCredentials({ email: createdEmail, password: temporaryPassword });
+      setMessage("Preview user created.");
+      return;
+    }
 
     const response = await fetch("/api/admin/users", {
       method: "POST",
@@ -60,10 +85,17 @@ export function AdminUsers({
     setName("");
     setEmail("");
     setRole("EMPLOYEE");
-    setMessage(`Temporary password: ${data.temporaryPassword}`);
+    setTemporaryCredentials({ email: data.user.email, password: data.temporaryPassword });
+    setMessage("User created with a temporary password.");
   }
 
   async function updateUser(user: User, patch: Partial<User>) {
+    if (isPreview) {
+      setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, ...patch } : item)));
+      setMessage("Preview user updated.");
+      return;
+    }
+
     const response = await fetch(`/api/admin/users/${user.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -79,15 +111,39 @@ export function AdminUsers({
   }
 
   async function resetPassword(user: User) {
+    setTemporaryCredentials(null);
+
+    if (isPreview) {
+      const temporaryPassword = `preview-${Math.random().toString(36).slice(2, 10)}`;
+      setTemporaryCredentials({ email: user.email ?? "", password: temporaryPassword });
+      setMessage("Preview temporary password created.");
+      return;
+    }
+
     const response = await fetch(`/api/admin/users/${user.id}/reset-password`, { method: "POST" });
     const data = await response.json();
 
     if (response.ok) {
-      setMessage(`${user.email} temporary password: ${data.temporaryPassword}`);
+      setTemporaryCredentials({ email: user.email ?? "", password: data.temporaryPassword });
+      setMessage("Temporary password created.");
     }
   }
 
+  async function copyTemporaryPassword() {
+    if (!temporaryCredentials) {
+      return;
+    }
+
+    await navigator.clipboard?.writeText(temporaryCredentials.password);
+    setMessage("Temporary password copied.");
+  }
+
   async function saveSettings() {
+    if (isPreview) {
+      setMessage("Preview company settings saved locally.");
+      return;
+    }
+
     const response = await fetch("/api/admin/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -100,16 +156,44 @@ export function AdminUsers({
   }
 
   return (
-    <div className="page-shell">
-      <div>
-        <p className="text-sm font-medium text-primary">Administration</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-normal">Users and company settings</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Invite-only access, fallback credentials, domains, and Jira filters.</p>
+    <main className="reference-page">
+      <div className="reference-page-header">
+        <div>
+          <h1 className="reference-title">Employees</h1>
+          <p className="reference-subtitle">Manage invite-only access, credentials users, and Jira reporting filters.</p>
+        </div>
       </div>
 
-      {message ? <Card className="border-primary/40 bg-primary/5"><CardContent className="p-4 text-sm">{message}</CardContent></Card> : null}
+      {message ? <div className="mb-4 rounded-[10px] bg-white/80 px-4 py-3 text-sm text-[#475569] shadow-[0_8px_24px_rgba(15,23,42,0.05)] dark:bg-[#0f1b2a] dark:text-muted-foreground">{message}</div> : null}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      {temporaryCredentials ? (
+        <div className="mb-4 rounded-[12px] border border-[#bfdbfe] bg-[#eff6ff] p-4 text-sm shadow-[0_8px_24px_rgba(15,23,42,0.05)] dark:border-[#1d4ed8]/40 dark:bg-[#132239]">
+          <div className="flex flex-col gap-3 min-[760px]:flex-row min-[760px]:items-start min-[760px]:justify-between">
+            <div>
+              <div className="font-semibold text-[#0f172a] dark:text-foreground">Temporary sign-in password</div>
+              <p className="mt-1 text-[#475569] dark:text-muted-foreground">
+                Give this password to {temporaryCredentials.email || "the user"}. They will be asked to change it after signing in.
+              </p>
+              <div className="mt-3 grid gap-2 min-[760px]:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)]">
+                <div className="rounded-[8px] bg-white px-3 py-2 ring-1 ring-[#dbe5f4] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+                  <div className="text-xs font-medium uppercase tracking-wide text-[#64748b]">Email</div>
+                  <div className="mt-1 break-all font-mono text-[#111827] dark:text-foreground">{temporaryCredentials.email || "-"}</div>
+                </div>
+                <div className="rounded-[8px] bg-white px-3 py-2 ring-1 ring-[#dbe5f4] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+                  <div className="text-xs font-medium uppercase tracking-wide text-[#64748b]">Password</div>
+                  <div className="mt-1 break-all font-mono text-[#111827] dark:text-foreground">{temporaryCredentials.password}</div>
+                </div>
+              </div>
+            </div>
+            <Button variant="outline" className="shrink-0 bg-white dark:bg-[#0f1b2a]" onClick={copyTemporaryPassword}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copy password
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid items-start gap-4 min-[1180px]:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <CardHeader>
             <CardTitle>Team members</CardTitle>
@@ -127,41 +211,49 @@ export function AdminUsers({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>{user.name ?? "-"}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      <Select value={user.role} onChange={(event) => updateUser(user, { role: event.target.value as User["role"] })}>
-                        <option value="EMPLOYEE">Employee</option>
-                        <option value="REVIEWER">Reviewer</option>
-                        <option value="ADMIN">Admin</option>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={user.status}
-                        onChange={(event) => updateUser(user, { status: event.target.value as User["status"] })}
-                      >
-                        <option value="INVITED">Invited</option>
-                        <option value="ACTIVE">Active</option>
-                        <option value="DISABLED">Disabled</option>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <Button variant="outline" size="sm" onClick={() => resetPassword(user)}>
-                        <KeyRound className="mr-2 h-4 w-4" />
-                        Reset
-                      </Button>
+                {users.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-sm text-[#64748b]">
+                      No users have been created yet.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell>{user.name ?? "-"}</TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>
+                        <Select value={user.role} onChange={(event) => updateUser(user, { role: event.target.value as User["role"] })}>
+                          <option value="EMPLOYEE">Employee</option>
+                          <option value="REVIEWER">Reviewer</option>
+                          <option value="ADMIN">Admin</option>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={user.status}
+                          onChange={(event) => updateUser(user, { status: event.target.value as User["status"] })}
+                        >
+                          <option value="INVITED">Invited</option>
+                          <option value="ACTIVE">Active</option>
+                          <option value="DISABLED">Disabled</option>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Button variant="outline" size="sm" onClick={() => resetPassword(user)}>
+                          <KeyRound className="mr-2 h-4 w-4" />
+                          Reset
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Create user</CardTitle>
@@ -185,7 +277,7 @@ export function AdminUsers({
                     <option value="ADMIN">Admin</option>
                   </Select>
                 </div>
-                <Button className="w-full">
+                <Button className="w-full bg-[#2563eb] hover:bg-[#1d4ed8]">
                   <UserPlus className="mr-2 h-4 w-4" />
                   Create
                 </Button>
@@ -196,20 +288,14 @@ export function AdminUsers({
           <Card>
             <CardHeader>
               <CardTitle>Company settings</CardTitle>
-              <CardDescription>Comma-separated domains and Jira project keys.</CardDescription>
+              <CardDescription>Generis access is fixed to @generisgp.com; Jira project filters are optional.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Email domains</Label>
-                <Input
-                  value={settings.emailDomains.join(", ")}
-                  onChange={(event) =>
-                    setSettings((current) => ({
-                      ...current,
-                      emailDomains: event.target.value.split(",").map((item) => item.trim()).filter(Boolean)
-                    }))
-                  }
-                />
+                <Label>Required email domain</Label>
+                <div className="rounded-[8px] bg-[#f8fafc] px-3 py-2 text-sm font-semibold text-[#0f172a] dark:bg-muted dark:text-foreground">
+                  @generisgp.com
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Jira projects</Label>
@@ -223,7 +309,7 @@ export function AdminUsers({
                   }
                 />
               </div>
-              <Button variant="secondary" className="w-full" onClick={saveSettings}>
+              <Button variant="outline" className="w-full" onClick={saveSettings}>
                 <Save className="mr-2 h-4 w-4" />
                 Save settings
               </Button>
@@ -236,6 +322,6 @@ export function AdminUsers({
           </Card>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

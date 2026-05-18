@@ -4,26 +4,48 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 215 28% 17%;
+    --background: 214 32% 97%;
+    --foreground: 217 33% 16%;
     --card: 0 0% 100%;
-    --card-foreground: 215 28% 17%;
+    --card-foreground: 217 33% 16%;
     --popover: 0 0% 100%;
-    --popover-foreground: 215 28% 17%;
-    --primary: 178 62% 27%;
+    --popover-foreground: 217 33% 16%;
+    --primary: 214 86% 55%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 33 56% 92%;
-    --secondary-foreground: 24 34% 24%;
-    --muted: 214 22% 92%;
-    --muted-foreground: 215 13% 42%;
-    --accent: 207 68% 91%;
-    --accent-foreground: 209 54% 26%;
+    --secondary: 214 35% 93%;
+    --secondary-foreground: 217 33% 20%;
+    --muted: 214 30% 94%;
+    --muted-foreground: 215 16% 43%;
+    --accent: 211 86% 94%;
+    --accent-foreground: 214 86% 38%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 18% 84%;
-    --input: 214 18% 84%;
-    --ring: 178 62% 27%;
+    --border: 215 25% 86%;
+    --input: 215 25% 86%;
+    --ring: 214 86% 55%;
     --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 218 42% 7%;
+    --foreground: 214 33% 92%;
+    --card: 218 35% 11%;
+    --card-foreground: 214 33% 92%;
+    --popover: 218 35% 11%;
+    --popover-foreground: 214 33% 92%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 218 30% 17%;
+    --secondary-foreground: 214 32% 91%;
+    --muted: 218 30% 16%;
+    --muted-foreground: 215 20% 69%;
+    --accent: 217 34% 18%;
+    --accent-foreground: 214 32% 91%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 217 27% 24%;
+    --input: 217 27% 25%;
+    --ring: 217 91% 60%;
   }
 
   * {
@@ -32,6 +54,83 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+
+  ::selection {
+    background: rgb(96 165 250 / 0.24);
+  }
+
+  .dark .bg-white,
+  .dark [class*="bg-[#f7f9fc]"],
+  .dark [class*="bg-[#f8fafc]"],
+  .dark [class*="bg-[#fbfcfe]"] {
+    background-color: hsl(var(--card)) !important;
+  }
+
+  .dark [class*="bg-[#eef2f7]"],
+  .dark [class*="bg-[#eff6ff]"],
+  .dark [class*="bg-[#f3f8ff]"],
+  .dark [class*="bg-[#e2e8f0]"] {
+    background-color: hsl(var(--muted)) !important;
+  }
+
+  .dark [class*="bg-[#ecfdf0]"] {
+    background-color: rgb(6 78 59 / 0.32) !important;
+  }
+
+  .dark [class*="bg-[#fff7ed]"] {
+    background-color: rgb(124 45 18 / 0.32) !important;
+  }
+
+  .dark [class*="bg-[#fef2f2]"] {
+    background-color: rgb(127 29 29 / 0.32) !important;
+  }
+
+  .dark [class*="text-[#0f172a]"],
+  .dark [class*="text-[#111827]"],
+  .dark [class*="text-[#334155]"] {
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .dark [class*="text-[#475569]"],
+  .dark [class*="text-[#64748b]"],
+  .dark [class*="text-[#94a3b8]"] {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  .dark [class*="text-[#2563eb]"] {
+    color: rgb(147 197 253) !important;
+  }
+
+  .dark [class*="text-[#15803d]"],
+  .dark [class*="text-[#16a34a]"] {
+    color: rgb(110 231 183) !important;
+  }
+
+  .dark [class*="text-[#ea580c]"] {
+    color: rgb(253 186 116) !important;
+  }
+
+  .dark [class*="text-[#dc2626]"],
+  .dark [class*="text-[#ef4444]"] {
+    color: rgb(252 165 165) !important;
+  }
+
+  .dark [class*="border-[#d8dee8]"],
+  .dark [class*="border-[#d9e1ec]"],
+  .dark [class*="border-[#e2e8f0]"],
+  .dark [class*="border-[#eef2f7]"],
+  .dark [class*="border-[#cbd5e1]"],
+  .dark [class*="border-[#bfdbfe]"],
+  .dark [class*="border-[#93c5fd]"] {
+    border-color: hsl(var(--border)) !important;
+  }
+
+  .dark [class*="divide-[#e2e8f0]"] > :not([hidden]) ~ :not([hidden]) {
+    border-color: hsl(var(--border)) !important;
   }
 }
 
@@ -43,4 +142,57 @@
   .section-band {
     @apply rounded-none border-y border-border bg-white/70 py-6;
   }
+
+  .reference-page {
+    @apply w-full px-[clamp(14px,1.7vw,26px)] pb-6 pt-5;
+  }
+
+  .reference-page-header {
+    @apply mb-4 flex flex-wrap items-end justify-between gap-3;
+  }
+
+  .reference-title {
+    @apply text-2xl font-semibold leading-tight tracking-normal text-[#0f172a] dark:text-foreground;
+  }
+
+  .reference-subtitle {
+    @apply mt-1 max-w-3xl text-sm leading-6 text-[#64748b] dark:text-muted-foreground;
+  }
+
+  .reference-toolbar {
+    @apply rounded-[10px] bg-white/[0.86] p-3 shadow-[0_10px_28px_rgba(15,23,42,0.055)] backdrop-blur dark:bg-[#0d1827]/[0.92] dark:shadow-[0_16px_38px_rgba(0,0,0,0.22)];
+  }
+
+  .reference-card {
+    @apply rounded-[10px] bg-white/[0.92] shadow-[0_10px_30px_rgba(15,23,42,0.06)] dark:bg-[#0f1b2a]/95 dark:shadow-[0_16px_38px_rgba(0,0,0,0.22)];
+  }
+
+  .reference-card-muted {
+    @apply rounded-[10px] bg-[#f7f9fc] dark:bg-[#0b1523];
+  }
+
+  .reference-label {
+    @apply mb-1.5 text-xs font-medium tracking-normal text-[#64748b] dark:text-muted-foreground;
+  }
+
+  .reference-table-head {
+    @apply border-b border-transparent bg-transparent text-left text-xs font-medium normal-case tracking-normal text-[#64748b] dark:text-muted-foreground;
+  }
+
+  .reference-table-row {
+    @apply rounded-[8px] bg-transparent transition-colors hover:bg-[#f8fafc]/80 dark:hover:bg-white/[0.04];
+  }
+
+  .reference-divider {
+    @apply border-[#edf2f7] dark:border-[#1a2a3d];
+  }
+
+  .reference-action-cell {
+    @apply relative w-14 px-4 py-3 text-center text-[#64748b] dark:text-muted-foreground;
+  }
+
+  .reference-menu-button {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-[#64748b] transition-colors hover:bg-[#eef2f7] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground;
+  }
+
 }

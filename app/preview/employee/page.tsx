@@ -12,19 +12,15 @@ export default function PreviewEmployeePage({
   requirePreviewBypass();
 
   const date = searchParams?.date ?? todayDateString();
-  const now = new Date();
-
   return (
     <DailyReportApp
       isPreview
       date={date}
       userName="Employee Preview"
+      userEmail="employee.preview@generisgp.com"
       userRole="Employee"
-      history={[
-        { id: "history-current", reportDate: date, status: "SUBMITTED" },
-        { id: "history-prior-1", reportDate: new Date(now.getTime() - 86_400_000).toISOString(), status: "SUBMITTED" },
-        { id: "history-prior-2", reportDate: new Date(now.getTime() - 172_800_000).toISOString(), status: "SUBMITTED", editedAfterDate: true }
-      ]}
+      userStatus="Preview"
+      timezone="America/Toronto"
       initialReport={{
         id: "preview-employee-report",
         reportDate: date,
@@ -39,7 +35,7 @@ export default function PreviewEmployeePage({
             id: "preview-activity-1",
             source: "JIRA",
             title: "Project planning update",
-            description: "Imported issue activity will appear here once Jira is connected.",
+            description: "Preview issue activity for the selected report date.",
             status: "In Progress",
             sourceUrl: "#",
             durationMinutes: 75,
@@ -50,7 +46,7 @@ export default function PreviewEmployeePage({
             id: "preview-activity-2",
             source: "GOOGLE_CALENDAR",
             title: "Client coordination meeting",
-            description: "Calendar meetings will be available as report activities.",
+            description: "Preview calendar activity for the selected report date.",
             status: "Completed",
             sourceUrl: "#",
             durationMinutes: 45,

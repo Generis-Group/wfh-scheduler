@@ -10,7 +10,6 @@ export async function GET() {
 
     return json({
       settings: setting?.value ?? {
-        emailDomains: [],
         jiraProjectKeys: []
       }
     });

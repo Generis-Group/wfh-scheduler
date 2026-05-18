@@ -1,7 +1,7 @@
 import { assertCanAccessUser, requireSession } from "@/lib/access";
-import { getDashboardMetrics, getDailyReport, listReportsForDate } from "@/lib/services/reports";
-import { handleRouteError, json } from "@/lib/http";
-import { reportQuerySchema } from "@/lib/validation";
+import { ensureDailyReport, getDashboardMetrics, getDailyReport, listReportsForDate, updateReport } from "@/lib/services/reports";
+import { handleRouteError, HttpError, json } from "@/lib/http";
+import { createReportSchema, reportQuerySchema } from "@/lib/validation";
 
 export async function GET(request: Request) {
   try {
@@ -27,6 +27,24 @@ export async function GET(request: Request) {
     const report = await getDailyReport(userId, query.date);
 
     return json({ report });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const session = await requireSession();
+
+    if (session.user.role !== "EMPLOYEE") {
+      throw new HttpError(403, "Only employees can create daily reports.");
+    }
+
+    const input = createReportSchema.parse(await request.json());
+    const report = await ensureDailyReport(session.user.id, input.date);
+    const updated = await updateReport(report.id, session.user.id, input);
+
+    return json({ report: updated }, { status: 201 });
   } catch (error) {
     return handleRouteError(error);
   }

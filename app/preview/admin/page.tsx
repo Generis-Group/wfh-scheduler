@@ -21,7 +21,7 @@ export default function PreviewAdminPage({
   const nextDate = nextDay.toISOString().slice(0, 10);
   const rows = [
     {
-      user: { id: "employee-1", name: "Employee One", email: "employee.one@generis.local", role: "EMPLOYEE" },
+      user: { id: "employee-1", name: "Employee One", email: "employee.one@generisgp.com", role: "EMPLOYEE", status: "ACTIVE" },
       report: {
         id: "report-1",
         reportDate: date,
@@ -40,7 +40,7 @@ export default function PreviewAdminPage({
       }
     },
     {
-      user: { id: "employee-2", name: "Employee Two", email: "employee.two@generis.local", role: "EMPLOYEE" },
+      user: { id: "employee-2", name: "Employee Two", email: "employee.two@generisgp.com", role: "EMPLOYEE", status: "ACTIVE" },
       report: {
         id: "report-2",
         reportDate: date,
@@ -65,7 +65,7 @@ export default function PreviewAdminPage({
       }
     },
     {
-      user: { id: "employee-3", name: "Employee Three", email: "employee.three@generis.local", role: "EMPLOYEE" },
+      user: { id: "employee-3", name: "Employee Three", email: "employee.three@generisgp.com", role: "EMPLOYEE", status: "ACTIVE" },
       report: null
     }
   ];
@@ -90,7 +90,11 @@ export default function PreviewAdminPage({
       }}
       date={date}
       userName="Admin Preview"
+      userEmail="admin.preview@generisgp.com"
       userRole="Reviewer"
+      userStatus="Preview"
+      timezone="America/Toronto"
+      reviewerId="preview-admin"
     />
   );
 }

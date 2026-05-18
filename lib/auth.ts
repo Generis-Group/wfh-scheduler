@@ -6,8 +6,10 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 
 import { encryptedPrismaAdapter } from "@/lib/auth-adapter";
+import { isGenerisEmail, normalizeEmail } from "@/lib/auth-domain";
 import { getOptionalEnv } from "@/lib/env";
 import { getOAuthProviderConfig } from "@/lib/oauth-config";
+import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
 import { prisma } from "@/lib/prisma";
 
 const oauthConfig = getOAuthProviderConfig();
@@ -30,7 +32,7 @@ export const authOptions: NextAuthOptions = {
             authorization: {
               params: {
                 audience: "api.atlassian.com",
-                scope: "read:jira-user read:jira-work offline_access",
+                scope: ATLASSIAN_OAUTH_SCOPE,
                 prompt: "consent"
               }
             }
@@ -47,8 +49,7 @@ export const authOptions: NextAuthOptions = {
               params: {
                 access_type: "offline",
                 prompt: "consent",
-                scope:
-                  "openid email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly"
+                scope: GOOGLE_OAUTH_SCOPE
               }
             }
           })
@@ -61,10 +62,14 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        const email = credentials?.email?.toLowerCase().trim();
+        const email = normalizeEmail(credentials?.email);
         const password = credentials?.password;
 
         if (!email || !password) {
+          return null;
+        }
+
+        if (!isGenerisEmail(email)) {
           return null;
         }
 
@@ -99,12 +104,12 @@ export const authOptions: NextAuthOptions = {
         return true;
       }
 
-      if (!user.email) {
+      if (!isGenerisEmail(user.email)) {
         return false;
       }
 
       const invitedUser = await prisma.user.findUnique({
-        where: { email: user.email.toLowerCase() }
+        where: { email: normalizeEmail(user.email) }
       });
 
       return Boolean(invitedUser && invitedUser.status !== "DISABLED");

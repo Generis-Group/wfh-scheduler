@@ -1,0 +1,208 @@
+import type { ReactNode } from "react";
+
+export type PageLoadingKind = "daily" | "reports" | "review" | "employees" | "settings" | "account";
+
+function LoadingBar({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse rounded-full bg-[#e3e8f1] dark:bg-[#1f3047] ${className}`} />;
+}
+
+function LoadingCard({ children, className = "" }: { children?: ReactNode; className?: string }) {
+  return (
+    <section className={`rounded-[14px] bg-white p-5 shadow-[0_12px_34px_rgba(15,23,42,0.07)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43] ${className}`}>
+      {children}
+    </section>
+  );
+}
+
+function LoadingHeader({ titleWidth = "w-56", subtitleWidth = "w-80" }: { titleWidth?: string; subtitleWidth?: string }) {
+  return (
+    <div className="mb-5">
+      <LoadingBar className={`h-8 ${titleWidth} max-w-full`} />
+      <LoadingBar className={`mt-3 h-4 ${subtitleWidth} max-w-full`} />
+    </div>
+  );
+}
+
+function DailyPreview() {
+  return (
+    <>
+      <LoadingHeader titleWidth="w-48" subtitleWidth="w-72" />
+      <LoadingCard className="mb-4">
+        <div className="flex flex-col gap-3 min-[900px]:flex-row min-[900px]:items-center min-[900px]:justify-between">
+          <div className="flex max-w-[430px] flex-1 gap-2">
+            <LoadingBar className="h-11 w-11 shrink-0 rounded-[8px]" />
+            <LoadingBar className="h-11 flex-1 rounded-[8px]" />
+            <LoadingBar className="h-11 w-11 shrink-0 rounded-[8px]" />
+          </div>
+          <LoadingBar className="h-11 w-full max-w-[344px] rounded-[8px]" />
+        </div>
+      </LoadingCard>
+      <div className="grid gap-4 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)]">
+        <LoadingCard className="min-h-[468px]">
+          <div className="flex items-center justify-between gap-4">
+            <LoadingBar className="h-7 w-36" />
+            <LoadingBar className="h-10 w-28 rounded-[8px]" />
+          </div>
+          <div className="mt-6 space-y-3">
+            <LoadingBar className="h-[74px] rounded-[10px]" />
+            <LoadingBar className="h-[74px] rounded-[10px]" />
+            <LoadingBar className="h-[74px] rounded-[10px]" />
+          </div>
+        </LoadingCard>
+        <LoadingCard className="min-h-[468px]">
+          <LoadingBar className="h-7 w-32" />
+          <LoadingBar className="mt-6 h-44 rounded-[8px]" />
+          <LoadingBar className="mt-6 h-12 rounded-[8px]" />
+          <LoadingBar className="mt-6 h-24 rounded-[10px]" />
+        </LoadingCard>
+      </div>
+    </>
+  );
+}
+
+function ReportsPreview() {
+  return (
+    <>
+      <LoadingHeader titleWidth="w-36" subtitleWidth="w-72" />
+      <LoadingCard className="mb-5">
+        <div className="grid gap-3 min-[980px]:grid-cols-[minmax(260px,1fr)_190px_320px_150px]">
+          <LoadingBar className="h-11 rounded-[8px]" />
+          <LoadingBar className="h-11 rounded-[8px]" />
+          <LoadingBar className="h-11 rounded-[8px]" />
+          <LoadingBar className="h-11 rounded-[8px]" />
+        </div>
+      </LoadingCard>
+      <LoadingCard>
+        <div className="grid gap-3">
+          <LoadingBar className="h-14 rounded-[8px]" />
+          <LoadingBar className="h-20 rounded-[8px]" />
+          <LoadingBar className="h-20 rounded-[8px]" />
+          <LoadingBar className="h-20 rounded-[8px]" />
+          <LoadingBar className="h-12 rounded-[8px]" />
+        </div>
+      </LoadingCard>
+    </>
+  );
+}
+
+function ReviewPreview() {
+  return (
+    <>
+      <LoadingHeader titleWidth="w-56" subtitleWidth="w-96" />
+      <div className="mb-4 grid gap-3 min-[920px]:grid-cols-4">
+        <LoadingCard><LoadingBar className="h-20" /></LoadingCard>
+        <LoadingCard><LoadingBar className="h-20" /></LoadingCard>
+        <LoadingCard><LoadingBar className="h-20" /></LoadingCard>
+        <LoadingCard><LoadingBar className="h-20" /></LoadingCard>
+      </div>
+      <div className="grid gap-4 min-[1180px]:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+        <LoadingCard className="min-h-[460px]">
+          <LoadingBar className="h-11 rounded-[8px]" />
+          <div className="mt-5 space-y-3">
+            <LoadingBar className="h-16 rounded-[8px]" />
+            <LoadingBar className="h-16 rounded-[8px]" />
+            <LoadingBar className="h-16 rounded-[8px]" />
+            <LoadingBar className="h-16 rounded-[8px]" />
+          </div>
+        </LoadingCard>
+        <LoadingCard className="min-h-[460px]">
+          <LoadingBar className="h-7 w-44" />
+          <LoadingBar className="mt-6 h-32 rounded-[8px]" />
+          <LoadingBar className="mt-5 h-24 rounded-[8px]" />
+          <LoadingBar className="mt-5 h-24 rounded-[8px]" />
+        </LoadingCard>
+      </div>
+    </>
+  );
+}
+
+function EmployeesPreview() {
+  return (
+    <>
+      <LoadingHeader titleWidth="w-40" subtitleWidth="w-96" />
+      <div className="grid items-start gap-4 min-[1180px]:grid-cols-[minmax(0,1fr)_360px]">
+        <LoadingCard className="min-h-[460px]">
+          <LoadingBar className="h-7 w-40" />
+          <div className="mt-6 space-y-3">
+            <LoadingBar className="h-12 rounded-[8px]" />
+            <LoadingBar className="h-14 rounded-[8px]" />
+            <LoadingBar className="h-14 rounded-[8px]" />
+            <LoadingBar className="h-14 rounded-[8px]" />
+          </div>
+        </LoadingCard>
+        <LoadingCard className="min-h-[360px]">
+          <LoadingBar className="h-7 w-32" />
+          <LoadingBar className="mt-6 h-10 rounded-[8px]" />
+          <LoadingBar className="mt-4 h-10 rounded-[8px]" />
+          <LoadingBar className="mt-4 h-10 rounded-[8px]" />
+          <LoadingBar className="mt-5 h-11 rounded-[8px]" />
+        </LoadingCard>
+      </div>
+    </>
+  );
+}
+
+function SettingsPreview({ account = false }: { account?: boolean }) {
+  return (
+    <>
+      <LoadingHeader titleWidth={account ? "w-36" : "w-40"} subtitleWidth="w-96" />
+      <div className="grid gap-4 min-[1060px]:grid-cols-2">
+        <LoadingCard className="min-h-[260px]">
+          <LoadingBar className="h-7 w-44" />
+          <LoadingBar className="mt-6 h-11 rounded-[8px]" />
+          <LoadingBar className="mt-4 h-11 rounded-[8px]" />
+          <LoadingBar className="mt-4 h-20 rounded-[8px]" />
+        </LoadingCard>
+        <LoadingCard className="min-h-[260px]">
+          <LoadingBar className="h-7 w-40" />
+          <LoadingBar className="mt-6 h-11 rounded-[8px]" />
+          <LoadingBar className="mt-4 h-11 rounded-[8px]" />
+          <LoadingBar className="mt-4 h-20 rounded-[8px]" />
+        </LoadingCard>
+      </div>
+    </>
+  );
+}
+
+export function loadingKindFromHref(href: string, fallbackVariant: "employee" | "admin" = "employee"): PageLoadingKind {
+  const path = href.split("?")[0] || "/";
+
+  if (path.endsWith("/reports") || path.endsWith("/history")) {
+    return "reports";
+  }
+
+  if (path.endsWith("/review") || path.endsWith("/preview/admin")) {
+    return "review";
+  }
+
+  if (path.endsWith("/admin") || path.endsWith("/employees")) {
+    return "employees";
+  }
+
+  if (path.endsWith("/account")) {
+    return "account";
+  }
+
+  if (path.endsWith("/settings") || path.endsWith("/admin-settings")) {
+    return "settings";
+  }
+
+  if (path.endsWith("/employee") || path === "/" || path === "") {
+    return fallbackVariant === "admin" ? "review" : "daily";
+  }
+
+  return fallbackVariant === "admin" ? "review" : "daily";
+}
+
+export function PageLoadingPreview({ kind = "daily" }: { kind?: PageLoadingKind }) {
+  return (
+    <main className="reference-page !pb-5 !pt-4" aria-busy="true" aria-label="Loading page">
+      {kind === "daily" ? <DailyPreview /> : null}
+      {kind === "reports" ? <ReportsPreview /> : null}
+      {kind === "review" ? <ReviewPreview /> : null}
+      {kind === "employees" ? <EmployeesPreview /> : null}
+      {kind === "settings" ? <SettingsPreview /> : null}
+      {kind === "account" ? <SettingsPreview account /> : null}
+    </main>
+  );
+}

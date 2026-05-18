@@ -1,11 +1,13 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 
+import { isGenerisEmail, normalizeEmail } from "@/lib/auth-domain";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import type { changePasswordSchema, createUserSchema, resetPasswordSchema, updateUserSchema } from "@/lib/validation";
+import type { accountProfileSchema, changePasswordSchema, createUserSchema, resetPasswordSchema, updateUserSchema } from "@/lib/validation";
 import type { z } from "zod";
 
+type AccountProfileInput = z.infer<typeof accountProfileSchema>;
 type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 type CreateUserInput = z.infer<typeof createUserSchema>;
 type UpdateUserInput = z.infer<typeof updateUserSchema>;
@@ -16,12 +18,18 @@ function generateTemporaryPassword() {
 }
 
 export async function createAppUser(input: CreateUserInput) {
+  const email = normalizeEmail(input.email);
+
+  if (!isGenerisEmail(email)) {
+    throw new HttpError(422, "User email must end with @generisgp.com.");
+  }
+
   const temporaryPassword = input.temporaryPassword ?? generateTemporaryPassword();
   const passwordHash = await bcrypt.hash(temporaryPassword, 12);
 
   const user = await prisma.user.create({
     data: {
-      email: input.email.toLowerCase(),
+      email,
       name: input.name,
       role: input.role,
       status: input.status,
@@ -61,6 +69,18 @@ export async function changeOwnPassword(userId: string, input: ChangePasswordInp
       passwordHash,
       mustChangePassword: false,
       status: user.status === "INVITED" ? "ACTIVE" : user.status
+    }
+  });
+}
+
+export async function updateOwnProfile(userId: string, input: AccountProfileInput) {
+  const name = input.name?.trim() || null;
+
+  return prisma.user.update({
+    where: { id: userId },
+    data: {
+      name,
+      timezone: input.timezone
     }
   });
 }

@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import { DailyReportApp } from "@/components/reports/daily-report-app";
 import { auth } from "@/lib/auth";
 import { todayDateString } from "@/lib/dates";
+import { getOAuthProviderConfig } from "@/lib/oauth-config";
+import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serializers";
+import { listActivities } from "@/lib/services/activity";
 import { getDailyReport } from "@/lib/services/reports";
 
 export default async function HomePage({
@@ -32,18 +35,46 @@ export default async function HomePage({
   }
 
   const date = searchParams?.date ?? todayDateString(session.user.timezone);
-  const report = await getDailyReport(session.user.id, date);
+  const [report, activities, accounts] = await Promise.all([
+    getDailyReport(session.user.id, date),
+    listActivities(session.user.id, date),
+    prisma.account.findMany({
+      where: { userId: session.user.id },
+      select: { provider: true }
+    })
+  ]);
 
-  if (!report) {
-    throw new Error("Unable to create daily report.");
-  }
+  const initialReport = report
+    ? serialize({ ...report, activities })
+    : {
+        id: "",
+        reportDate: date,
+        workLocation: "UNKNOWN" as const,
+        summary: "",
+        blockers: "",
+        status: "DRAFT" as const,
+        submittedAt: null,
+        updatedAt: null,
+        activities: serialize(activities),
+        comments: [],
+        revisions: []
+      };
 
   return (
     <DailyReportApp
-      initialReport={serialize(report)}
+      initialReport={initialReport}
       date={date}
       userName={session.user.name ?? session.user.email}
+      userEmail={session.user.email}
       userRole="Employee"
+      userStatus={session.user.status}
+      timezone={session.user.timezone}
+      mustChangePassword={session.user.mustChangePassword}
+      integrationStatus={{
+        google: accounts.some((account) => account.provider === "google"),
+        atlassian: accounts.some((account) => account.provider === "atlassian")
+      }}
+      oauthConfig={getOAuthProviderConfig()}
     />
   );
 }

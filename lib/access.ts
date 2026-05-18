@@ -42,3 +42,13 @@ export function assertCanAccessUser(session: NonNullable<AppSession>, userId: st
 export function assertCanAccessReport(session: NonNullable<AppSession>, report: Pick<DailyReport, "userId">) {
   assertCanAccessUser(session, report.userId);
 }
+
+export function canMutateReport(session: NonNullable<AppSession>, report: Pick<DailyReport, "userId">) {
+  return session.user.role === "EMPLOYEE" && session.user.id === report.userId;
+}
+
+export function assertCanMutateReport(session: NonNullable<AppSession>, report: Pick<DailyReport, "userId">) {
+  if (!canMutateReport(session, report)) {
+    throw new HttpError(403, "Only the report owner can edit or submit this report.");
+  }
+}

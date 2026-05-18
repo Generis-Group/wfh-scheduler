@@ -3,7 +3,6 @@ import type { Prisma } from "@prisma/client";
 import { parseReportDate } from "@/lib/dates";
 import type { NormalizedActivity } from "@/lib/normalizers/types";
 import { prisma } from "@/lib/prisma";
-import { ensureDailyReport } from "@/lib/services/reports";
 
 function metadataJson(metadata: NormalizedActivity["metadata"]) {
   return metadata ? (JSON.parse(JSON.stringify(metadata)) as Prisma.InputJsonValue) : undefined;
@@ -24,8 +23,16 @@ export async function upsertImportedActivities(
   dateString: string,
   activities: NormalizedActivity[]
 ) {
-  const report = await ensureDailyReport(userId, dateString);
   const reportDate = parseReportDate(dateString);
+  const report = await prisma.dailyReport.findUnique({
+    where: {
+      userId_reportDate: {
+        userId,
+        reportDate
+      }
+    },
+    select: { id: true }
+  });
 
   let importedCount = 0;
   let skippedCount = 0;
@@ -46,7 +53,7 @@ export async function upsertImportedActivities(
         }
       },
       update: {
-        dailyReportId: report.id,
+        dailyReportId: report?.id,
         sourceContainerId: item.sourceContainerId ?? null,
         title: item.title,
         description: item.description ?? null,
@@ -59,7 +66,7 @@ export async function upsertImportedActivities(
       },
       create: {
         userId,
-        dailyReportId: report.id,
+        dailyReportId: report?.id,
         reportDate,
         source: item.source,
         sourceId: item.sourceId,

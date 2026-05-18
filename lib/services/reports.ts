@@ -9,6 +9,14 @@ import type { z } from "zod";
 
 type UpdateReportInput = z.infer<typeof updateReportSchema>;
 
+function extractBlockerLines(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.match(/^\s*blockers?:\s*(.+?)\s*$/i)?.[1]?.trim())
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
 const reportInclude = {
   user: true,
   activities: {
@@ -17,6 +25,12 @@ const reportInclude = {
   comments: {
     include: { author: true },
     orderBy: { createdAt: "asc" as const }
+  },
+  readReceipts: {
+    select: {
+      reviewerId: true,
+      readAt: true
+    }
   },
   revisions: {
     include: { editedBy: true },
@@ -43,10 +57,15 @@ export async function ensureDailyReport(userId: string, dateString: string) {
 }
 
 export async function getDailyReport(userId: string, dateString: string) {
-  const report = await ensureDailyReport(userId, dateString);
+  const reportDate = parseReportDate(dateString);
 
   return prisma.dailyReport.findUnique({
-    where: { id: report.id },
+    where: {
+      userId_reportDate: {
+        userId,
+        reportDate
+      }
+    },
     include: reportInclude
   });
 }
@@ -98,7 +117,6 @@ async function createRevision(reportId: string, editedById: string) {
 
 export async function updateReport(reportId: string, editedById: string, input: UpdateReportInput) {
   const report = await getReportById(reportId);
-  const reportDateString = report.reportDate.toISOString().slice(0, 10);
 
   await createRevision(report.id, editedById);
 
@@ -107,17 +125,29 @@ export async function updateReport(reportId: string, editedById: string, input: 
       where: { id: report.id },
       data: {
         summary: input.summary,
-        blockers: input.blockers,
+        blockers: input.summary === undefined ? input.blockers : extractBlockerLines(input.summary),
         workLocation: input.workLocation
       }
     });
 
     for (const activity of input.activityUpdates ?? []) {
       await tx.activityItem.updateMany({
-        where: { id: activity.id, userId: report.userId },
+        where: { id: activity.id, userId: report.userId, reportDate: report.reportDate },
         data: {
+          dailyReportId: report.id,
           selected: activity.selected,
           employeeNote: activity.employeeNote === undefined ? undefined : activity.employeeNote
+        }
+      });
+    }
+
+    if (input.deletedActivityIds?.length) {
+      await tx.activityItem.deleteMany({
+        where: {
+          id: { in: input.deletedActivityIds },
+          userId: report.userId,
+          dailyReportId: report.id,
+          source: "MANUAL"
         }
       });
     }
@@ -142,7 +172,7 @@ export async function updateReport(reportId: string, editedById: string, input: 
     }
   });
 
-  return getDailyReport(report.userId, reportDateString);
+  return getReportById(report.id);
 }
 
 export async function submitReport(reportId: string, editedById: string) {
@@ -165,6 +195,30 @@ export async function submitReport(reportId: string, editedById: string) {
   return getReportById(reportId);
 }
 
+export async function deleteDraftReport(reportId: string) {
+  const report = await getReportById(reportId);
+
+  if (report.status !== "DRAFT") {
+    throw new HttpError(400, "Submitted reports cannot be deleted.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.activityItem.deleteMany({
+      where: {
+        dailyReportId: report.id
+      }
+    });
+
+    await tx.dailyReport.delete({
+      where: {
+        id: report.id
+      }
+    });
+  });
+
+  return { ok: true };
+}
+
 export async function addReportComment(reportId: string, authorId: string, body: string) {
   await prisma.reportComment.create({
     data: {
@@ -177,11 +231,44 @@ export async function addReportComment(reportId: string, authorId: string, body:
   return getReportById(reportId);
 }
 
+export async function setReportReadState(reportId: string, reviewerId: string, read: boolean) {
+  await getReportById(reportId);
+
+  if (!read) {
+    await prisma.reportReadReceipt.deleteMany({
+      where: {
+        reportId,
+        reviewerId
+      }
+    });
+
+    return getReportById(reportId);
+  }
+
+  await prisma.reportReadReceipt.upsert({
+    where: {
+      reportId_reviewerId: {
+        reportId,
+        reviewerId
+      }
+    },
+    update: {
+      readAt: new Date()
+    },
+    create: {
+      reportId,
+      reviewerId
+    }
+  });
+
+  return getReportById(reportId);
+}
+
 export async function listReportsForDate(dateString: string) {
   const reportDate = parseReportDate(dateString);
 
   const users = await prisma.user.findMany({
-    where: { status: { not: "DISABLED" } },
+    where: { role: "EMPLOYEE", status: { not: "DISABLED" } },
     orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
     include: {
       reports: {
@@ -205,7 +292,20 @@ export async function listReportHistory(userId: string, limit = 30) {
     include: {
       activities: {
         where: { selected: true },
-        select: { id: true }
+        orderBy: [{ startedAt: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          source: true,
+          title: true,
+          status: true,
+          durationMinutes: true,
+          employeeNote: true,
+          sourceUrl: true
+        }
+      },
+      comments: {
+        include: { author: true },
+        orderBy: { createdAt: "asc" }
       },
       revisions: {
         include: { editedBy: true },
@@ -219,17 +319,19 @@ export async function getDashboardMetrics(dateString: string) {
   const reportDate = parseReportDate(dateString);
   const trendStart = new Date(reportDate);
   trendStart.setUTCDate(trendStart.getUTCDate() - 6);
-  const users = await prisma.user.count({ where: { status: { not: "DISABLED" } } });
-  const submitted = await prisma.dailyReport.count({ where: { reportDate, status: "SUBMITTED" } });
+  const employeeWhere = { role: "EMPLOYEE" as const, status: { not: "DISABLED" as const } };
+  const users = await prisma.user.count({ where: employeeWhere });
+  const submitted = await prisma.dailyReport.count({ where: { reportDate, status: "SUBMITTED", user: employeeWhere } });
   const activities = await prisma.activityItem.groupBy({
     by: ["source"],
-    where: { reportDate, selected: true },
+    where: { reportDate, selected: true, user: employeeWhere },
     _count: true
   });
   const blockers = await prisma.dailyReport.count({
     where: {
       reportDate,
-      blockers: { not: "" }
+      blockers: { not: "" },
+      user: employeeWhere
     }
   });
   const blockerTrendRows = await prisma.dailyReport.groupBy({
@@ -239,7 +341,8 @@ export async function getDashboardMetrics(dateString: string) {
         gte: trendStart,
         lte: reportDate
       },
-      blockers: { not: "" }
+      blockers: { not: "" },
+      user: employeeWhere
     },
     _count: true
   });

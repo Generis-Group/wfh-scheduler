@@ -3,6 +3,8 @@
 import { SessionProvider } from "next-auth/react";
 import type { Session } from "next-auth";
 
+import { ThemeProvider } from "@/components/theme-provider";
+
 export function Providers({
   children,
   session
@@ -10,5 +12,9 @@ export function Providers({
   children: React.ReactNode;
   session: Session | null;
 }) {
-  return <SessionProvider session={session}>{children}</SessionProvider>;
+  return (
+    <ThemeProvider>
+      <SessionProvider session={session}>{children}</SessionProvider>
+    </ThemeProvider>
+  );
 }

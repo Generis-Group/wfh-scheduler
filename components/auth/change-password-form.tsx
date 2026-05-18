@@ -43,8 +43,8 @@ export function ChangePasswordForm() {
 
   return (
     <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>Change temporary password</CardTitle>
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl">Change temporary password</CardTitle>
         <CardDescription>Set a permanent password before continuing to the reporting app.</CardDescription>
       </CardHeader>
       <CardContent>

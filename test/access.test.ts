@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { auth } from "@/lib/auth";
 import { HttpError } from "@/lib/http";
-import { canAccessUser, requireRole, requireSession } from "@/lib/access";
+import { canAccessUser, canMutateReport, requireRole, requireSession } from "@/lib/access";
 
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn()
@@ -47,6 +47,13 @@ describe("access guards", () => {
     expect(canAccessUser(session("REVIEWER")!, "employee-1")).toBe(true);
     expect(canAccessUser(session("ADMIN")!, "employee-1")).toBe(true);
     expect(canAccessUser(session("EMPLOYEE")!, "employee-1")).toBe(false);
+  });
+
+  it("allows only employee owners to mutate reports", () => {
+    expect(canMutateReport(session("EMPLOYEE")!, { userId: "user-1" })).toBe(true);
+    expect(canMutateReport(session("EMPLOYEE")!, { userId: "employee-1" })).toBe(false);
+    expect(canMutateReport(session("REVIEWER")!, { userId: "employee-1" })).toBe(false);
+    expect(canMutateReport(session("ADMIN")!, { userId: "employee-1" })).toBe(false);
   });
 
   it("enforces role allow lists", async () => {

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { generisEmailMessage, isGenerisEmail } from "@/lib/auth-domain";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 
 export function LoginForm({
@@ -27,6 +28,12 @@ export function LoginForm({
     event.preventDefault();
     setIsSubmitting(true);
     setError(null);
+
+    if (!isGenerisEmail(email)) {
+      setError(generisEmailMessage());
+      setIsSubmitting(false);
+      return;
+    }
 
     const result = await signIn("credentials", {
       email,
@@ -47,9 +54,9 @@ export function LoginForm({
 
   return (
     <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>Generis daily reporting</CardTitle>
-        <CardDescription>Sign in to review activity and submit today&apos;s report.</CardDescription>
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl">Welcome back</CardTitle>
+        <CardDescription>Sign in with your @generisgp.com account to review activity and submit reports.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <form className="space-y-4" onSubmit={submit}>
@@ -59,6 +66,7 @@ export function LoginForm({
               id="email"
               type="email"
               autoComplete="email"
+              placeholder="name@generisgp.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               required
@@ -101,19 +109,23 @@ export function LoginForm({
             Atlassian
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">Only @generisgp.com accounts can sign in.</p>
         {!oauthConfig.google || !oauthConfig.atlassian ? (
           <p className="text-xs text-muted-foreground">
             OAuth buttons are enabled after client IDs and secrets are added to `.env.local`.
           </p>
         ) : null}
         {previewEnabled ? (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="space-y-2 pt-4">
+            <p className="text-center text-xs font-medium text-muted-foreground">Preview the app during development</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Button asChild variant="secondary">
               <Link href="/preview/employee">View as Employee</Link>
             </Button>
             <Button asChild variant="secondary">
               <Link href="/preview/admin">View as Admin/Reviewer</Link>
             </Button>
+            </div>
           </div>
         ) : null}
       </CardContent>

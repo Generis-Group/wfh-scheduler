@@ -21,6 +21,7 @@ Docker is intentionally not used for this MVP.
    - `NEXTAUTH_SECRET`
    - `TOKEN_ENCRYPTION_KEY`
    - Atlassian and Google OAuth client values
+   - Resend email values: `RESEND_API_KEY`, `EMAIL_FROM`, `APP_BASE_URL`, and `CRON_SECRET`
    - `ENABLE_PREVIEW_BYPASS=true` only for local demos
 3. Install dependencies:
 
@@ -55,11 +56,12 @@ npm run db:deploy
 ## Vercel + Managed Postgres
 
 1. Create a managed Postgres database and set `DATABASE_URL` in Vercel.
-2. Set `NEXTAUTH_URL` to the production URL, plus `NEXTAUTH_SECRET`, `TOKEN_ENCRYPTION_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ATLASSIAN_CLIENT_ID`, and `ATLASSIAN_CLIENT_SECRET`.
+2. Set `NEXTAUTH_URL` and `APP_BASE_URL` to the production URL, plus `NEXTAUTH_SECRET`, `TOKEN_ENCRYPTION_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, and `CRON_SECRET`.
 3. Set `ENABLE_PREVIEW_BYPASS=false` in production unless a temporary private demo bypass is intentionally needed.
 4. Configure OAuth redirect URLs:
    - Local: `http://localhost:3000/api/auth/callback/google` and `http://localhost:3000/api/auth/callback/atlassian`
    - Production: `https://YOUR_DOMAIN/api/auth/callback/google` and `https://YOUR_DOMAIN/api/auth/callback/atlassian`
+   - Atlassian must include both the Jira API scopes and the User Identity API `read:me` scope: `read:me read:jira-user read:jira-work offline_access`.
 5. Deploy migrations before first production use:
 
 ```bash
@@ -67,11 +69,15 @@ npm run db:deploy
 npm run db:seed
 ```
 
+6. Vercel Cron is configured in `vercel.json` to call `/api/cron/review-digest` hourly on weekdays. The route checks `CRON_SECRET`, sends only during the 6 PM `America/Toronto` hour, and skips duplicate scheduled digests for the same report date.
+
 ## MVP Notes
 
 - Jira is read-only and imports normalized issue, worklog, and changelog activity.
 - Google Calendar imports accepted timed events from the configured calendar.
 - Google Tasks imports tasks from selected task lists; if none are selected, all lists are included.
 - OAuth tokens are encrypted before being stored in the Auth.js `Account` table, and refreshes persist updated encrypted tokens.
+- Sign-in and admin-created accounts are restricted to `@generisgp.com` email addresses.
+- Reviewer/admin digest emails use Resend, go to all active reviewers/admins, and include coverage, blockers, missing reports, late/edit flags, and a link back to the review dashboard.
 - Employees can revise submitted reports; previous submitted snapshots are retained in `ReportRevision`.
 - Reviewer access uses the `REVIEWER` role internally; legacy `/coo` links redirect to `/review`.

@@ -85,9 +85,9 @@ describe("provider normalizers", () => {
           summary: "Planning",
           start: { dateTime: "2026-05-13T13:00:00-04:00" },
           end: { dateTime: "2026-05-13T13:30:00-04:00" },
-          attendees: [{ email: "employee@generis.com", responseStatus: "declined" }]
+          attendees: [{ email: "employee@generisgp.com", responseStatus: "declined" }]
         },
-        "employee@generis.com"
+        "employee@generisgp.com"
       )
     ).toBeNull();
   });
@@ -102,11 +102,11 @@ describe("provider normalizers", () => {
           start: { dateTime: "2026-05-13T09:00:00-04:00" },
           end: { dateTime: "2026-05-13T09:30:00-04:00" },
           attendees: [
-            { email: "employee@generis.com", responseStatus: "accepted" },
-            { email: "reviewer@generis.com", responseStatus: "accepted" }
+            { email: "employee@generisgp.com", responseStatus: "accepted" },
+            { email: "reviewer@generisgp.com", responseStatus: "accepted" }
           ]
         },
-        "employee@generis.com"
+        "employee@generisgp.com"
       )
     ).toMatchObject({
       source: "GOOGLE_CALENDAR",

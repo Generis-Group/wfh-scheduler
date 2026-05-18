@@ -2,22 +2,26 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useState } from "react";
-import type { ElementType, ReactNode } from "react";
+import { useEffect, useState } from "react";
+import type { ElementType, MouseEvent, ReactNode } from "react";
 import {
   BarChart3,
   ChevronDown,
   CircleUser,
   ClipboardList,
   History,
+  KeyRound,
   LogOut,
   Settings,
   Users
 } from "lucide-react";
 
+import { PageLoadingPreview, loadingKindFromHref } from "@/components/reports/page-loading-preview";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn, initials } from "@/lib/utils";
-import generisLogo from "@/images/Generis_logo.jpg";
+import generisLogo from "@/images/Generis_logo.png";
 
 type NavItem = {
   href: string;
@@ -27,15 +31,17 @@ type NavItem = {
 };
 
 const employeeNav: NavItem[] = [
-  { href: "/", label: "Report", icon: ClipboardList, key: "report" },
-  { href: "/history", label: "History", icon: History, key: "history" },
-  { href: "/settings", label: "Settings", icon: Settings, key: "settings" }
+  { href: "/", label: "Daily", icon: ClipboardList, key: "report" },
+  { href: "/reports", label: "Reports", icon: History, key: "reports" },
+  { href: "/settings", label: "Settings", icon: Settings, key: "settings" },
+  { href: "/account", label: "Account", icon: CircleUser, key: "account" }
 ];
 
 const adminNav: NavItem[] = [
-  { href: "/review", label: "Review Dashboard", icon: BarChart3, key: "review" },
+  { href: "/review", label: "Review", icon: BarChart3, key: "review" },
   { href: "/admin", label: "Employees", icon: Users, key: "employees" },
-  { href: "/settings", label: "Settings", icon: Settings, key: "settings" }
+  { href: "/settings", label: "Settings", icon: Settings, key: "settings" },
+  { href: "/account", label: "Account", icon: CircleUser, key: "account" }
 ];
 
 export function ReferenceAppShell({
@@ -43,107 +49,231 @@ export function ReferenceAppShell({
   active,
   variant,
   userName,
+  userEmail,
   userRole,
+  userStatus,
+  timezone,
+  mustChangePassword,
+  currentReportDate,
   preview = false
 }: {
   children: ReactNode;
   active: string;
   variant: "employee" | "admin";
   userName?: string | null;
+  userEmail?: string | null;
   userRole?: string | null;
+  userStatus?: string | null;
+  timezone?: string | null;
+  mustChangePassword?: boolean;
+  currentReportDate?: string | null;
   preview?: boolean;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const nav = variant === "admin" ? adminNav : employeeNav;
   const displayName = userName || (variant === "admin" ? "Admin User" : "Employee User");
-  const roleLabel = userRole ? ` (${userRole})` : "";
+  const displayEmail = userEmail ?? (userName?.includes("@") ? userName : null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [profileNotice, setProfileNotice] = useState<string | null>(null);
+  const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
+  const [lastReportDate, setLastReportDate] = useState<string | null>(currentReportDate ?? null);
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
   const settingsHref = preview ? (variant === "admin" ? "/preview/admin-settings" : "/preview/settings") : "/settings";
+  const currentHref = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
+  const logoHref = preview ? (variant === "admin" ? "/preview/admin" : "/preview/employee") : (variant === "admin" ? "/review" : "/");
+  const mobileLogoHref = preview ? "/preview" : "/";
+
+  useEffect(() => {
+    if (variant !== "employee") {
+      return;
+    }
+
+    if (currentReportDate) {
+      window.localStorage.setItem("generis.lastReportDate", currentReportDate);
+      setLastReportDate(currentReportDate);
+      return;
+    }
+
+    const storedDate = window.localStorage.getItem("generis.lastReportDate");
+    if (storedDate) {
+      setLastReportDate(storedDate);
+    }
+  }, [currentReportDate, variant]);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname, searchParams]);
+
+  useEffect(() => {
+    const hrefs = [
+      logoHref,
+      mobileLogoHref,
+      settingsHref,
+      preview ? settingsHref : "/account",
+      ...nav.map((item) => getNavHref(item, preview, variant, lastReportDate))
+    ];
+
+    hrefs.forEach((href) => {
+      if (href !== currentHref) {
+        router.prefetch(href);
+      }
+    });
+  }, [currentHref, lastReportDate, logoHref, mobileLogoHref, nav, preview, router, settingsHref, variant]);
+
+  function routeLinkProps(href: string) {
+    return {
+      prefetch: true,
+      onMouseEnter: () => router.prefetch(href),
+      onFocus: () => router.prefetch(href),
+      onClick: (event: MouseEvent<HTMLAnchorElement>) => {
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey ||
+          href === currentHref
+        ) {
+          return;
+        }
+
+        setPendingHref(href);
+        setProfileOpen(false);
+      }
+    };
+  }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-[#111827]">
-      <header className="sticky top-0 z-20 border-b border-[#d9e1ec] bg-white/95 backdrop-blur">
-        <div className="flex h-[72px] w-full items-center justify-between px-[clamp(16px,2vw,32px)]">
-          <Link href={preview ? "/preview" : "/"} className="flex items-center gap-3">
-            <span className="relative flex h-11 w-[136px] overflow-hidden rounded-[6px] bg-white">
-              <Image
-                src={generisLogo}
-                alt="Generis"
-                className="absolute -left-4 -top-4 h-[76px] w-[150px] max-w-none object-contain"
-                priority
-              />
+    <div className="min-h-screen bg-[#f4f7fb] text-[#0f172a] dark:bg-background dark:text-foreground lg:grid lg:grid-cols-[176px_minmax(0,1fr)]">
+        <aside className="sticky top-0 hidden h-screen min-w-0 flex-col bg-white/88 px-3 py-4 shadow-[1px_0_0_rgba(15,23,42,0.04)] backdrop-blur-xl dark:bg-[#0b1422]/96 dark:shadow-[1px_0_0_rgba(255,255,255,0.04)] lg:flex">
+          <Link href={logoHref} {...routeLinkProps(logoHref)} className="flex items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]">
+            <span className="relative flex h-7 w-[132px] items-center overflow-hidden">
+              <Image src={generisLogo} alt="Generis" className="h-auto w-full object-contain" priority />
             </span>
-            <span className="hidden h-8 border-l border-[#d9e1ec] sm:block" />
-            <span className="hidden text-[19px] font-semibold tracking-normal text-[#0f172a] sm:block">Daily Reporting</span>
           </Link>
-
-          <nav className="hidden h-full items-center gap-[clamp(14px,2vw,34px)] md:flex">
+          <nav className="mt-6 space-y-0.5">
             {nav.map((item) => {
               const Icon = item.icon;
-              const href = getNavHref(item, preview, variant);
+              const href = getNavHref(item, preview, variant, lastReportDate);
 
               return (
                 <Link
                   key={item.key}
                   href={href}
+                  {...routeLinkProps(href)}
                   className={cn(
-                    "flex h-full items-center gap-2 border-b-[3px] px-[clamp(8px,1vw,18px)] text-[15px] font-medium transition-colors",
+                    "flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-[13px] font-semibold transition-colors",
                     active === item.key
-                      ? "border-[#2563eb] text-[#2563eb]"
-                      : "border-transparent text-[#475569] hover:text-[#0f172a]"
+                      ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
+                      : "text-[#52647a] hover:bg-[#eef4fb] hover:text-[#0f172a] dark:text-[#93a4b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]"
                   )}
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-4 w-4" />
                   {item.label}
                 </Link>
               );
             })}
           </nav>
+        </aside>
+      <div className="min-w-0">
+      <header className="sticky top-0 z-20 bg-white/92 shadow-[0_1px_0_rgba(15,23,42,0.05)] backdrop-blur-xl dark:bg-[#0b1422]/94 dark:shadow-[0_1px_0_rgba(255,255,255,0.05)]">
+        <div className="flex h-12 w-full items-center justify-between gap-3 px-[clamp(14px,1.7vw,26px)] lg:justify-end">
+          <div className="flex h-full min-w-0 items-center gap-[clamp(16px,2.2vw,34px)] lg:hidden">
+            <Link href={mobileLogoHref} {...routeLinkProps(mobileLogoHref)} className="flex shrink-0 items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]">
+              <span className="relative flex h-7 w-[132px] items-center overflow-hidden">
+                <Image src={generisLogo} alt="Generis" className="h-auto w-full object-contain" priority />
+              </span>
+            </Link>
 
-          <div className="relative">
+            <nav className="hidden h-full items-center gap-1 md:flex">
+              {nav.map((item) => {
+                const Icon = item.icon;
+                const href = getNavHref(item, preview, variant, lastReportDate);
+
+                return (
+                  <Link
+                    key={item.key}
+                    href={href}
+                    {...routeLinkProps(href)}
+                    className={cn(
+                      "flex h-full items-center gap-2 border-b-[3px] px-4 text-sm font-semibold transition-colors",
+                      active === item.key
+                        ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#bfdbfe]"
+                        : "border-transparent text-[#52647a] hover:text-[#0f172a] dark:text-[#93a4b8] dark:hover:text-[#e2e8f0]"
+                    )}
+                  >
+                    <Icon className="h-[18px] w-[18px]" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+
+          <div className="relative flex items-center gap-2">
+            <ThemeToggle />
             <button
-              className="flex min-w-0 items-center gap-3 rounded-[8px] px-2 py-1.5 hover:bg-[#f1f5f9]"
+              className="flex min-w-0 items-center gap-2 rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
               onClick={() => {
                 setProfileOpen((open) => !open);
-                setProfileNotice(null);
               }}
               aria-expanded={profileOpen}
               aria-haspopup="menu"
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#243552] text-sm font-semibold text-white">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1d4ed8] text-xs font-semibold text-white shadow-[0_8px_18px_rgba(29,78,216,0.22)] dark:bg-[#1d4ed8]">
                 {initials(displayName)}
               </div>
-              <div className="hidden max-w-[220px] truncate text-sm font-semibold text-[#0f172a] sm:block">
+              <div className="hidden max-w-[200px] truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0] sm:block">
                 {displayName}
-                {roleLabel}
               </div>
-              <ChevronDown className={cn("h-4 w-4 text-[#475569] transition-transform", profileOpen && "rotate-180")} />
+              <ChevronDown className={cn("h-4 w-4 text-[#64748b] transition-transform dark:text-[#94a3b8]", profileOpen && "rotate-180")} />
             </button>
             {profileOpen ? (
               <div
-                className="absolute right-0 top-12 z-30 w-64 rounded-[8px] border border-[#d9e1ec] bg-white p-2 shadow-lg"
+                className="absolute right-0 top-12 z-30 w-72 overflow-hidden rounded-[12px] border border-[#dbe3ee] bg-[#ffffff] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.16)] dark:border-[#24354c] dark:bg-[#0f1b2a] dark:shadow-[0_18px_45px_rgba(0,0,0,0.42)]"
                 role="menu"
               >
-                <div className="border-b border-[#e2e8f0] px-3 py-2">
-                  <div className="truncate text-sm font-semibold text-[#0f172a]">{displayName}</div>
-                  <div className="text-xs text-[#64748b]">{userRole || (variant === "admin" ? "Reviewer" : "Employee")}</div>
+                <div className="rounded-[8px] bg-[#f8fafc] px-3 py-2 dark:bg-[#0b1523]">
+                  <div className="truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0]">{displayName}</div>
+                  <div className="text-xs text-[#64748b] dark:text-[#94a3b8]">{userRole || (variant === "admin" ? "Reviewer" : "Employee")}</div>
                 </div>
                 <button
-                  className="mt-2 flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
-                  onClick={() => setProfileNotice("Profile details will be connected with account management.")}
+                  className="mt-1.5 flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                  onClick={() => setProfileDetailsOpen((open) => !open)}
                 >
                   <CircleUser className="h-4 w-4" />
                   Profile details
                 </button>
-                <Link href={settingsHref} className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]">
-                  <Settings className="h-4 w-4" />
+                {profileDetailsOpen ? (
+                  <div className="mx-1 mb-1 rounded-[8px] bg-[#f8fafc] px-3 py-2 text-xs text-[#475569] ring-1 ring-[#e2e8f0] dark:bg-[#0b1523] dark:text-[#94a3b8] dark:ring-[#24354c]">
+                    <ProfileLine label="Name" value={displayName} />
+                    <ProfileLine label="Email" value={displayEmail ?? "Not set"} />
+                    <ProfileLine label="Role" value={userRole || (variant === "admin" ? "Reviewer" : "Employee")} />
+                    <ProfileLine label="Status" value={userStatus ?? (preview ? "Preview" : "Active")} />
+                    <ProfileLine label="Timezone" value={timezone ?? "America/Toronto"} />
+                  </div>
+                ) : null}
+                <Link href={preview ? settingsHref : "/account"} {...routeLinkProps(preview ? settingsHref : "/account")} className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]">
+                  <CircleUser className="h-4 w-4" />
                   Account settings
                 </Link>
+                <Link href={settingsHref} {...routeLinkProps(settingsHref)} className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]">
+                  <Settings className="h-4 w-4" />
+                  Integrations
+                </Link>
+                {mustChangePassword && !preview ? (
+                  <Link href="/change-password" {...routeLinkProps("/change-password")} className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]">
+                    <KeyRound className="h-4 w-4" />
+                    Change password
+                  </Link>
+                ) : null}
                 <button
-                  className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-sm text-[#94a3b8]"
+                  className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
                   onClick={() => {
                     if (preview) {
-                      setProfileNotice("Sign out is not connected in the preview shell yet.");
+                      window.location.href = "/login";
                       return;
                     }
 
@@ -151,27 +281,27 @@ export function ReferenceAppShell({
                   }}
                 >
                   <LogOut className="h-4 w-4" />
-                  {preview ? "Sign out unavailable in preview" : "Sign out"}
+                  {preview ? "Exit preview" : "Sign out"}
                 </button>
-                {profileNotice ? <p className="px-3 pb-2 pt-1 text-xs text-[#64748b]">{profileNotice}</p> : null}
               </div>
             ) : null}
           </div>
         </div>
-        <nav className="flex h-12 items-center gap-2 overflow-x-auto border-t border-[#eef2f7] px-[clamp(16px,2vw,32px)] md:hidden">
+        <nav className="flex h-11 items-center gap-2 overflow-x-auto px-[clamp(14px,1.7vw,26px)] shadow-[0_-1px_0_rgba(15,23,42,0.04)] dark:shadow-[0_-1px_0_rgba(255,255,255,0.04)] md:hidden">
           {nav.map((item) => {
             const Icon = item.icon;
-            const href = getNavHref(item, preview, variant);
+            const href = getNavHref(item, preview, variant, lastReportDate);
 
             return (
               <Link
                 key={item.key}
                 href={href}
+                {...routeLinkProps(href)}
                 className={cn(
-                  "flex h-full shrink-0 items-center gap-2 border-b-[3px] px-2 text-sm font-medium transition-colors",
+                  "flex h-full shrink-0 items-center gap-2 border-b-[3px] px-2 text-sm font-semibold transition-colors",
                   active === item.key
-                    ? "border-[#2563eb] text-[#2563eb]"
-                    : "border-transparent text-[#475569] hover:text-[#0f172a]"
+                    ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#93c5fd]"
+                    : "border-transparent text-[#475569] hover:text-[#0f172a] dark:text-[#94a3b8] dark:hover:text-[#e2e8f0]"
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -181,18 +311,32 @@ export function ReferenceAppShell({
           })}
         </nav>
       </header>
-      {children}
+      {pendingHref ? <PageLoadingPreview kind={loadingKindFromHref(pendingHref, variant)} /> : children}
+      </div>
     </div>
   );
 }
 
-function getNavHref(item: NavItem, preview: boolean, variant: "employee" | "admin") {
+function ProfileLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1">
+      <span className="font-medium text-[#64748b] dark:text-[#94a3b8]">{label}</span>
+      <span className="max-w-[145px] truncate text-right text-[#0f172a] dark:text-[#e2e8f0]">{value}</span>
+    </div>
+  );
+}
+
+function getNavHref(item: NavItem, preview: boolean, variant: "employee" | "admin", lastReportDate?: string | null) {
   if (!preview) {
+    if (item.key === "report" && lastReportDate) {
+      return `/?date=${lastReportDate}`;
+    }
+
     return item.href;
   }
 
   if (item.key === "report") {
-    return "/preview/employee";
+    return lastReportDate ? `/preview/employee?date=${lastReportDate}` : "/preview/employee";
   }
 
   if (item.key === "review") {
@@ -201,6 +345,10 @@ function getNavHref(item: NavItem, preview: boolean, variant: "employee" | "admi
 
   if (item.key === "settings" && variant === "admin") {
     return "/preview/admin-settings";
+  }
+
+  if (item.key === "account") {
+    return variant === "admin" ? "/preview/admin-settings" : "/preview/settings";
   }
 
   return `/preview/${item.key}`;
@@ -213,7 +361,7 @@ export function ReferencePanel({
   children: ReactNode;
   className?: string;
 }) {
-  return <section className={cn("rounded-[8px] border border-[#d9e1ec] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]", className)}>{children}</section>;
+  return <section className={cn("reference-card min-w-0", className)}>{children}</section>;
 }
 
 export function ReferenceBadge({
@@ -226,20 +374,20 @@ export function ReferenceBadge({
   className?: string;
 }) {
   const tones = {
-    green: "border-[#b7e4bf] bg-[#ecfdf0] text-[#15803d]",
-    orange: "border-[#fed7aa] bg-[#fff7ed] text-[#ea580c]",
-    red: "border-[#fecaca] bg-[#fef2f2] text-[#dc2626]",
-    blue: "border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb]",
-    neutral: "border-[#d9e1ec] bg-[#f8fafc] text-[#475569]"
+    green: "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300",
+    orange: "bg-orange-50 text-orange-700 dark:bg-orange-400/10 dark:text-orange-300",
+    red: "bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-300",
+    blue: "bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300",
+    neutral: "bg-[#f4f7fb] text-[#52647a] dark:bg-white/[0.045] dark:text-[#b5c2d3]"
   };
 
   return (
-    <span className={cn("inline-flex items-center rounded-[5px] border px-2.5 py-1 text-xs font-semibold", tones[tone], className)}>
+    <span className={cn("inline-flex items-center whitespace-nowrap rounded-[7px] px-2.5 py-1 text-xs font-semibold leading-none", tones[tone], className)}>
       {children}
     </span>
   );
 }
 
 export function EmptyReferenceState({ children }: { children: ReactNode }) {
-  return <div className="flex min-h-24 items-center justify-center rounded-[8px] border border-dashed border-[#cbd5e1] bg-[#f8fafc] text-sm text-[#64748b]">{children}</div>;
+  return <div className="flex min-h-24 items-center justify-center rounded-[10px] border border-dashed border-[#cbd5e1] bg-[#f8fafc]/80 px-4 text-center text-sm text-[#64748b] dark:border-[#2b3c54] dark:bg-[#0b1523]/80 dark:text-muted-foreground">{children}</div>;
 }
