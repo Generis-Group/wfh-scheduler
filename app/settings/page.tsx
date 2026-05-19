@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { tasks_v1 } from "googleapis";
 
 import { ReferenceAppShell } from "@/components/reports/reference-shell";
 import { SettingsPanel } from "@/components/settings/settings-panel";
@@ -12,6 +13,19 @@ import { getLastReviewDigestRun, getReviewDigestEmailStatus } from "@/lib/servic
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unable to load provider settings.";
+}
+
+async function listAllGoogleTaskLists(tasks: tasks_v1.Tasks) {
+  const taskLists: tasks_v1.Schema$TaskList[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const response = await tasks.tasklists.list({ maxResults: 100, pageToken });
+    taskLists.push(...(response.data.items ?? []));
+    pageToken = response.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  return taskLists;
 }
 
 export default async function SettingsPage() {
@@ -59,9 +73,9 @@ export default async function SettingsPage() {
     : [];
   const taskLists = connected.google
     ? await getGoogleServices(session.user.id)
-        .then((services) => services.tasks.tasklists.list({ maxResults: 100 }))
-        .then((response) =>
-          (response.data.items ?? [])
+        .then((services) => listAllGoogleTaskLists(services.tasks))
+        .then((items) =>
+          items
             .filter((item) => item.id)
             .map((item) => ({ id: item.id!, title: item.title ?? "Untitled task list" }))
         )

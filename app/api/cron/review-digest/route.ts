@@ -3,7 +3,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { DEFAULT_TIMEZONE, todayDateString } from "@/lib/dates";
 import { getOptionalEnv } from "@/lib/env";
 import { handleRouteError, HttpError, json } from "@/lib/http";
-import { sendReviewDigest } from "@/lib/services/email-digest";
+import { sendScheduledReviewDigests } from "@/lib/services/email-digest";
 
 function isAuthorized(request: Request) {
   const secret = getOptionalEnv("CRON_SECRET");
@@ -42,13 +42,10 @@ export async function GET(request: Request) {
     }
 
     const date = todayDateString(DEFAULT_TIMEZONE);
-    const result = await sendReviewDigest({
-      date,
-      trigger: "SCHEDULED"
-    });
+    const result = await sendScheduledReviewDigests({ date });
 
     return json({
-      emailRun: result.emailRun,
+      emailRuns: result.emailRuns,
       skipped: result.skipped
     });
   } catch (error) {

@@ -40,21 +40,39 @@ describe("review email digest", () => {
 
   it("selects only active Generis reviewer/admin recipients", async () => {
     mockUserFindMany.mockResolvedValue([
-      { email: "reviewer@generisgp.com", name: "Reviewer", role: "REVIEWER", status: "ACTIVE" },
-      { email: "admin@generisgp.com", name: "Admin", role: "ADMIN", status: "ACTIVE" },
-      { email: "employee@generisgp.com", name: "Employee", role: "EMPLOYEE", status: "ACTIVE" },
-      { email: "disabled@generisgp.com", name: "Disabled", role: "REVIEWER", status: "DISABLED" },
-      { email: "external@example.com", name: "External", role: "ADMIN", status: "ACTIVE" },
-      { email: null, name: "No Email", role: "ADMIN", status: "ACTIVE" }
+      { id: "reviewer-1", email: "reviewer@generisgp.com", name: "Reviewer", role: "REVIEWER", status: "ACTIVE" },
+      { id: "admin-1", email: "admin@generisgp.com", name: "Admin", role: "ADMIN", status: "ACTIVE" },
+      { id: "employee-1", email: "employee@generisgp.com", name: "Employee", role: "EMPLOYEE", status: "ACTIVE" },
+      { id: "disabled-1", email: "disabled@generisgp.com", name: "Disabled", role: "REVIEWER", status: "DISABLED" },
+      { id: "external-1", email: "external@example.com", name: "External", role: "ADMIN", status: "ACTIVE" },
+      { id: "no-email-1", email: null, name: "No Email", role: "ADMIN", status: "ACTIVE" }
     ]);
 
     const { selectReviewDigestRecipients } = await import("@/lib/services/email-digest");
     const recipients = await selectReviewDigestRecipients();
 
     expect(recipients).toEqual([
-      { email: "reviewer@generisgp.com", name: "Reviewer" },
-      { email: "admin@generisgp.com", name: "Admin" }
+      { id: "reviewer-1", email: "reviewer@generisgp.com", name: "Reviewer", role: "REVIEWER" },
+      { id: "admin-1", email: "admin@generisgp.com", name: "Admin", role: "ADMIN" }
     ]);
+  });
+
+  it("uses Toronto day boundaries for late and edited status", async () => {
+    const { isReportEditedAfterDate, isReportLate } = await import("@/lib/services/email-digest");
+    const report = {
+      id: "r1",
+      reportDate: "2026-05-14",
+      status: "SUBMITTED" as const,
+      workLocation: "WFH",
+      blockers: "",
+      submittedAt: "2026-05-15T03:30:00.000Z",
+      updatedAt: "2026-05-15T03:30:00.000Z",
+      activities: [],
+      revisions: [{ createdAt: "2026-05-15T04:30:00.000Z" }]
+    };
+
+    expect(isReportLate(report, "2026-05-14")).toBe(false);
+    expect(isReportEditedAfterDate(report, "2026-05-14")).toBe(true);
   });
 
   it("builds a concise digest for submitted, draft, missing, blocker, late, and edited reports", async () => {
@@ -156,6 +174,108 @@ describe("review email digest", () => {
     expect(digest.text).not.toContain("Admin");
   });
 
+  it("sends scheduled digests separately for each scoped reviewer/admin", async () => {
+    const previousApiKey = process.env.RESEND_API_KEY;
+    const previousFrom = process.env.EMAIL_FROM;
+    process.env.RESEND_API_KEY = "resend-test-key";
+    process.env.EMAIL_FROM = "reports@generisgp.com";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ id: "resend-message-1" }), { status: 200 }))
+    );
+    const reviewer = { id: "reviewer-1", email: "reviewer@generisgp.com", name: "Reviewer", role: "REVIEWER", status: "ACTIVE" };
+    const admin = { id: "admin-1", email: "admin@generisgp.com", name: "Admin", role: "ADMIN", status: "ACTIVE" };
+    mockUserFindMany
+      .mockResolvedValueOnce([reviewer, admin])
+      .mockResolvedValueOnce([reviewer])
+      .mockResolvedValueOnce([admin]);
+    mockEmailRunFindUnique.mockResolvedValue(null);
+    mockListReportsForDate.mockResolvedValue([
+      {
+        user: { id: "u1", name: "Employee", email: "employee@generisgp.com", role: "EMPLOYEE", status: "ACTIVE" },
+        report: null
+      }
+    ]);
+    mockEmailRunCreate.mockImplementation(async ({ data }) => ({ id: `run-${data.dedupeKey}`, ...data }));
+    mockEmailRunUpdate.mockImplementation(async ({ where, data }) => ({ id: where.id, ...data }));
+
+    const { sendScheduledReviewDigests } = await import("@/lib/services/email-digest");
+    const result = await sendScheduledReviewDigests({ date: "2026-05-14" });
+
+    expect(result.emailRuns).toHaveLength(2);
+    expect(mockListReportsForDate).toHaveBeenNthCalledWith(1, "2026-05-14", { userId: "reviewer-1", role: "REVIEWER" });
+    expect(mockListReportsForDate).toHaveBeenNthCalledWith(2, "2026-05-14", { userId: "admin-1", role: "ADMIN" });
+    expect(mockEmailRunCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ dedupeKey: "review-digest:2026-05-14:reviewer-1" })
+      })
+    );
+    expect(mockEmailRunCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ dedupeKey: "review-digest:2026-05-14:admin-1" })
+      })
+    );
+
+    if (previousApiKey === undefined) {
+      delete process.env.RESEND_API_KEY;
+    } else {
+      process.env.RESEND_API_KEY = previousApiKey;
+    }
+    if (previousFrom === undefined) {
+      delete process.env.EMAIL_FROM;
+    } else {
+      process.env.EMAIL_FROM = previousFrom;
+    }
+  });
+
+  it("continues scheduled digest delivery after one recipient fails", async () => {
+    const previousApiKey = process.env.RESEND_API_KEY;
+    const previousFrom = process.env.EMAIL_FROM;
+    process.env.RESEND_API_KEY = "resend-test-key";
+    process.env.EMAIL_FROM = "reports@generisgp.com";
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockRejectedValueOnce(new Error("temporary provider outage"))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ id: "resend-message-2" }), { status: 200 }))
+    );
+    const reviewer = { id: "reviewer-1", email: "reviewer@generisgp.com", name: "Reviewer", role: "REVIEWER", status: "ACTIVE" };
+    const admin = { id: "admin-1", email: "admin@generisgp.com", name: "Admin", role: "ADMIN", status: "ACTIVE" };
+    mockUserFindMany
+      .mockResolvedValueOnce([reviewer, admin])
+      .mockResolvedValueOnce([reviewer])
+      .mockResolvedValueOnce([admin]);
+    mockEmailRunFindUnique.mockResolvedValue(null);
+    mockListReportsForDate.mockResolvedValue([
+      {
+        user: { id: "u1", name: "Employee", email: "employee@generisgp.com", role: "EMPLOYEE", status: "ACTIVE" },
+        report: null
+      }
+    ]);
+    mockEmailRunCreate.mockImplementation(async ({ data }) => ({ id: `run-${data.dedupeKey}`, ...data }));
+    mockEmailRunUpdate.mockImplementation(async ({ where, data }) => ({ id: where.id, ...data }));
+
+    const { sendScheduledReviewDigests } = await import("@/lib/services/email-digest");
+    const result = await sendScheduledReviewDigests({ date: "2026-05-14" });
+
+    expect(result.emailRuns).toHaveLength(2);
+    expect(result.emailRuns[0]).toMatchObject({ status: "FAILED" });
+    expect(result.emailRuns[1]).toMatchObject({ status: "SUCCEEDED", providerMessageId: "resend-message-2" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    if (previousApiKey === undefined) {
+      delete process.env.RESEND_API_KEY;
+    } else {
+      process.env.RESEND_API_KEY = previousApiKey;
+    }
+    if (previousFrom === undefined) {
+      delete process.env.EMAIL_FROM;
+    } else {
+      process.env.EMAIL_FROM = previousFrom;
+    }
+  });
+
   it("retries a failed scheduled digest for the same report date", async () => {
     const previousApiKey = process.env.RESEND_API_KEY;
     const previousFrom = process.env.EMAIL_FROM;
@@ -175,13 +295,13 @@ describe("review email digest", () => {
       providerMessageId: null,
       errorMessage: "Resend email failed.",
       filters: null,
-      dedupeKey: "review-digest:2026-05-14",
+      dedupeKey: "review-digest:2026-05-14:reviewer-1",
       createdAt: new Date("2026-05-14T22:00:00.000Z"),
       completedAt: new Date("2026-05-14T22:01:00.000Z")
     };
     mockEmailRunFindUnique.mockResolvedValue(failedRun);
     mockUserFindMany.mockResolvedValue([
-      { email: "reviewer@generisgp.com", name: "Reviewer", role: "REVIEWER", status: "ACTIVE" }
+      { id: "reviewer-1", email: "reviewer@generisgp.com", name: "Reviewer", role: "REVIEWER", status: "ACTIVE" }
     ]);
     mockListReportsForDate.mockResolvedValue([
       {
@@ -194,7 +314,11 @@ describe("review email digest", () => {
       .mockResolvedValueOnce({ ...failedRun, status: "SUCCEEDED", providerMessageId: "resend-message-1" });
 
     const { sendReviewDigest } = await import("@/lib/services/email-digest");
-    const result = await sendReviewDigest({ date: "2026-05-14", trigger: "SCHEDULED" });
+    const result = await sendReviewDigest({
+      date: "2026-05-14",
+      trigger: "SCHEDULED",
+      scope: { userId: "reviewer-1", role: "REVIEWER" }
+    });
 
     expect(result.skipped).toBe(false);
     expect(mockEmailRunCreate).not.toHaveBeenCalled();

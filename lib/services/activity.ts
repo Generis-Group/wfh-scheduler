@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { ActivitySource, Prisma } from "@prisma/client";
 
 import { parseReportDate } from "@/lib/dates";
 import type { NormalizedActivity } from "@/lib/normalizers/types";
@@ -12,13 +12,17 @@ export async function listActivities(userId: string, dateString: string) {
   return prisma.activityItem.findMany({
     where: {
       userId,
-      reportDate: parseReportDate(dateString)
+      reportDate: parseReportDate(dateString),
+      staleAt: null
     },
     orderBy: [{ startedAt: "asc" }, { createdAt: "asc" }]
   });
 }
 
+type ImportedActivitySource = Exclude<ActivitySource, "MANUAL">;
+
 export async function upsertImportedActivities(
+  source: ImportedActivitySource,
   userId: string,
   dateString: string,
   activities: NormalizedActivity[]
@@ -36,12 +40,15 @@ export async function upsertImportedActivities(
 
   let importedCount = 0;
   let skippedCount = 0;
+  const importedSourceIds = new Set<string>();
 
   for (const item of activities) {
-    if (!item.sourceId) {
+    if (!item.sourceId || item.source !== source) {
       skippedCount += 1;
       continue;
     }
+
+    importedSourceIds.add(item.sourceId);
 
     await prisma.activityItem.upsert({
       where: {
@@ -62,7 +69,8 @@ export async function upsertImportedActivities(
         startedAt: item.startedAt ?? null,
         endedAt: item.endedAt ?? null,
         durationMinutes: item.durationMinutes ?? null,
-        metadata: metadataJson(item.metadata)
+        metadata: metadataJson(item.metadata),
+        staleAt: null
       },
       create: {
         userId,
@@ -78,12 +86,26 @@ export async function upsertImportedActivities(
         startedAt: item.startedAt ?? null,
         endedAt: item.endedAt ?? null,
         durationMinutes: item.durationMinutes ?? null,
-        metadata: metadataJson(item.metadata)
+        metadata: metadataJson(item.metadata),
+        staleAt: null
       }
     });
 
     importedCount += 1;
   }
 
-  return { importedCount, skippedCount };
+  const staleResult = await prisma.activityItem.updateMany({
+    where: {
+      userId,
+      reportDate,
+      source,
+      staleAt: null,
+      sourceId: importedSourceIds.size > 0 ? { notIn: [...importedSourceIds] } : { not: null }
+    },
+    data: {
+      staleAt: new Date()
+    }
+  });
+
+  return { importedCount, skippedCount, staleCount: staleResult.count };
 }

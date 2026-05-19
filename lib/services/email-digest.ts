@@ -1,6 +1,6 @@
 import type { EmailRun, Prisma } from "@prisma/client";
 
-import { DEFAULT_TIMEZONE, parseReportDate } from "@/lib/dates";
+import { DEFAULT_TIMEZONE, parseReportDate, reportDayEnd } from "@/lib/dates";
 import { getOptionalEnv } from "@/lib/env";
 import { HttpError } from "@/lib/http";
 import { isGenerisEmail } from "@/lib/auth-domain";
@@ -41,8 +41,10 @@ type DigestRow = {
 };
 
 type DigestRecipient = {
+  id?: string;
   email: string;
   name?: string | null;
+  role?: "REVIEWER" | "ADMIN";
 };
 
 function toDate(value?: string | Date | null) {
@@ -58,18 +60,6 @@ function toDate(value?: string | Date | null) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function dateInputValue(value: string | Date) {
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return value;
-  }
-
-  return (toDate(value) ?? new Date()).toISOString().slice(0, 10);
-}
-
-function dayEnd(value: string | Date) {
-  return new Date(`${dateInputValue(value)}T23:59:59.999`);
-}
-
 function displayName(row: DigestRow) {
   return row.user.name ?? row.user.email ?? "Unassigned employee";
 }
@@ -80,14 +70,14 @@ function hasBlockers(report: DigestReport | null) {
 
 export function isReportLate(report: DigestReport | null, date: string) {
   const submittedAt = toDate(report?.submittedAt);
-  return Boolean(submittedAt && submittedAt > dayEnd(report?.reportDate ?? date));
+  return Boolean(submittedAt && submittedAt > reportDayEnd(report?.reportDate ?? date, DEFAULT_TIMEZONE));
 }
 
 export function isReportEditedAfterDate(report: DigestReport | null, date: string) {
   return Boolean(
     report?.revisions.some((revision) => {
       const editedAt = toDate(revision.createdAt);
-      return Boolean(editedAt && editedAt > dayEnd(report.reportDate ?? date));
+      return Boolean(editedAt && editedAt > reportDayEnd(report.reportDate ?? date, DEFAULT_TIMEZONE));
     })
   );
 }
@@ -231,11 +221,12 @@ export async function selectReviewDigestRecipients(scope?: ReviewScope) {
   const users = await prisma.user.findMany({
     where: {
       status: "ACTIVE",
-      ...(scope ? { id: scope.userId } : { role: "ADMIN" as const }),
+      ...(scope ? { id: scope.userId } : { role: { in: ["REVIEWER", "ADMIN"] as const } }),
       email: { not: null }
     },
     orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
     select: {
+      id: true,
       email: true,
       name: true,
       role: true,
@@ -244,30 +235,32 @@ export async function selectReviewDigestRecipients(scope?: ReviewScope) {
   });
 
   return users
-    .filter((user): user is { email: string; name: string | null; role: "REVIEWER" | "ADMIN"; status: "ACTIVE" } =>
+    .filter((user): user is { id: string; email: string; name: string | null; role: "REVIEWER" | "ADMIN"; status: "ACTIVE" } =>
       Boolean(
         user.email &&
           isGenerisEmail(user.email) &&
           user.status === "ACTIVE" &&
           (user.role === "REVIEWER" || user.role === "ADMIN")
-      )
+        )
     )
-    .map((user) => ({ email: user.email, name: user.name }));
+    .map((user) => ({ id: user.id, email: user.email, name: user.name, role: user.role }));
 }
 
 export async function sendReviewDigest({
   date,
   trigger,
   filters,
-  scope
+  scope,
+  throwOnFailure = true
 }: {
   date: string;
   trigger: DigestTrigger;
   filters?: ReviewDigestFilters;
   scope?: ReviewScope;
+  throwOnFailure?: boolean;
 }) {
   const reportDate = parseReportDate(date);
-  const dedupeKey = trigger === "SCHEDULED" ? `review-digest:${date}` : null;
+  const dedupeKey = trigger === "SCHEDULED" ? `review-digest:${date}:${scope?.userId ?? "global"}` : null;
   let retryRun: EmailRun | null = null;
 
   if (dedupeKey) {
@@ -314,7 +307,7 @@ export async function sendReviewDigest({
       where: { id: emailRun.id },
       data: {
         status: "SKIPPED",
-        errorMessage: scope ? "The current reviewer/admin recipient does not have an active @generisgp.com email." : "No active admin recipients with @generisgp.com emails.",
+        errorMessage: scope ? "The current reviewer/admin recipient does not have an active @generisgp.com email." : "No active reviewer/admin recipients with @generisgp.com emails.",
         completedAt: new Date()
       }
     });
@@ -340,7 +333,7 @@ export async function sendReviewDigest({
 
     return { emailRun: sent, skipped: false };
   } catch (error) {
-    await prisma.emailRun.update({
+    const failed = await prisma.emailRun.update({
       where: { id: emailRun.id },
       data: {
         status: "FAILED",
@@ -349,8 +342,33 @@ export async function sendReviewDigest({
       }
     });
 
+    if (!throwOnFailure) {
+      return { emailRun: failed, skipped: false };
+    }
+
     throw error;
   }
+}
+
+export async function sendScheduledReviewDigests({ date }: { date: string }) {
+  const recipients = await selectReviewDigestRecipients();
+  const results = [];
+
+  for (const recipient of recipients) {
+    results.push(
+      await sendReviewDigest({
+        date,
+        trigger: "SCHEDULED",
+        scope: { userId: recipient.id!, role: recipient.role! },
+        throwOnFailure: false
+      })
+    );
+  }
+
+  return {
+    emailRuns: results.map((result) => result.emailRun),
+    skipped: recipients.length === 0 || results.every((result) => result.skipped)
+  };
 }
 
 export async function getLastReviewDigestRun() {
@@ -365,7 +383,7 @@ export function getReviewDigestEmailStatus() {
     provider: "Resend",
     from: getOptionalEnv("EMAIL_FROM") ?? null,
     digestTime: `6:00 PM ${DEFAULT_TIMEZONE}`,
-    recipientRule: "Manual digests go to the sender; scheduled digests go to active admins"
+    recipientRule: "Manual digests go to the sender; scheduled digests are scoped per active reviewer/admin"
   };
 }
 

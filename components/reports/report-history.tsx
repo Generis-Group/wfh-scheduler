@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { EmptyReferenceState, ReferenceAppShell } from "@/components/reports/reference-shell";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
+import { reportDayEnd } from "@/lib/dates";
 import { cn, titleCase } from "@/lib/utils";
 
 type HistoryActivity = {
@@ -95,10 +96,6 @@ function todayInTimezone(timezone?: string | null) {
   return `${lookup.year}-${lookup.month}-${lookup.day}`;
 }
 
-function dayEnd(value: string | Date) {
-  return new Date(`${dateInputValue(value)}T23:59:59.999`);
-}
-
 function formatReportDate(value: string | Date) {
   const date = dateOnlyDisplayDate(value);
   return new Intl.DateTimeFormat("en-US", {
@@ -145,13 +142,13 @@ function formatDuration(minutes?: number | null) {
 
 function isLate(report: HistoryReport) {
   const submittedAt = toDate(report.submittedAt);
-  return Boolean(submittedAt && submittedAt > dayEnd(report.reportDate));
+  return Boolean(submittedAt && submittedAt > reportDayEnd(report.reportDate));
 }
 
 function editedAfterDate(report: HistoryReport) {
   return report.revisions.some((revision) => {
     const editedAt = toDate(revision.createdAt);
-    return Boolean(editedAt && editedAt > dayEnd(report.reportDate));
+    return Boolean(editedAt && editedAt > reportDayEnd(report.reportDate));
   });
 }
 

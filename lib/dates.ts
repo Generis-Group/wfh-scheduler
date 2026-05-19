@@ -19,11 +19,35 @@ export function reportDateString(date: Date, timezone = DEFAULT_TIMEZONE) {
   return formatInTimeZone(date, timezone, "yyyy-MM-dd");
 }
 
+export function reportDateKey(value: string | Date) {
+  if (typeof value === "string") {
+    const match = value.match(/^\d{4}-\d{2}-\d{2}/);
+
+    if (match) {
+      return match[0];
+    }
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error("Expected date in YYYY-MM-DD format.");
+    }
+
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  return value.toISOString().slice(0, 10);
+}
+
 export function zonedDayRange(dateString: string, timezone = DEFAULT_TIMEZONE) {
   const start = fromZonedTime(`${dateString}T00:00:00`, timezone);
   const end = fromZonedTime(`${dateString}T23:59:59.999`, timezone);
 
   return { start, end };
+}
+
+export function reportDayEnd(value: string | Date, timezone = DEFAULT_TIMEZONE) {
+  return zonedDayRange(reportDateKey(value), timezone).end;
 }
 
 export function inclusiveDateRange(startDate: string, endDate = startDate) {

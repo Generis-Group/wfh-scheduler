@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
+import { reportDayEnd } from "@/lib/dates";
 import { cn, initials, titleCase } from "@/lib/utils";
 
 type DashboardUser = {
@@ -147,20 +148,16 @@ function formatTimestamp(value?: string | Date | null) {
   }).format(date);
 }
 
-function dayEnd(value: string | Date) {
-  return new Date(`${dateInputValue(value)}T23:59:59.999`);
-}
-
 function isLate(report: DashboardReport | null, date: string) {
   const submittedAt = toDate(report?.submittedAt);
-  return Boolean(submittedAt && submittedAt > dayEnd(report?.reportDate ?? date));
+  return Boolean(submittedAt && submittedAt > reportDayEnd(report?.reportDate ?? date));
 }
 
 function editedAfterDate(report: DashboardReport | null, date: string) {
   return Boolean(
     report?.revisions.some((revision) => {
       const editedAt = toDate(revision.createdAt);
-      return Boolean(editedAt && editedAt > dayEnd(report.reportDate ?? date));
+      return Boolean(editedAt && editedAt > reportDayEnd(report.reportDate ?? date));
     })
   );
 }

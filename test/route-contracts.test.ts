@@ -41,9 +41,9 @@ vi.mock("@/lib/services/activity", () => ({
 }));
 
 vi.mock("@/lib/services/sync", () => ({
-  syncJira: vi.fn(async () => ({ importedCount: 0, skippedCount: 0 })),
-  syncGoogleCalendar: vi.fn(async () => ({ importedCount: 0, skippedCount: 0 })),
-  syncGoogleTasks: vi.fn(async () => ({ importedCount: 0, skippedCount: 0 }))
+  syncJira: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0 })),
+  syncGoogleCalendar: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0 })),
+  syncGoogleTasks: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0 }))
 }));
 
 vi.mock("@/lib/services/admin", () => ({
@@ -71,13 +71,23 @@ vi.mock("@/lib/services/email-digest", () => ({
       recipientEmails: ["reviewer@generisgp.com"]
     }
   })),
+  sendScheduledReviewDigests: vi.fn(async () => ({
+    skipped: true,
+    emailRuns: [
+      {
+        id: "email-run-1",
+        status: "SKIPPED",
+        recipientEmails: ["reviewer@generisgp.com"]
+      }
+    ]
+  })),
   getLastReviewDigestRun: vi.fn(async () => null),
   getReviewDigestEmailStatus: vi.fn(() => ({
     configured: true,
     provider: "Resend",
     from: "reports@generisgp.com",
     digestTime: "6:00 PM America/Toronto",
-    recipientRule: "All active reviewers/admins"
+    recipientRule: "Manual digests go to the sender; scheduled digests are scoped per active reviewer/admin"
   }))
 }));
 
@@ -141,7 +151,7 @@ describe("route contracts", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ importedCount: 0, skippedCount: 0 });
+    await expect(response.json()).resolves.toEqual({ importedCount: 0, skippedCount: 0, staleCount: 0 });
   });
 
   it("creates admin-managed credentials users", async () => {
@@ -341,10 +351,12 @@ describe("route contracts", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      emailRun: {
-        id: "email-run-1",
-        status: "SKIPPED"
-      },
+      emailRuns: [
+        {
+          id: "email-run-1",
+          status: "SKIPPED"
+        }
+      ],
       skipped: true
     });
 

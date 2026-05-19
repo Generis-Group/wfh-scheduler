@@ -23,6 +23,7 @@ const reportInclude = {
     include: departmentMembershipInclude
   },
   activities: {
+    where: { staleAt: null },
     orderBy: [{ startedAt: "asc" as const }, { createdAt: "asc" as const }]
   },
   comments: {
@@ -89,7 +90,7 @@ export async function getReportById(reportId: string) {
 async function createRevision(reportId: string, editedById: string) {
   const report = await prisma.dailyReport.findUnique({
     where: { id: reportId },
-    include: { activities: true }
+    include: { activities: { where: { staleAt: null } } }
   });
 
   if (!report || report.status !== "SUBMITTED") {
@@ -135,7 +136,7 @@ export async function updateReport(reportId: string, editedById: string, input: 
 
     for (const activity of input.activityUpdates ?? []) {
       await tx.activityItem.updateMany({
-        where: { id: activity.id, userId: report.userId, reportDate: report.reportDate },
+        where: { id: activity.id, userId: report.userId, reportDate: report.reportDate, staleAt: null },
         data: {
           dailyReportId: report.id,
           selected: activity.selected,
@@ -302,7 +303,7 @@ export async function listReportHistory(userId: string, limit = 30) {
         include: departmentMembershipInclude
       },
       activities: {
-        where: { selected: true },
+        where: { selected: true, staleAt: null },
         orderBy: [{ startedAt: "asc" }, { createdAt: "asc" }],
         select: {
           id: true,
@@ -335,7 +336,7 @@ export async function getDashboardMetrics(dateString: string, scope?: ReviewScop
   const submitted = await prisma.dailyReport.count({ where: { reportDate, status: "SUBMITTED", user: employeeWhere } });
   const activities = await prisma.activityItem.groupBy({
     by: ["source"],
-    where: { reportDate, selected: true, user: employeeWhere },
+    where: { reportDate, selected: true, staleAt: null, user: employeeWhere },
     _count: true
   });
   const blockers = await prisma.dailyReport.count({

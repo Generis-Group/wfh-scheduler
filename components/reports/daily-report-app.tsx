@@ -159,6 +159,11 @@ function formatDuration(minutes?: number | null) {
   return remaining ? `${hours}h ${remaining}m` : `${hours}h`;
 }
 
+async function responseErrorMessage(response: Response, fallback: string) {
+  const body = await response.json().catch(() => null);
+  return body && typeof body.error === "string" ? body.error : fallback;
+}
+
 function statusTone(status?: string | null): "green" | "orange" | "blue" | "neutral" {
   const normalized = status?.toLowerCase() ?? "";
 
@@ -431,36 +436,40 @@ export function DailyReportApp({
 
   async function sync(provider: "jira" | "google-calendar" | "google-tasks") {
     setIsBusy(true);
-    setMessage(null);
     const providerLabel = syncProviderLabels[provider];
+    setMessage(`Importing ${providerLabel.toLowerCase()}...`);
 
-    const response = await fetch(`/api/sync/${provider}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date })
-    });
+    try {
+      const response = await fetch(`/api/sync/${provider}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date })
+      });
 
-    if (!response.ok) {
-      setMessage((await response.json()).error ?? "Sync failed.");
+      if (!response.ok) {
+        setMessage(await responseErrorMessage(response, `${providerLabel} import failed.`));
+        return;
+      }
+
+      const result = (await response.json()) as { importedCount: number; skippedCount: number; staleCount?: number };
+      const activityResponse = await fetch(`/api/activity?date=${encodeURIComponent(reportDate)}`);
+
+      if (activityResponse.ok) {
+        const data = (await activityResponse.json()) as { activities: Activity[] };
+        setActivities(data.activities);
+        setReport((current) => ({ ...current, activities: data.activities }));
+      }
+
+      setMessage(
+        result.importedCount > 0
+          ? `${providerLabel} import complete: ${result.importedCount} work item${result.importedCount === 1 ? "" : "s"} found${result.staleCount ? `, ${result.staleCount} stale item${result.staleCount === 1 ? "" : "s"} hidden` : ""}.`
+          : `No ${providerLabel.toLowerCase()} work items found for this date.`
+      );
+    } catch {
+      setMessage(`${providerLabel} import failed. Check your connection and try again.`);
+    } finally {
       setIsBusy(false);
-      return;
     }
-
-    const result = (await response.json()) as { importedCount: number; skippedCount: number };
-    const activityResponse = await fetch(`/api/activity?date=${encodeURIComponent(reportDate)}`);
-
-    if (activityResponse.ok) {
-      const data = (await activityResponse.json()) as { activities: Activity[] };
-      setActivities(data.activities);
-      setReport((current) => ({ ...current, activities: data.activities }));
-    }
-
-    setMessage(
-      result.importedCount > 0
-        ? `${providerLabel} import complete: ${result.importedCount} work item${result.importedCount === 1 ? "" : "s"} found.`
-        : `No ${providerLabel.toLowerCase()} work items found for this date.`
-    );
-    setIsBusy(false);
   }
 
   function connectProvider(provider: "google" | "atlassian") {
@@ -677,12 +686,6 @@ export function DailyReportApp({
               <span className="text-[#667085] dark:text-muted-foreground">{lastSavedLabel === "-" ? "Not saved yet" : `Last saved ${lastSavedLabel}`}</span>
             </div>
           </div>
-
-          {message ? (
-            <div className="mx-6 mb-4 rounded-[10px] bg-[#f8fafc] px-4 py-3 text-sm text-[#475569] shadow-[0_8px_24px_rgba(15,23,42,0.05)] dark:bg-[#101d2e] dark:text-muted-foreground min-[1200px]:mx-8">
-              {message}
-            </div>
-          ) : null}
 
           <div className="grid gap-4 border-t border-[#e8ecf3] px-6 py-5 dark:border-[#213149] min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)] min-[1200px]:px-8">
             <section className="flex min-h-[468px] flex-col rounded-[12px] bg-white p-5 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
@@ -921,6 +924,15 @@ export function DailyReportApp({
             </button>
           </div>
         </>
+      ) : null}
+      {message ? (
+        <div
+          className="fixed bottom-5 right-5 z-50 max-w-[min(420px,calc(100vw-2.5rem))] rounded-[12px] bg-white px-4 py-3 text-sm font-medium text-[#334155] shadow-[0_18px_42px_rgba(15,23,42,0.18)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:text-[#d7e0ec] dark:ring-[#263a55]"
+          role="status"
+          aria-live="polite"
+        >
+          {message}
+        </div>
       ) : null}
     </ReferenceAppShell>
   );
