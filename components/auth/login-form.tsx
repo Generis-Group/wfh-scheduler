@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { CalendarDays, KanbanSquare, LogIn } from "lucide-react";
-import Link from "next/link";
 import { signIn } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
@@ -13,11 +12,9 @@ import { generisEmailMessage, isGenerisEmail } from "@/lib/auth-domain";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 
 export function LoginForm({
-  oauthConfig,
-  previewEnabled
+  oauthConfig
 }: {
   oauthConfig: OAuthProviderConfig;
-  previewEnabled: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -114,19 +111,6 @@ export function LoginForm({
           <p className="text-xs text-muted-foreground">
             OAuth buttons are enabled after client IDs and secrets are added to `.env.local`.
           </p>
-        ) : null}
-        {previewEnabled ? (
-          <div className="space-y-2 pt-4">
-            <p className="text-center text-xs font-medium text-muted-foreground">Preview the app during development</p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Button asChild variant="secondary">
-              <Link href="/preview/employee">View as Employee</Link>
-            </Button>
-            <Button asChild variant="secondary">
-              <Link href="/preview/admin">View as Admin/Reviewer</Link>
-            </Button>
-            </div>
-          </div>
         ) : null}
       </CardContent>
     </Card>

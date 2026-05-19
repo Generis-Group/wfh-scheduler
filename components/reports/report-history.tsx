@@ -239,8 +239,7 @@ export function ReportHistory({
   userRole,
   userStatus,
   timezone,
-  mustChangePassword,
-  isPreview = false
+  mustChangePassword
 }: {
   reports: HistoryReport[];
   userName?: string | null;
@@ -249,7 +248,6 @@ export function ReportHistory({
   userStatus?: string | null;
   timezone?: string | null;
   mustChangePassword?: boolean;
-  isPreview?: boolean;
 }) {
   const [items, setItems] = useState(reports);
   const [openedReportId, setOpenedReportId] = useState(getInitialOpenedId);
@@ -354,7 +352,7 @@ export function ReportHistory({
   }
 
   function openReportDate(date: string) {
-    window.location.href = isPreview ? `/preview/employee?date=${date}` : `/?date=${date}`;
+    window.location.href = `/?date=${date}`;
   }
 
   function openNewReport() {
@@ -373,25 +371,6 @@ export function ReportHistory({
 
     setIsSubmitting(true);
     setMessage(null);
-
-    if (isPreview) {
-      const submittedAt = new Date().toISOString();
-      setItems((current) =>
-        current.map((item) =>
-          item.id === report.id
-            ? {
-                ...item,
-                status: "SUBMITTED",
-                submittedAt,
-                updatedAt: submittedAt
-              }
-            : item
-        )
-      );
-      setMessage("Preview draft submitted.");
-      setIsSubmitting(false);
-      return;
-    }
 
     const response = await fetch(`/api/reports/${report.id}/submit`, { method: "POST" });
     if (!response.ok) {
@@ -419,17 +398,6 @@ export function ReportHistory({
 
     setIsSubmitting(true);
     setMessage(null);
-
-    if (isPreview) {
-      setItems((current) => current.filter((item) => item.id !== report.id));
-      if (openedReportId === report.id) {
-        backToReports();
-      }
-      setRowMenu(null);
-      setMessage("Preview draft deleted.");
-      setIsSubmitting(false);
-      return;
-    }
 
     const response = await fetch(`/api/reports/${report.id}`, { method: "DELETE" });
     if (!response.ok) {
@@ -495,12 +463,10 @@ export function ReportHistory({
       userStatus={userStatus}
       timezone={timezone}
       mustChangePassword={mustChangePassword}
-      preview={isPreview}
     >
       {openedReport ? (
         <OpenedReportView
           report={openedReport}
-          isPreview={isPreview}
           isSubmitting={isSubmitting}
           onBack={backToReports}
           onEdit={() => editReport(openedReport)}
@@ -694,7 +660,6 @@ export function ReportHistory({
 
 function OpenedReportView({
   report,
-  isPreview,
   isSubmitting,
   onBack,
   onEdit,
@@ -703,7 +668,6 @@ function OpenedReportView({
   onDownload
 }: {
   report: HistoryReport;
-  isPreview: boolean;
   isSubmitting: boolean;
   onBack: () => void;
   onEdit: () => void;
@@ -837,7 +801,6 @@ function OpenedReportView({
           )}
         </ReportSection>
 
-        {isPreview ? <p className="sr-only">Preview report detail page.</p> : null}
       </div>
     </main>
   );

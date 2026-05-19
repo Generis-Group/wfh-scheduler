@@ -339,8 +339,7 @@ export function ReviewerDashboard({
   userStatus,
   timezone,
   mustChangePassword,
-  reviewerId,
-  isPreview = false
+  reviewerId
 }: {
   rows: Row[];
   metrics: Metrics;
@@ -352,7 +351,6 @@ export function ReviewerDashboard({
   timezone?: string | null;
   mustChangePassword?: boolean;
   reviewerId?: string | null;
-  isPreview?: boolean;
 }) {
   const [items, setItems] = useState(rows);
   const [activeReportUserId, setActiveReportUserId] = useState<string | null>(null);
@@ -401,7 +399,7 @@ export function ReviewerDashboard({
       return;
     }
 
-    window.location.href = isPreview ? `/preview/admin?date=${nextDate}` : `/review?date=${nextDate}`;
+    window.location.href = `/review?date=${nextDate}`;
   }
 
   function downloadCsv() {
@@ -473,11 +471,6 @@ export function ReviewerDashboard({
   async function sendEmailDigest() {
     setNotice(null);
 
-    if (isPreview) {
-      setNotice(`Preview email digest prepared for ${filteredItems.length} visible row${filteredItems.length === 1 ? "" : "s"}.`);
-      return;
-    }
-
     setIsSendingDigest(true);
     const response = await fetch("/api/review/email-digest", {
       method: "POST",
@@ -510,13 +503,9 @@ export function ReviewerDashboard({
     }
 
     const reportId = row.report.id;
-    const activeReviewerId = reviewerId ?? "preview-admin";
+    const activeReviewerId = reviewerId ?? "current-reviewer";
     setNotice(null);
     setItems((current) => setLocalReadReceipt(current, reportId, activeReviewerId, read));
-
-    if (isPreview) {
-      return;
-    }
 
     const response = await fetch(`/api/reports/${reportId}/read`, {
       method: "PATCH",
@@ -543,34 +532,6 @@ export function ReviewerDashboard({
 
     if (!trimmedBody) {
       return false;
-    }
-
-    if (isPreview) {
-      const comment: DashboardComment = {
-        id: `preview-comment-${Date.now()}`,
-        body: trimmedBody,
-        createdAt: new Date().toISOString(),
-        author: {
-          name: userName ?? "Reviewer",
-          email: userEmail ?? null
-        }
-      };
-
-      setItems((current) =>
-        current.map((item) =>
-          item.report?.id === row.report!.id
-            ? {
-                ...item,
-                report: {
-                  ...item.report,
-                  comments: [...item.report.comments, comment]
-                }
-              }
-            : item
-        )
-      );
-      setNotice("Comment added.");
-      return true;
     }
 
     const response = await fetch(`/api/reports/${row.report.id}/comments`, {
@@ -600,7 +561,6 @@ export function ReviewerDashboard({
       userStatus={userStatus}
       timezone={timezone}
       mustChangePassword={mustChangePassword}
-      preview={isPreview}
     >
       {activeRow ? (
         <ReportReviewPage

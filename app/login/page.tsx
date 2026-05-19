@@ -5,7 +5,6 @@ import { LoginForm } from "@/components/auth/login-form";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { auth } from "@/lib/auth";
 import { getOAuthProviderConfig } from "@/lib/oauth-config";
-import { isPreviewBypassEnabled } from "@/lib/preview";
 import generisLogo from "@/images/Generis_logo.png";
 
 export default async function LoginPage() {
@@ -31,7 +30,7 @@ export default async function LoginPage() {
       <div className="absolute right-6 top-6">
         <ThemeToggle />
       </div>
-      <LoginForm oauthConfig={getOAuthProviderConfig()} previewEnabled={isPreviewBypassEnabled()} />
+      <LoginForm oauthConfig={getOAuthProviderConfig()} />
     </main>
   );
 }

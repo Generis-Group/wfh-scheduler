@@ -18,7 +18,7 @@ import {
   Users
 } from "lucide-react";
 
-import { PageLoadingPreview, loadingKindFromHref } from "@/components/reports/page-loading-preview";
+import { PageLoadingSkeleton, loadingKindFromHref } from "@/components/reports/page-loading-skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn, initials } from "@/lib/utils";
 import generisLogo from "@/images/Generis_logo.png";
@@ -54,8 +54,7 @@ export function ReferenceAppShell({
   userStatus,
   timezone,
   mustChangePassword,
-  currentReportDate,
-  preview = false
+  currentReportDate
 }: {
   children: ReactNode;
   active: string;
@@ -67,7 +66,6 @@ export function ReferenceAppShell({
   timezone?: string | null;
   mustChangePassword?: boolean;
   currentReportDate?: string | null;
-  preview?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -79,10 +77,11 @@ export function ReferenceAppShell({
   const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
   const [lastReportDate, setLastReportDate] = useState<string | null>(currentReportDate ?? null);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
-  const settingsHref = preview ? (variant === "admin" ? "/preview/admin-settings" : "/preview/settings") : "/settings";
+  const [optimisticActive, setOptimisticActive] = useState(active);
+  const settingsHref = "/settings";
   const currentHref = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
-  const logoHref = preview ? (variant === "admin" ? "/preview/admin" : "/preview/employee") : (variant === "admin" ? "/review" : "/");
-  const mobileLogoHref = preview ? "/preview" : "/";
+  const logoHref = variant === "admin" ? "/review" : "/";
+  const mobileLogoHref = "/";
 
   useEffect(() => {
     if (variant !== "employee") {
@@ -103,15 +102,16 @@ export function ReferenceAppShell({
 
   useEffect(() => {
     setPendingHref(null);
-  }, [pathname, searchParams]);
+    setOptimisticActive(active);
+  }, [active, pathname, searchParams]);
 
   useEffect(() => {
     const hrefs = [
       logoHref,
       mobileLogoHref,
       settingsHref,
-      preview ? settingsHref : "/account",
-      ...nav.map((item) => getNavHref(item, preview, variant, lastReportDate))
+      "/account",
+      ...nav.map((item) => getNavHref(item, lastReportDate))
     ];
 
     hrefs.forEach((href) => {
@@ -119,9 +119,9 @@ export function ReferenceAppShell({
         router.prefetch(href);
       }
     });
-  }, [currentHref, lastReportDate, logoHref, mobileLogoHref, nav, preview, router, settingsHref, variant]);
+  }, [currentHref, lastReportDate, logoHref, mobileLogoHref, nav, router, settingsHref]);
 
-  function routeLinkProps(href: string) {
+  function routeLinkProps(href: string, activeKey?: string) {
     return {
       prefetch: true,
       onMouseEnter: () => router.prefetch(href),
@@ -140,6 +140,9 @@ export function ReferenceAppShell({
         }
 
         setPendingHref(href);
+        if (activeKey) {
+          setOptimisticActive(activeKey);
+        }
         setProfileOpen(false);
       }
     };
@@ -148,7 +151,7 @@ export function ReferenceAppShell({
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-[#0f172a] dark:bg-background dark:text-foreground lg:grid lg:grid-cols-[176px_minmax(0,1fr)]">
         <aside className="sticky top-0 hidden h-screen min-w-0 flex-col bg-white/88 px-3 py-4 shadow-[1px_0_0_rgba(15,23,42,0.04)] backdrop-blur-xl dark:bg-[#0b1422]/96 dark:shadow-[1px_0_0_rgba(255,255,255,0.04)] lg:flex">
-          <Link href={logoHref} {...routeLinkProps(logoHref)} className="flex items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]">
+          <Link href={logoHref} {...routeLinkProps(logoHref, variant === "admin" ? "review" : "report")} className="flex items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]">
             <span className="relative flex h-7 w-[132px] items-center overflow-hidden">
               <Image src={generisLogo} alt="Generis" className="h-auto w-full object-contain" priority />
             </span>
@@ -156,16 +159,16 @@ export function ReferenceAppShell({
           <nav className="mt-6 space-y-0.5">
             {nav.map((item) => {
               const Icon = item.icon;
-              const href = getNavHref(item, preview, variant, lastReportDate);
+              const href = getNavHref(item, lastReportDate);
 
               return (
                 <Link
                   key={item.key}
                   href={href}
-                  {...routeLinkProps(href)}
+                  {...routeLinkProps(href, item.key)}
                   className={cn(
                     "flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-[13px] font-semibold transition-colors",
-                    active === item.key
+                    optimisticActive === item.key
                       ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
                       : "text-[#52647a] hover:bg-[#eef4fb] hover:text-[#0f172a] dark:text-[#93a4b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]"
                   )}
@@ -181,7 +184,7 @@ export function ReferenceAppShell({
       <header className="sticky top-0 z-20 bg-white/92 shadow-[0_1px_0_rgba(15,23,42,0.05)] backdrop-blur-xl dark:bg-[#0b1422]/94 dark:shadow-[0_1px_0_rgba(255,255,255,0.05)]">
         <div className="flex h-12 w-full items-center justify-between gap-3 px-[clamp(14px,1.7vw,26px)] lg:justify-end">
           <div className="flex h-full min-w-0 items-center gap-[clamp(16px,2.2vw,34px)] lg:hidden">
-            <Link href={mobileLogoHref} {...routeLinkProps(mobileLogoHref)} className="flex shrink-0 items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]">
+            <Link href={mobileLogoHref} {...routeLinkProps(mobileLogoHref, variant === "admin" ? "review" : "report")} className="flex shrink-0 items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]">
               <span className="relative flex h-7 w-[132px] items-center overflow-hidden">
                 <Image src={generisLogo} alt="Generis" className="h-auto w-full object-contain" priority />
               </span>
@@ -190,16 +193,16 @@ export function ReferenceAppShell({
             <nav className="hidden h-full items-center gap-1 md:flex">
               {nav.map((item) => {
                 const Icon = item.icon;
-                const href = getNavHref(item, preview, variant, lastReportDate);
+                const href = getNavHref(item, lastReportDate);
 
                 return (
                   <Link
                     key={item.key}
                     href={href}
-                    {...routeLinkProps(href)}
+                    {...routeLinkProps(href, item.key)}
                     className={cn(
                       "flex h-full items-center gap-2 border-b-[3px] px-4 text-sm font-semibold transition-colors",
-                      active === item.key
+                      optimisticActive === item.key
                         ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#bfdbfe]"
                         : "border-transparent text-[#52647a] hover:text-[#0f172a] dark:text-[#93a4b8] dark:hover:text-[#e2e8f0]"
                     )}
@@ -251,20 +254,16 @@ export function ReferenceAppShell({
                     <ProfileLine label="Name" value={displayName} />
                     <ProfileLine label="Email" value={displayEmail ?? "Not set"} />
                     <ProfileLine label="Role" value={userRole || (variant === "admin" ? "Reviewer" : "Employee")} />
-                    <ProfileLine label="Status" value={userStatus ?? (preview ? "Preview" : "Active")} />
+                    <ProfileLine label="Status" value={userStatus ?? "Active"} />
                     <ProfileLine label="Timezone" value={timezone ?? "America/Toronto"} />
                   </div>
                 ) : null}
-                <Link href={preview ? settingsHref : "/account"} {...routeLinkProps(preview ? settingsHref : "/account")} className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]">
+                <Link href="/account" {...routeLinkProps("/account", "account")} className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]">
                   <CircleUser className="h-4 w-4" />
                   Account settings
                 </Link>
-                <Link href={settingsHref} {...routeLinkProps(settingsHref)} className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]">
-                  <Settings className="h-4 w-4" />
-                  Integrations
-                </Link>
-                {mustChangePassword && !preview ? (
-                  <Link href="/change-password" {...routeLinkProps("/change-password")} className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]">
+                {mustChangePassword ? (
+                  <Link href="/change-password" {...routeLinkProps("/change-password", "account")} className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]">
                     <KeyRound className="h-4 w-4" />
                     Change password
                   </Link>
@@ -272,16 +271,11 @@ export function ReferenceAppShell({
                 <button
                   className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
                   onClick={() => {
-                    if (preview) {
-                      window.location.href = "/login";
-                      return;
-                    }
-
                     signOut({ callbackUrl: "/login" });
                   }}
                 >
                   <LogOut className="h-4 w-4" />
-                  {preview ? "Exit preview" : "Sign out"}
+                  Sign out
                 </button>
               </div>
             ) : null}
@@ -290,16 +284,16 @@ export function ReferenceAppShell({
         <nav className="flex h-11 items-center gap-2 overflow-x-auto px-[clamp(14px,1.7vw,26px)] shadow-[0_-1px_0_rgba(15,23,42,0.04)] dark:shadow-[0_-1px_0_rgba(255,255,255,0.04)] md:hidden">
           {nav.map((item) => {
             const Icon = item.icon;
-            const href = getNavHref(item, preview, variant, lastReportDate);
+            const href = getNavHref(item, lastReportDate);
 
             return (
               <Link
                 key={item.key}
                 href={href}
-                {...routeLinkProps(href)}
+                {...routeLinkProps(href, item.key)}
                 className={cn(
                   "flex h-full shrink-0 items-center gap-2 border-b-[3px] px-2 text-sm font-semibold transition-colors",
-                  active === item.key
+                  optimisticActive === item.key
                     ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#93c5fd]"
                     : "border-transparent text-[#475569] hover:text-[#0f172a] dark:text-[#94a3b8] dark:hover:text-[#e2e8f0]"
                 )}
@@ -311,7 +305,7 @@ export function ReferenceAppShell({
           })}
         </nav>
       </header>
-      {pendingHref ? <PageLoadingPreview kind={loadingKindFromHref(pendingHref, variant)} /> : children}
+      {pendingHref ? <PageLoadingSkeleton kind={loadingKindFromHref(pendingHref, variant)} /> : children}
       </div>
     </div>
   );
@@ -326,32 +320,12 @@ function ProfileLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function getNavHref(item: NavItem, preview: boolean, variant: "employee" | "admin", lastReportDate?: string | null) {
-  if (!preview) {
-    if (item.key === "report" && lastReportDate) {
-      return `/?date=${lastReportDate}`;
-    }
-
-    return item.href;
+function getNavHref(item: NavItem, lastReportDate?: string | null) {
+  if (item.key === "report" && lastReportDate) {
+    return `/?date=${lastReportDate}`;
   }
 
-  if (item.key === "report") {
-    return lastReportDate ? `/preview/employee?date=${lastReportDate}` : "/preview/employee";
-  }
-
-  if (item.key === "review") {
-    return "/preview/admin";
-  }
-
-  if (item.key === "settings" && variant === "admin") {
-    return "/preview/admin-settings";
-  }
-
-  if (item.key === "account") {
-    return variant === "admin" ? "/preview/admin-settings" : "/preview/settings";
-  }
-
-  return `/preview/${item.key}`;
+  return item.href;
 }
 
 export function ReferencePanel({

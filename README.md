@@ -22,7 +22,6 @@ Docker is intentionally not used for this MVP.
    - `TOKEN_ENCRYPTION_KEY`
    - Atlassian and Google OAuth client values
    - Resend email values: `RESEND_API_KEY`, `EMAIL_FROM`, `APP_BASE_URL`, and `CRON_SECRET`
-   - `ENABLE_PREVIEW_BYPASS=true` only for local demos
 3. Install dependencies:
 
 ```bash
@@ -57,19 +56,18 @@ npm run db:deploy
 
 1. Create a managed Postgres database and set `DATABASE_URL` in Vercel.
 2. Set `NEXTAUTH_URL` and `APP_BASE_URL` to the production URL, plus `NEXTAUTH_SECRET`, `TOKEN_ENCRYPTION_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, and `CRON_SECRET`.
-3. Set `ENABLE_PREVIEW_BYPASS=false` in production unless a temporary private demo bypass is intentionally needed.
-4. Configure OAuth redirect URLs:
+3. Configure OAuth redirect URLs:
    - Local: `http://localhost:3000/api/auth/callback/google` and `http://localhost:3000/api/auth/callback/atlassian`
    - Production: `https://YOUR_DOMAIN/api/auth/callback/google` and `https://YOUR_DOMAIN/api/auth/callback/atlassian`
    - Atlassian must include both the Jira API scopes and the User Identity API `read:me` scope: `read:me read:jira-user read:jira-work offline_access`.
-5. Deploy migrations before first production use:
+4. Deploy migrations before first production use:
 
 ```bash
 npm run db:deploy
 npm run db:seed
 ```
 
-6. Vercel Cron is configured in `vercel.json` to call `/api/cron/review-digest` hourly on weekdays. The route checks `CRON_SECRET`, sends only during the 6 PM `America/Toronto` hour, and skips duplicate scheduled digests for the same report date.
+5. Vercel Cron is configured in `vercel.json` to call `/api/cron/review-digest` hourly on weekdays. The route checks `CRON_SECRET`, sends only during the 6 PM `America/Toronto` hour, and skips duplicate scheduled digests for the same report date.
 
 ## MVP Notes
 

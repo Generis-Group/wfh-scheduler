@@ -42,13 +42,11 @@ type UserPatch = Partial<User> & {
 export function AdminUsers({
   initialUsers,
   initialDepartments,
-  initialSettings,
-  isPreview = false
+  initialSettings
 }: {
   initialUsers: User[];
   initialDepartments: Department[];
   initialSettings: CompanySettings;
-  isPreview?: boolean;
 }) {
   const [users, setUsers] = useState(initialUsers);
   const [departments, setDepartments] = useState(initialDepartments);
@@ -64,30 +62,6 @@ export function AdminUsers({
     event.preventDefault();
     setMessage(null);
     setTemporaryCredentials(null);
-
-    if (isPreview) {
-      const temporaryPassword = `preview-${Math.random().toString(36).slice(2, 10)}`;
-      const createdEmail = email;
-      setUsers((current) => [
-        ...current,
-        {
-          id: `preview-user-${Date.now()}`,
-          name: name || null,
-          email,
-          role,
-          status: "ACTIVE",
-          timezone: "America/Toronto",
-          reviewerAllDepartments: false,
-          departments: []
-        }
-      ]);
-      setName("");
-      setEmail("");
-      setRole("EMPLOYEE");
-      setTemporaryCredentials({ email: createdEmail, password: temporaryPassword });
-      setMessage("Preview user created.");
-      return;
-    }
 
     const response = await fetch("/api/admin/users", {
       method: "POST",
@@ -111,12 +85,6 @@ export function AdminUsers({
   }
 
   async function updateUser(user: User, patch: UserPatch) {
-    if (isPreview) {
-      setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, ...patch } : item)));
-      setMessage("Preview user updated.");
-      return true;
-    }
-
     const apiPatch: UserPatch = { ...patch };
     delete apiPatch.departments;
     let response: Response;
@@ -148,18 +116,6 @@ export function AdminUsers({
     const trimmedName = newDepartmentName.trim();
 
     if (!trimmedName) {
-      return;
-    }
-
-    if (isPreview) {
-      const department = {
-        id: `preview-department-${Date.now()}`,
-        name: trimmedName,
-        slug: trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-      };
-      setDepartments((current) => [...current, department].sort((left, right) => left.name.localeCompare(right.name)));
-      setNewDepartmentName("");
-      setMessage("Preview department created.");
       return;
     }
 
@@ -233,13 +189,6 @@ export function AdminUsers({
   async function resetPassword(user: User) {
     setTemporaryCredentials(null);
 
-    if (isPreview) {
-      const temporaryPassword = `preview-${Math.random().toString(36).slice(2, 10)}`;
-      setTemporaryCredentials({ email: user.email ?? "", password: temporaryPassword });
-      setMessage("Preview temporary password created.");
-      return;
-    }
-
     const response = await fetch(`/api/admin/users/${user.id}/reset-password`, { method: "POST" });
     const data = await response.json();
 
@@ -259,11 +208,6 @@ export function AdminUsers({
   }
 
   async function saveSettings() {
-    if (isPreview) {
-      setMessage("Preview company settings saved locally.");
-      return;
-    }
-
     const response = await fetch("/api/admin/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

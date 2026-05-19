@@ -226,7 +226,6 @@ export function DailyReportApp({
   userStatus,
   timezone,
   mustChangePassword,
-  isPreview = false,
   integrationStatus = { google: false, atlassian: false },
   oauthConfig = { google: true, atlassian: true }
 }: {
@@ -238,7 +237,6 @@ export function DailyReportApp({
   userStatus?: string | null;
   timezone?: string | null;
   mustChangePassword?: boolean;
-  isPreview?: boolean;
   integrationStatus?: IntegrationStatus;
   oauthConfig?: OAuthProviderConfig;
 }) {
@@ -346,28 +344,6 @@ export function DailyReportApp({
         durationMinutes: activity.durationMinutes ?? null
       }));
 
-    if (isPreview) {
-      const nextActivities = activities.map((activity) =>
-        activity.id.startsWith("manual-new-") ? { ...activity, id: `manual-${Date.now()}-${activity.id}` } : activity
-      );
-
-      setActivities(nextActivities);
-      setReport((current) => ({
-        ...current,
-        status: submit ? "SUBMITTED" : current.status,
-        summary,
-        blockers,
-        workLocation,
-        submittedAt: submit ? new Date().toISOString() : current.submittedAt,
-        updatedAt: new Date().toISOString(),
-        activities: nextActivities
-      }));
-      setDeletedActivityIds([]);
-      setMessage(submit ? "Preview submitted." : "Preview saved.");
-      setIsBusy(false);
-      return;
-    }
-
     const reportPayload = {
       summary,
       blockers,
@@ -410,11 +386,11 @@ export function DailyReportApp({
 
     setReport(nextReport);
     setActivities(nextReport.activities);
-      setDeletedActivityIds([]);
-      setWorkLocation(nextReport.workLocation);
-      setMessage(submit ? "Submitted for review." : "Draft saved.");
-      setIsBusy(false);
-    }
+    setDeletedActivityIds([]);
+    setWorkLocation(nextReport.workLocation);
+    setMessage(submit ? "Submitted for review." : "Draft saved.");
+    setIsBusy(false);
+  }
 
   async function deleteDraft() {
     if (!report.id || report.status !== "DRAFT") {
@@ -427,25 +403,6 @@ export function DailyReportApp({
 
     setIsBusy(true);
     setMessage(null);
-
-    if (isPreview) {
-      setReport((current) => ({
-        ...current,
-        id: "",
-        summary: "",
-        blockers: "",
-        workLocation: "UNKNOWN",
-        activities: [],
-        updatedAt: null
-      }));
-      setSummary("");
-      setWorkLocation("UNKNOWN");
-      setActivities([]);
-      setDeletedActivityIds([]);
-      setMessage("Preview draft deleted.");
-      setIsBusy(false);
-      return;
-    }
 
     const response = await fetch(`/api/reports/${report.id}`, { method: "DELETE" });
 
@@ -477,12 +434,6 @@ export function DailyReportApp({
     setMessage(null);
     const providerLabel = syncProviderLabels[provider];
 
-    if (isPreview) {
-      setMessage(`${providerLabel} preview import complete.`);
-      setIsBusy(false);
-      return;
-    }
-
     const response = await fetch(`/api/sync/${provider}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -513,11 +464,6 @@ export function DailyReportApp({
   }
 
   function connectProvider(provider: "google" | "atlassian") {
-    if (isPreview) {
-      setMessage(`${provider === "google" ? "Google" : "Atlassian"} connection opens from Settings in the real app.`);
-      return;
-    }
-
     signIn(
       provider,
       { callbackUrl: "/" },
@@ -548,8 +494,8 @@ export function DailyReportApp({
     setOpenActivityMenu(null);
   }
 
-  const canSyncJira = isPreview || integrationStatus.atlassian;
-  const canSyncGoogle = isPreview || integrationStatus.google;
+  const canSyncJira = integrationStatus.atlassian;
+  const canSyncGoogle = integrationStatus.google;
   const hasPendingManual = activities.some((activity) => activity.id.startsWith("manual-new-"));
   const selectedCount = activities.filter((activity) => activity.selected).length;
   const totalSelectedMinutes = activities
@@ -612,7 +558,7 @@ export function DailyReportApp({
       return;
     }
 
-    router.push(isPreview ? `/preview/employee?date=${nextDate}` : `/?date=${nextDate}`);
+    router.push(`/?date=${nextDate}`);
   }
 
   function shiftReportDate(days: number) {
@@ -634,7 +580,6 @@ export function DailyReportApp({
       timezone={timezone}
       mustChangePassword={mustChangePassword}
       currentReportDate={reportDate}
-      preview={isPreview}
     >
       <main className="reference-page !pb-4 !pt-3">
         <section className="overflow-visible rounded-[18px] bg-white shadow-[0_14px_38px_rgba(15,23,42,0.09)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
@@ -794,7 +739,7 @@ export function DailyReportApp({
                       </button>
                       <Link
                         className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#2563eb] hover:bg-[#eff6ff] dark:text-[#93c5fd] dark:hover:bg-white/5"
-                        href={isPreview ? "/preview/settings" : "/settings"}
+                        href="/settings"
                         onClick={() => setImportMenuOpen(false)}
                       >
                         Manage integrations

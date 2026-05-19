@@ -102,7 +102,6 @@ export function SettingsPanel({
   jiraResources,
   taskLists,
   providerErrors,
-  isPreview = false,
   companySettings,
   canManageCompanySettings = false,
   viewerKind = "employee",
@@ -121,7 +120,6 @@ export function SettingsPanel({
     google?: string;
     atlassian?: string;
   };
-  isPreview?: boolean;
   companySettings?: CompanySettings;
   canManageCompanySettings?: boolean;
   viewerKind?: "employee" | "admin";
@@ -164,14 +162,6 @@ export function SettingsPanel({
     saveRequestId.current = currentRequestId;
 
     const timeout = window.setTimeout(async () => {
-      if (isPreview) {
-        if (saveRequestId.current === currentRequestId) {
-          lastSavedIntegrationSettings.current = serialized;
-          setIntegrationSaveStatus("saved");
-        }
-        return;
-      }
-
       const response = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -193,7 +183,7 @@ export function SettingsPanel({
     }, 600);
 
     return () => window.clearTimeout(timeout);
-  }, [isPreview, settings]);
+  }, [settings]);
 
   const integrationSaveLabel =
     integrationSaveStatus === "saving"
@@ -211,12 +201,6 @@ export function SettingsPanel({
       jiraProjectKeys: jiraProjectsInput.split(",").map((item) => item.trim().toUpperCase()).filter(Boolean)
     };
 
-    if (isPreview) {
-      setMessage("Preview company settings saved locally.");
-      setIsSavingCompany(false);
-      return;
-    }
-
     const response = await fetch("/api/admin/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -229,12 +213,6 @@ export function SettingsPanel({
   }
 
   async function disconnect(provider: "google" | "atlassian") {
-    if (isPreview) {
-      setConnectionState((current) => ({ ...current, [provider]: false }));
-      setMessage(`${provider === "google" ? "Google" : "Atlassian"} disconnected in preview.`);
-      return;
-    }
-
     const response = await fetch(`/api/settings/providers/${provider}`, { method: "DELETE" });
 
     if (response.ok) {
@@ -246,12 +224,6 @@ export function SettingsPanel({
   }
 
   function connect(provider: "google" | "atlassian") {
-    if (isPreview) {
-      setConnectionState((current) => ({ ...current, [provider]: true }));
-      setMessage(`${provider === "google" ? "Google" : "Atlassian"} connected in preview.`);
-      return;
-    }
-
     signIn(
       provider,
       { callbackUrl: "/settings" },
@@ -460,7 +432,7 @@ export function SettingsPanel({
                     </div>
                   </div>
                   <Badge variant="outline" className="bg-[#f8fafc] text-[#475569]">
-                    {canManageCompanySettings || isPreview ? "Editable" : "Read only"}
+                    {canManageCompanySettings ? "Editable" : "Read only"}
                   </Badge>
                 </div>
               </CardHeader>
@@ -481,14 +453,14 @@ export function SettingsPanel({
                         value={jiraProjectsInput}
                         onChange={(event) => setJiraProjectsInput(event.target.value)}
                         placeholder="GEN, OPS"
-                        disabled={!canManageCompanySettings && !isPreview}
+                        disabled={!canManageCompanySettings}
                       />
                       <p className="text-xs text-[#64748b]">Leave empty to import matching Jira activity from every accessible project.</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="text-xs text-[#64748b]">Employee access is managed from the Employees page.</div>
-                    {(canManageCompanySettings || isPreview) ? (
+                    {canManageCompanySettings ? (
                       <Button className="bg-[#2563eb] hover:bg-[#1d4ed8]" disabled={isSavingCompany}>
                         <Save className="mr-2 h-4 w-4" />
                         {isSavingCompany ? "Saving..." : "Save company settings"}

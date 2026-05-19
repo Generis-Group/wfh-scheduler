@@ -23,7 +23,7 @@ function LoadingHeader({ titleWidth = "w-56", subtitleWidth = "w-80" }: { titleW
   );
 }
 
-function DailyPreview() {
+function DailySkeleton() {
   return (
     <>
       <LoadingHeader titleWidth="w-48" subtitleWidth="w-72" />
@@ -60,7 +60,7 @@ function DailyPreview() {
   );
 }
 
-function ReportsPreview() {
+function ReportsSkeleton() {
   return (
     <>
       <LoadingHeader titleWidth="w-36" subtitleWidth="w-72" />
@@ -85,7 +85,7 @@ function ReportsPreview() {
   );
 }
 
-function ReviewPreview() {
+function ReviewSkeleton() {
   return (
     <>
       <LoadingHeader titleWidth="w-56" subtitleWidth="w-96" />
@@ -116,7 +116,7 @@ function ReviewPreview() {
   );
 }
 
-function EmployeesPreview() {
+function EmployeesSkeleton() {
   return (
     <>
       <LoadingHeader titleWidth="w-40" subtitleWidth="w-96" />
@@ -142,7 +142,7 @@ function EmployeesPreview() {
   );
 }
 
-function SettingsPreview({ account = false }: { account?: boolean }) {
+function SettingsSkeleton({ account = false }: { account?: boolean }) {
   return (
     <>
       <LoadingHeader titleWidth={account ? "w-36" : "w-40"} subtitleWidth="w-96" />
@@ -171,7 +171,7 @@ export function loadingKindFromHref(href: string, fallbackVariant: "employee" | 
     return "reports";
   }
 
-  if (path.endsWith("/review") || path.endsWith("/preview/admin")) {
+  if (path.endsWith("/review")) {
     return "review";
   }
 
@@ -187,22 +187,22 @@ export function loadingKindFromHref(href: string, fallbackVariant: "employee" | 
     return "settings";
   }
 
-  if (path.endsWith("/employee") || path === "/" || path === "") {
+  if (path === "/" || path === "") {
     return fallbackVariant === "admin" ? "review" : "daily";
   }
 
   return fallbackVariant === "admin" ? "review" : "daily";
 }
 
-export function PageLoadingPreview({ kind = "daily" }: { kind?: PageLoadingKind }) {
+export function PageLoadingSkeleton({ kind = "daily" }: { kind?: PageLoadingKind }) {
   return (
     <main className="reference-page !pb-5 !pt-4" aria-busy="true" aria-label="Loading page">
-      {kind === "daily" ? <DailyPreview /> : null}
-      {kind === "reports" ? <ReportsPreview /> : null}
-      {kind === "review" ? <ReviewPreview /> : null}
-      {kind === "employees" ? <EmployeesPreview /> : null}
-      {kind === "settings" ? <SettingsPreview /> : null}
-      {kind === "account" ? <SettingsPreview account /> : null}
+      {kind === "daily" ? <DailySkeleton /> : null}
+      {kind === "reports" ? <ReportsSkeleton /> : null}
+      {kind === "review" ? <ReviewSkeleton /> : null}
+      {kind === "employees" ? <EmployeesSkeleton /> : null}
+      {kind === "settings" ? <SettingsSkeleton /> : null}
+      {kind === "account" ? <SettingsSkeleton account /> : null}
     </main>
   );
 }
