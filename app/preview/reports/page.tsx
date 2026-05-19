@@ -10,9 +10,14 @@ function daysAgo(days: number) {
 export default function PreviewReportsPage() {
   requirePreviewBypass();
 
+  const operations = { id: "preview-department-1", name: "Operations", slug: "operations" };
+  const previewUser = {
+    departments: [{ departmentId: operations.id, department: operations }]
+  };
   const reports = [
     {
       id: "preview-history-1",
+      user: previewUser,
       reportDate: daysAgo(0),
       status: "SUBMITTED" as const,
       workLocation: "HYBRID",
@@ -52,6 +57,7 @@ export default function PreviewReportsPage() {
     },
     {
       id: "preview-history-2",
+      user: previewUser,
       reportDate: daysAgo(1),
       status: "DRAFT" as const,
       workLocation: "WFH",
@@ -75,6 +81,7 @@ export default function PreviewReportsPage() {
     },
     {
       id: "preview-history-3",
+      user: previewUser,
       reportDate: daysAgo(2),
       status: "SUBMITTED" as const,
       workLocation: "OFFICE",

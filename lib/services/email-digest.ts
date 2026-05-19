@@ -5,6 +5,7 @@ import { getOptionalEnv } from "@/lib/env";
 import { HttpError } from "@/lib/http";
 import { isGenerisEmail } from "@/lib/auth-domain";
 import { prisma } from "@/lib/prisma";
+import type { ReviewScope } from "@/lib/services/departments";
 import { listReportsForDate } from "@/lib/services/reports";
 
 export type ReviewDigestFilters = {
@@ -226,11 +227,11 @@ export function buildReviewDigest({
   };
 }
 
-export async function selectReviewDigestRecipients() {
+export async function selectReviewDigestRecipients(scope?: ReviewScope) {
   const users = await prisma.user.findMany({
     where: {
       status: "ACTIVE",
-      role: { in: ["REVIEWER", "ADMIN"] },
+      ...(scope ? { id: scope.userId } : { role: "ADMIN" as const }),
       email: { not: null }
     },
     orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
@@ -257,11 +258,13 @@ export async function selectReviewDigestRecipients() {
 export async function sendReviewDigest({
   date,
   trigger,
-  filters
+  filters,
+  scope
 }: {
   date: string;
   trigger: DigestTrigger;
   filters?: ReviewDigestFilters;
+  scope?: ReviewScope;
 }) {
   const reportDate = parseReportDate(date);
   const dedupeKey = trigger === "SCHEDULED" ? `review-digest:${date}` : null;
@@ -275,8 +278,8 @@ export async function sendReviewDigest({
     retryRun = existing;
   }
 
-  const recipients = await selectReviewDigestRecipients();
-  const rows = await listReportsForDate(date);
+  const recipients = await selectReviewDigestRecipients(scope);
+  const rows = await listReportsForDate(date, scope);
   const appBaseUrl = getOptionalEnv("APP_BASE_URL") ?? getOptionalEnv("NEXTAUTH_URL") ?? "http://localhost:3000";
   const digest = buildReviewDigest({ date, rows, recipients, appBaseUrl, filters });
   const emailRun = retryRun
@@ -311,7 +314,7 @@ export async function sendReviewDigest({
       where: { id: emailRun.id },
       data: {
         status: "SKIPPED",
-        errorMessage: "No active reviewer/admin recipients with @generisgp.com emails.",
+        errorMessage: scope ? "The current reviewer/admin recipient does not have an active @generisgp.com email." : "No active admin recipients with @generisgp.com emails.",
         completedAt: new Date()
       }
     });
@@ -362,7 +365,7 @@ export function getReviewDigestEmailStatus() {
     provider: "Resend",
     from: getOptionalEnv("EMAIL_FROM") ?? null,
     digestTime: `6:00 PM ${DEFAULT_TIMEZONE}`,
-    recipientRule: "All active reviewers/admins"
+    recipientRule: "Manual digests go to the sender; scheduled digests go to active admins"
   };
 }
 

@@ -43,9 +43,10 @@ describe("access guards", () => {
     });
   });
 
-  it("allows reviewer and admin access to employee data", () => {
-    expect(canAccessUser(session("REVIEWER")!, "employee-1")).toBe(true);
+  it("allows owners and admins through the synchronous user guard", () => {
+    expect(canAccessUser(session("EMPLOYEE")!, "user-1")).toBe(true);
     expect(canAccessUser(session("ADMIN")!, "employee-1")).toBe(true);
+    expect(canAccessUser(session("REVIEWER")!, "employee-1")).toBe(false);
     expect(canAccessUser(session("EMPLOYEE")!, "employee-1")).toBe(false);
   });
 

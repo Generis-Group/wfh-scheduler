@@ -32,7 +32,8 @@ export default async function ReviewPage({
   }
 
   const date = searchParams?.date ?? todayDateString(session.user.timezone);
-  const [rows, metrics] = await Promise.all([listReportsForDate(date), getDashboardMetrics(date)]);
+  const scope = { userId: session.user.id, role: session.user.role };
+  const [rows, metrics] = await Promise.all([listReportsForDate(date, scope), getDashboardMetrics(date, scope)]);
 
   return (
     <ReviewerDashboard

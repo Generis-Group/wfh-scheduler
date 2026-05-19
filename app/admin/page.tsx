@@ -5,6 +5,8 @@ import { ReferenceAppShell } from "@/components/reports/reference-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serializers";
+import { adminUserInclude } from "@/lib/services/admin";
+import { listDepartments } from "@/lib/services/departments";
 
 export default async function AdminPage() {
   const session = await auth();
@@ -25,10 +27,12 @@ export default async function AdminPage() {
     redirect("/");
   }
 
-  const [users, setting] = await Promise.all([
+  const [users, departments, setting] = await Promise.all([
     prisma.user.findMany({
-      orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }]
+      orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
+      include: adminUserInclude
     }),
+    listDepartments(),
     prisma.appSetting.findUnique({ where: { key: "company" } })
   ]);
   const rawSettings = setting?.value as
@@ -53,6 +57,7 @@ export default async function AdminPage() {
     >
       <AdminUsers
         initialUsers={serialize(users)}
+        initialDepartments={serialize(departments)}
         initialSettings={serialize(initialSettings)}
       />
     </ReferenceAppShell>

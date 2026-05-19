@@ -2,6 +2,7 @@ import type { DailyReport, UserRole } from "@prisma/client";
 
 import { auth } from "@/lib/auth";
 import { HttpError } from "@/lib/http";
+import { canReviewEmployee } from "@/lib/services/departments";
 
 export type AppSession = Awaited<ReturnType<typeof auth>>;
 
@@ -30,7 +31,7 @@ export async function requireRole(roles: UserRole[]) {
 }
 
 export function canAccessUser(session: NonNullable<AppSession>, userId: string) {
-  return session.user.id === userId || session.user.role === "REVIEWER" || session.user.role === "ADMIN";
+  return session.user.id === userId || session.user.role === "ADMIN";
 }
 
 export function assertCanAccessUser(session: NonNullable<AppSession>, userId: string) {
@@ -39,8 +40,20 @@ export function assertCanAccessUser(session: NonNullable<AppSession>, userId: st
   }
 }
 
-export function assertCanAccessReport(session: NonNullable<AppSession>, report: Pick<DailyReport, "userId">) {
-  assertCanAccessUser(session, report.userId);
+export async function assertCanAccessUserData(session: NonNullable<AppSession>, userId: string) {
+  if (canAccessUser(session, userId)) {
+    return;
+  }
+
+  if (session.user.role === "REVIEWER" && await canReviewEmployee({ userId: session.user.id, role: session.user.role }, userId)) {
+    return;
+  }
+
+  throw new HttpError(403, "You do not have access to this user's data.");
+}
+
+export async function assertCanAccessReport(session: NonNullable<AppSession>, report: Pick<DailyReport, "userId">) {
+  await assertCanAccessUserData(session, report.userId);
 }
 
 export function canMutateReport(session: NonNullable<AppSession>, report: Pick<DailyReport, "userId">) {

@@ -18,6 +18,7 @@ vi.mock("@/lib/access", () => ({
     }
   })),
   assertCanAccessUser: vi.fn(),
+  assertCanAccessUserData: vi.fn(),
   assertCanAccessReport: vi.fn(),
   assertCanMutateReport: vi.fn()
 }));

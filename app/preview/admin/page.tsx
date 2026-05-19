@@ -19,9 +19,18 @@ export default function PreviewAdminPage({
   const nextDay = new Date(`${date}T00:00:00.000Z`);
   nextDay.setUTCDate(nextDay.getUTCDate() + 1);
   const nextDate = nextDay.toISOString().slice(0, 10);
+  const operations = { id: "preview-department-1", name: "Operations", slug: "operations" };
+  const sales = { id: "preview-department-2", name: "Sales", slug: "sales" };
   const rows = [
     {
-      user: { id: "employee-1", name: "Employee One", email: "employee.one@generisgp.com", role: "EMPLOYEE", status: "ACTIVE" },
+      user: {
+        id: "employee-1",
+        name: "Employee One",
+        email: "employee.one@generisgp.com",
+        role: "EMPLOYEE",
+        status: "ACTIVE",
+        departments: [{ departmentId: operations.id, department: operations }]
+      },
       report: {
         id: "report-1",
         reportDate: date,
@@ -40,7 +49,14 @@ export default function PreviewAdminPage({
       }
     },
     {
-      user: { id: "employee-2", name: "Employee Two", email: "employee.two@generisgp.com", role: "EMPLOYEE", status: "ACTIVE" },
+      user: {
+        id: "employee-2",
+        name: "Employee Two",
+        email: "employee.two@generisgp.com",
+        role: "EMPLOYEE",
+        status: "ACTIVE",
+        departments: [{ departmentId: sales.id, department: sales }]
+      },
       report: {
         id: "report-2",
         reportDate: date,
@@ -65,7 +81,14 @@ export default function PreviewAdminPage({
       }
     },
     {
-      user: { id: "employee-3", name: "Employee Three", email: "employee.three@generisgp.com", role: "EMPLOYEE", status: "ACTIVE" },
+      user: {
+        id: "employee-3",
+        name: "Employee Three",
+        email: "employee.three@generisgp.com",
+        role: "EMPLOYEE",
+        status: "ACTIVE",
+        departments: [{ departmentId: operations.id, department: operations }]
+      },
       report: null
     }
   ];

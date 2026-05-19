@@ -75,10 +75,12 @@ model User {
   timezone             String                   @default("America/Toronto")
   passwordHash         String?
   mustChangePassword   Boolean                  @default(false)
+  reviewerAllDepartments Boolean                @default(false)
   createdAt            DateTime                 @default(now())
   updatedAt            DateTime                 @updatedAt
   accounts             Account[]
   sessions             Session[]
+  departments          UserDepartment[]
   reports              DailyReport[]
   activities           ActivityItem[]
   comments             ReportComment[]          @relation("CommentAuthor")
@@ -86,6 +88,28 @@ model User {
   reportReadReceipts   ReportReadReceipt[]      @relation("ReadReceiptReviewer")
   syncRuns             SyncRun[]
   integrationSettings  UserIntegrationSettings?
+}
+
+model Department {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  slug        String           @unique
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       UserDepartment[]
+}
+
+model UserDepartment {
+  id           String     @id @default(cuid())
+  userId       String
+  departmentId String
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, departmentId])
+  @@index([departmentId])
 }
 
 model Account {

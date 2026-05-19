@@ -18,26 +18,45 @@ type User = {
   role: "EMPLOYEE" | "REVIEWER" | "ADMIN";
   status: "INVITED" | "ACTIVE" | "DISABLED";
   timezone: string;
+  reviewerAllDepartments?: boolean;
+  departments?: Array<{
+    departmentId: string;
+    department: Department;
+  }>;
+};
+
+type Department = {
+  id: string;
+  name: string;
+  slug: string;
 };
 
 type CompanySettings = {
   jiraProjectKeys: string[];
 };
 
+type UserPatch = Partial<User> & {
+  departmentIds?: string[];
+};
+
 export function AdminUsers({
   initialUsers,
+  initialDepartments,
   initialSettings,
   isPreview = false
 }: {
   initialUsers: User[];
+  initialDepartments: Department[];
   initialSettings: CompanySettings;
   isPreview?: boolean;
 }) {
   const [users, setUsers] = useState(initialUsers);
+  const [departments, setDepartments] = useState(initialDepartments);
   const [settings, setSettings] = useState(initialSettings);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<User["role"]>("EMPLOYEE");
+  const [newDepartmentName, setNewDepartmentName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [temporaryCredentials, setTemporaryCredentials] = useState<{ email: string; password: string } | null>(null);
 
@@ -57,7 +76,9 @@ export function AdminUsers({
           email,
           role,
           status: "ACTIVE",
-          timezone: "America/Toronto"
+          timezone: "America/Toronto",
+          reviewerAllDepartments: false,
+          departments: []
         }
       ]);
       setName("");
@@ -89,25 +110,124 @@ export function AdminUsers({
     setMessage("User created with a temporary password.");
   }
 
-  async function updateUser(user: User, patch: Partial<User>) {
+  async function updateUser(user: User, patch: UserPatch) {
     if (isPreview) {
       setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, ...patch } : item)));
       setMessage("Preview user updated.");
-      return;
+      return true;
     }
 
-    const response = await fetch(`/api/admin/users/${user.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch)
-    });
+    const apiPatch: UserPatch = { ...patch };
+    delete apiPatch.departments;
+    let response: Response;
+
+    try {
+      response = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(apiPatch)
+      });
+    } catch {
+      setMessage("Unable to update user. Check your connection and try again.");
+      return false;
+    }
+
+    const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      setMessage(data.error ?? "Unable to update user.");
+      return false;
+    }
+
+    setUsers((current) => current.map((item) => (item.id === user.id ? data.user : item)));
+    return true;
+  }
+
+  async function createDepartment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmedName = newDepartmentName.trim();
+
+    if (!trimmedName) {
       return;
     }
 
-    const data = await response.json();
-    setUsers((current) => current.map((item) => (item.id === user.id ? data.user : item)));
+    if (isPreview) {
+      const department = {
+        id: `preview-department-${Date.now()}`,
+        name: trimmedName,
+        slug: trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+      };
+      setDepartments((current) => [...current, department].sort((left, right) => left.name.localeCompare(right.name)));
+      setNewDepartmentName("");
+      setMessage("Preview department created.");
+      return;
+    }
+
+    const response = await fetch("/api/admin/departments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmedName })
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      setMessage(data.error ?? "Unable to create department.");
+      return;
+    }
+
+    setDepartments((current) => [...current, data.department].sort((left, right) => left.name.localeCompare(right.name)));
+    setNewDepartmentName("");
+    setMessage("Department created.");
+  }
+
+  function departmentIdsForUser(user: User) {
+    return user.departments?.map((membership) => membership.departmentId) ?? [];
+  }
+
+  async function toggleUserDepartment(user: User, departmentId: string, checked: boolean) {
+    const currentIds = departmentIdsForUser(user);
+    const departmentIds = checked
+      ? [...new Set([...currentIds, departmentId])]
+      : currentIds.filter((id) => id !== departmentId);
+    const nextDepartments = departments
+      .filter((department) => departmentIds.includes(department.id))
+      .map((department) => ({ departmentId: department.id, department }));
+    const previousDepartments = user.departments ?? [];
+
+    setUsers((current) =>
+      current.map((item) =>
+        item.id === user.id
+          ? {
+              ...item,
+              departments: nextDepartments
+            }
+          : item
+      )
+    );
+    const saved = await updateUser(user, { departmentIds, departments: nextDepartments });
+
+    if (!saved) {
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === user.id
+            ? {
+                ...item,
+                departments: previousDepartments
+              }
+            : item
+        )
+      );
+    }
+  }
+
+  function departmentSummary(user: User) {
+    if (user.role === "REVIEWER" && user.reviewerAllDepartments) {
+      return "All departments";
+    }
+
+    const names = user.departments?.map((membership) => membership.department.name) ?? [];
+
+    return names.length ? names.join(", ") : "No departments";
   }
 
   async function resetPassword(user: User) {
@@ -197,7 +317,7 @@ export function AdminUsers({
         <Card>
           <CardHeader>
             <CardTitle>Team members</CardTitle>
-            <CardDescription>Assign roles and disable access without deleting reporting history.</CardDescription>
+            <CardDescription>Assign roles, departments, and reviewer access without deleting reporting history.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -206,6 +326,7 @@ export function AdminUsers({
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Departments</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Password</TableHead>
                 </TableRow>
@@ -213,7 +334,7 @@ export function AdminUsers({
               <TableBody>
                 {users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-sm text-[#64748b]">
+                    <TableCell colSpan={6} className="py-8 text-center text-sm text-[#64748b]">
                       No users have been created yet.
                     </TableCell>
                   </TableRow>
@@ -223,11 +344,51 @@ export function AdminUsers({
                       <TableCell>{user.name ?? "-"}</TableCell>
                       <TableCell>{user.email}</TableCell>
                       <TableCell>
-                        <Select value={user.role} onChange={(event) => updateUser(user, { role: event.target.value as User["role"] })}>
+                        <Select
+                          value={user.role}
+                          onChange={(event) => {
+                            const nextRole = event.target.value as User["role"];
+                            updateUser(user, {
+                              role: nextRole,
+                              reviewerAllDepartments: nextRole === "REVIEWER" ? user.reviewerAllDepartments : false
+                            });
+                          }}
+                        >
                           <option value="EMPLOYEE">Employee</option>
                           <option value="REVIEWER">Reviewer</option>
                           <option value="ADMIN">Admin</option>
                         </Select>
+                      </TableCell>
+                      <TableCell className="min-w-[260px]">
+                        <div className="space-y-2">
+                          <div className="text-xs text-[#64748b] dark:text-muted-foreground">{departmentSummary(user)}</div>
+                          {user.role === "REVIEWER" ? (
+                            <label className="flex items-center gap-2 text-xs font-medium text-[#334155] dark:text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(user.reviewerAllDepartments)}
+                                onChange={(event) => updateUser(user, { reviewerAllDepartments: event.target.checked })}
+                              />
+                              Can review all departments
+                            </label>
+                          ) : null}
+                          <div className="grid gap-1">
+                            {departments.length === 0 ? (
+                              <span className="text-xs text-[#64748b] dark:text-muted-foreground">Create departments to assign access.</span>
+                            ) : (
+                              departments.map((department) => (
+                                <label key={department.id} className="flex items-center gap-2 text-xs text-[#334155] dark:text-muted-foreground">
+                                  <input
+                                    type="checkbox"
+                                    checked={departmentIdsForUser(user).includes(department.id)}
+                                    onChange={(event) => toggleUserDepartment(user, department.id, event.target.checked)}
+                                  />
+                                  {department.name}
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Select
@@ -282,6 +443,34 @@ export function AdminUsers({
                   Create
                 </Button>
               </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Departments</CardTitle>
+              <CardDescription>Create departments, then assign employees and reviewers above.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <form className="flex gap-2" onSubmit={createDepartment}>
+                <Input
+                  value={newDepartmentName}
+                  onChange={(event) => setNewDepartmentName(event.target.value)}
+                  placeholder="Department name"
+                />
+                <Button type="submit" variant="outline" disabled={!newDepartmentName.trim()}>
+                  Add
+                </Button>
+              </form>
+              <div className="flex flex-wrap gap-2">
+                {departments.length === 0 ? (
+                  <span className="text-sm text-[#64748b] dark:text-muted-foreground">No departments created yet.</span>
+                ) : (
+                  departments.map((department) => (
+                    <Badge key={department.id} variant="outline">{department.name}</Badge>
+                  ))
+                )}
+              </div>
             </CardContent>
           </Card>
 

@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { isGenerisEmail, normalizeEmail } from "@/lib/auth-domain";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
+import { createDepartment as createDepartmentRecord, departmentMembershipInclude } from "@/lib/services/departments";
 import type { accountProfileSchema, changePasswordSchema, createUserSchema, resetPasswordSchema, updateUserSchema } from "@/lib/validation";
 import type { z } from "zod";
 
@@ -12,6 +13,10 @@ type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 type CreateUserInput = z.infer<typeof createUserSchema>;
 type UpdateUserInput = z.infer<typeof updateUserSchema>;
 type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+export const adminUserInclude = {
+  ...departmentMembershipInclude
+};
 
 function generateTemporaryPassword() {
   return crypto.randomBytes(12).toString("base64url");
@@ -34,18 +39,60 @@ export async function createAppUser(input: CreateUserInput) {
       role: input.role,
       status: input.status,
       passwordHash,
-      mustChangePassword: true
-    }
+      mustChangePassword: true,
+      reviewerAllDepartments: input.role === "REVIEWER" ? Boolean(input.reviewerAllDepartments) : false,
+      departments: input.departmentIds?.length
+        ? {
+            create: input.departmentIds.map((departmentId) => ({
+              departmentId
+            }))
+          }
+        : undefined
+    },
+    include: adminUserInclude
   });
 
   return { user, temporaryPassword };
 }
 
 export async function updateAppUser(userId: string, input: UpdateUserInput) {
-  return prisma.user.update({
-    where: { id: userId },
-    data: input
+  const { departmentIds, reviewerAllDepartments, role, ...userInput } = input;
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id: userId },
+      data: {
+        ...userInput,
+        role,
+        reviewerAllDepartments: role && role !== "REVIEWER" ? false : reviewerAllDepartments
+      }
+    });
+
+    if (departmentIds) {
+      await tx.userDepartment.deleteMany({
+        where: { userId }
+      });
+
+      if (departmentIds.length > 0) {
+        await tx.userDepartment.createMany({
+          data: departmentIds.map((departmentId) => ({
+            userId,
+            departmentId
+          })),
+          skipDuplicates: true
+        });
+      }
+    }
+
+    return tx.user.findUniqueOrThrow({
+      where: { id: user.id },
+      include: adminUserInclude
+    });
   });
+}
+
+export async function createDepartment(name: string) {
+  return createDepartmentRecord(name);
 }
 
 export async function changeOwnPassword(userId: string, input: ChangePasswordInput) {

@@ -21,7 +21,8 @@ async function main() {
       role: UserRole.ADMIN,
       status: UserStatus.ACTIVE,
       passwordHash,
-      mustChangePassword: true
+      mustChangePassword: true,
+      reviewerAllDepartments: true
     },
     create: {
       email,
@@ -29,7 +30,8 @@ async function main() {
       role: UserRole.ADMIN,
       status: UserStatus.ACTIVE,
       passwordHash,
-      mustChangePassword: true
+      mustChangePassword: true,
+      reviewerAllDepartments: true
     }
   });
 

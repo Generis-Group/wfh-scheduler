@@ -57,14 +57,22 @@ export const createUserSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   role: z.enum(["EMPLOYEE", "REVIEWER", "ADMIN"]).default("EMPLOYEE"),
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).default("INVITED"),
-  temporaryPassword: z.string().min(8).optional()
+  temporaryPassword: z.string().min(8).optional(),
+  reviewerAllDepartments: z.boolean().optional(),
+  departmentIds: z.array(z.string()).optional()
 });
 
 export const updateUserSchema = z.object({
   name: z.string().min(1).max(200).nullable().optional(),
   role: z.enum(["EMPLOYEE", "REVIEWER", "ADMIN"]).optional(),
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).optional(),
-  timezone: z.string().min(1).max(100).optional()
+  timezone: z.string().min(1).max(100).optional(),
+  reviewerAllDepartments: z.boolean().optional(),
+  departmentIds: z.array(z.string()).optional()
+});
+
+export const createDepartmentSchema = z.object({
+  name: z.string().min(1).max(120)
 });
 
 export const resetPasswordSchema = z.object({

@@ -36,6 +36,9 @@ type DashboardUser = {
   email?: string | null;
   role: string;
   status?: string | null;
+  departments?: Array<{
+    department?: { name?: string | null } | null;
+  }>;
 };
 
 type DashboardActivity = {
@@ -177,6 +180,10 @@ function includedActivities(report: DashboardReport | null) {
   return report?.activities.filter((activity) => activity.selected) ?? [];
 }
 
+function visibleReviewComments(report: DashboardReport | null) {
+  return report?.comments.filter((comment) => comment.body.trim().toLowerCase() !== "reviewed") ?? [];
+}
+
 function reportStatus(row: Row, date: string) {
   if (!row.report) {
     return "Missing";
@@ -215,6 +222,11 @@ function sourceLabel(source: string) {
   }
 
   return titleCase(source);
+}
+
+function userDepartmentLabel(user: DashboardUser) {
+  const departments = user.departments?.map((membership) => membership.department?.name).filter(Boolean) ?? [];
+  return departments.length ? departments.join(", ") : "No department";
 }
 
 function formatDuration(minutes?: number | null) {
@@ -351,6 +363,7 @@ export function ReviewerDashboard({
   const [locationFilter, setLocationFilter] = useState("ALL");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -372,6 +385,9 @@ export function ReviewerDashboard({
   const pageCount = Math.max(1, Math.ceil(filteredItems.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const pageItems = filteredItems.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const visibleReportIds = pageItems.flatMap((row) => (row.report ? [row.report.id] : []));
+  const selectedRows = items.filter((row) => row.report && selectedReportIds.includes(row.report.id));
+  const allVisibleReportsSelected = visibleReportIds.length > 0 && visibleReportIds.every((id) => selectedReportIds.includes(id));
   const activeRow = activeReportUserId ? items.find((row) => row.user.id === activeReportUserId) ?? null : null;
   const total = filteredItems.length;
   const submitted = filteredItems.filter((row) => row.report?.status === "SUBMITTED").length;
@@ -392,6 +408,7 @@ export function ReviewerDashboard({
     const exportRows = filteredItems.map((row) => ({
       employee: row.user.name ?? row.user.email ?? "Unassigned employee",
       email: row.user.email ?? "",
+      department: userDepartmentLabel(row.user),
       date: formatShortDate(row.report?.reportDate ?? date),
       status: reportStatus(row, date),
       workLocation: row.report ? titleCase(row.report.workLocation) : "",
@@ -400,7 +417,7 @@ export function ReviewerDashboard({
       blockers: hasBlockers(row.report) ? "Yes" : "No",
       activities: includedActivities(row.report).length
     }));
-    const headers = ["employee", "email", "date", "status", "workLocation", "submittedAt", "lastEdited", "blockers", "activities"];
+    const headers = ["employee", "email", "department", "date", "status", "workLocation", "submittedAt", "lastEdited", "blockers", "activities"];
     const csv = [
       headers.join(","),
       ...exportRows.map((row) =>
@@ -416,6 +433,41 @@ export function ReviewerDashboard({
     link.click();
     URL.revokeObjectURL(url);
     setNotice(`Exported ${filteredItems.length} row${filteredItems.length === 1 ? "" : "s"}.`);
+  }
+
+  function toggleReportSelection(reportId: string, checked: boolean) {
+    setSelectedReportIds((current) => {
+      if (checked) {
+        return current.includes(reportId) ? current : [...current, reportId];
+      }
+
+      return current.filter((id) => id !== reportId);
+    });
+  }
+
+  function toggleVisibleSelection(checked: boolean) {
+    setSelectedReportIds((current) => {
+      if (!checked) {
+        return current.filter((id) => !visibleReportIds.includes(id));
+      }
+
+      return [...new Set([...current, ...visibleReportIds])];
+    });
+  }
+
+  function openReport(row: Row) {
+    if (row.report) {
+      void setReadState(row, true);
+    }
+
+    setActiveReportUserId(row.user.id);
+  }
+
+  async function markSelectedUnread() {
+    const rowsToUpdate = selectedRows;
+
+    setSelectedReportIds([]);
+    await Promise.all(rowsToUpdate.map((row) => setReadState(row, false)));
   }
 
   async function sendEmailDigest() {
@@ -457,26 +509,29 @@ export function ReviewerDashboard({
       return;
     }
 
+    const reportId = row.report.id;
+    const activeReviewerId = reviewerId ?? "preview-admin";
+    setNotice(null);
+    setItems((current) => setLocalReadReceipt(current, reportId, activeReviewerId, read));
+
     if (isPreview) {
-      setItems((current) => setLocalReadReceipt(current, row.report!.id, reviewerId ?? "preview-admin", read));
-      setNotice(read ? "Report marked as read." : "Report marked unread.");
       return;
     }
 
-    const response = await fetch(`/api/reports/${row.report.id}/read`, {
+    const response = await fetch(`/api/reports/${reportId}/read`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ read })
     });
 
     if (!response.ok) {
+      setItems((current) => setLocalReadReceipt(current, reportId, activeReviewerId, !read));
       setNotice(read ? "Unable to mark report as read." : "Unable to mark report unread.");
       return;
     }
 
     const { report } = await response.json();
     setItems((current) => current.map((item) => (item.report?.id === report.id ? { ...item, report } : item)));
-    setNotice(read ? "Report marked as read." : "Report marked unread.");
   }
 
   async function addComment(row: Row, body: string) {
@@ -554,7 +609,6 @@ export function ReviewerDashboard({
           reviewerId={reviewerId}
           notice={notice}
           onBack={() => setActiveReportUserId(null)}
-          onSetRead={(read) => setReadState(activeRow, read)}
           onAddComment={(body) => addComment(activeRow, body)}
           onPrint={() => {
             window.print();
@@ -568,13 +622,13 @@ export function ReviewerDashboard({
             <p className="mt-2 text-sm text-[#667085] dark:text-muted-foreground">Track report coverage, blockers, and submissions across the team.</p>
           </div>
 
-          <section className="mb-4 rounded-[12px] bg-white p-4 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-            <div className="grid gap-4 lg:grid-cols-[minmax(210px,260px)_minmax(190px,230px)_minmax(190px,230px)_minmax(260px,1fr)_auto]">
+          <section className="mb-4 rounded-[12px] bg-white p-3 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+            <div className="grid gap-3 lg:grid-cols-4 xl:grid-cols-[minmax(180px,230px)_minmax(120px,160px)_minmax(140px,180px)_minmax(190px,1fr)_auto]">
               <Field label="Report Date">
-                <label className="relative flex h-11 items-center rounded-[8px] border border-[#d8dee8] bg-white px-4 text-sm text-[#344054] dark:border-[#263a55] dark:bg-[#0b1523] dark:text-foreground">
-                  <CalendarDays className="mr-3 h-4 w-4 text-[#667085]" />
-                  <span className="pointer-events-none flex-1">{formatReportDate(date)}</span>
-                  <ChevronDown className="ml-3 h-4 w-4 text-[#667085]" />
+                <label className="relative flex h-10 min-w-0 items-center rounded-[8px] border border-[#d8dee8] bg-white px-3 text-xs font-medium text-[#344054] dark:border-[#263a55] dark:bg-[#0b1523] dark:text-foreground">
+                  <CalendarDays className="mr-2 h-3.5 w-3.5 shrink-0 text-[#667085]" />
+                  <span className="pointer-events-none min-w-0 flex-1 truncate whitespace-nowrap">{formatReportDate(date)}</span>
+                  <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 text-[#667085]" />
                   <Input
                     type="date"
                     value={dateInputValue(date)}
@@ -588,7 +642,7 @@ export function ReviewerDashboard({
               <Field label="Group">
                 <Select
                   value={groupFilter}
-                  className="h-11 rounded-[8px] bg-white dark:bg-[#0b1523]"
+                  className="h-10 rounded-[8px] bg-white text-xs dark:bg-[#0b1523]"
                   onChange={(event) => {
                     setGroupFilter(event.target.value);
                     setPage(1);
@@ -604,7 +658,7 @@ export function ReviewerDashboard({
               <Field label="Work Location">
                 <Select
                   value={locationFilter}
-                  className="h-11 rounded-[8px] bg-white dark:bg-[#0b1523]"
+                  className="h-10 rounded-[8px] bg-white text-xs dark:bg-[#0b1523]"
                   onChange={(event) => {
                     setLocationFilter(event.target.value);
                     setPage(1);
@@ -629,19 +683,19 @@ export function ReviewerDashboard({
                       setSearch(event.target.value);
                       setPage(1);
                     }}
-                    className="h-11 rounded-[8px] bg-white pl-11 dark:bg-[#0b1523]"
+                    className="h-10 rounded-[8px] bg-white pl-11 text-xs dark:bg-[#0b1523]"
                     placeholder="Search by name or email..."
                   />
                 </label>
               </Field>
 
-              <div className="flex items-end justify-end gap-3">
-                <Button variant="outline" className="h-11 rounded-[8px] bg-white px-5 dark:bg-[#0b1523]" onClick={sendEmailDigest} disabled={isSendingDigest}>
-                  <Mail className="mr-2 h-4 w-4" />
+              <div className="flex items-end justify-start gap-2 lg:col-span-4 xl:col-span-1 xl:justify-end">
+                <Button variant="outline" className="h-10 rounded-[8px] bg-white px-3 text-xs dark:bg-[#0b1523]" onClick={sendEmailDigest} disabled={isSendingDigest}>
+                  <Mail className="mr-1.5 h-3.5 w-3.5" />
                   {isSendingDigest ? "Sending..." : "Email digest"}
                 </Button>
-                <Button className="h-11 rounded-[8px] bg-[#2563eb] px-5 text-white hover:bg-[#1d4ed8]" onClick={downloadCsv}>
-                  <Download className="mr-2 h-4 w-4" />
+                <Button className="h-10 rounded-[8px] bg-[#2563eb] px-3 text-xs text-white hover:bg-[#1d4ed8]" onClick={downloadCsv}>
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
                   Export
                 </Button>
               </div>
@@ -683,30 +737,48 @@ export function ReviewerDashboard({
           </section>
 
           <section className="overflow-hidden rounded-[12px] bg-white shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-            <div className="p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4">
               <h2 className="text-lg font-semibold text-[#101828] dark:text-foreground">Employee Reports</h2>
+              {selectedRows.length > 0 ? (
+                <div className="flex items-center gap-2 rounded-[9px] bg-[#f4f8ff] px-2 py-1.5 ring-1 ring-[#dbe7f5] dark:bg-blue-400/10 dark:ring-blue-300/15">
+                  <span className="px-1 text-xs font-semibold text-[#475467] dark:text-muted-foreground">{selectedRows.length} selected</span>
+                  <Button variant="outline" size="sm" className="h-8 rounded-[7px] bg-white px-3 text-xs dark:bg-[#0b1523]" onClick={markSelectedUnread}>
+                    Mark as unread
+                  </Button>
+                </div>
+              ) : null}
             </div>
             <div className="overflow-x-auto px-4">
-              <table className="w-full min-w-[940px] text-sm">
+              <table className="w-full min-w-[980px] text-xs">
                 <thead>
-                  <tr className="border-b border-[#e5eaf2] text-left text-xs font-semibold text-[#64748b] dark:border-[#263a55] dark:text-muted-foreground">
-                    <th className="w-[24%] px-4 py-3">Employee</th>
-                    <th className="w-[14%] px-4 py-3">Status</th>
-                    <th className="w-[16%] px-4 py-3">Flags</th>
-                    <th className="w-[17%] px-4 py-3">Location</th>
-                    <th className="w-[20%] px-4 py-3">Submitted</th>
-                    <th className="w-[9%] px-4 py-3 text-center">Action</th>
+                  <tr className="border-b border-[#e5eaf2] text-left text-[10px] font-semibold uppercase tracking-[0.02em] text-[#64748b] dark:border-[#263a55] dark:text-muted-foreground">
+                    <th className="w-[36px] px-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleReportsSelected}
+                        disabled={visibleReportIds.length === 0}
+                        onChange={(event) => toggleVisibleSelection(event.target.checked)}
+                        aria-label="Select visible reports"
+                      />
+                    </th>
+                    <th className="w-[22%] px-2 py-2">Employee</th>
+                    <th className="w-[14%] px-2 py-2">Department</th>
+                    <th className="w-[10%] px-2 py-2">Status</th>
+                    <th className="w-[18%] px-2 py-2">Flags</th>
+                    <th className="w-[10%] px-2 py-2">Location</th>
+                    <th className="w-[14%] px-2 py-2">Submitted</th>
+                    <th className="w-[10%] px-2 py-2 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pageItems.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8">
+                      <td colSpan={8} className="px-4 py-8">
                         <EmptyReferenceState>No employee reports match these filters.</EmptyReferenceState>
                       </td>
                     </tr>
                   ) : (
-                    pageItems.map((row, index) => {
+                    pageItems.map((row) => {
                       const status = reportStatus(row, date);
                       const flags = dashboardFlags(row, date);
                       const unread = isUnreadForReviewer(row.report, reviewerId);
@@ -719,18 +791,29 @@ export function ReviewerDashboard({
                             unread && "bg-[#f4f8ff] dark:bg-blue-400/10"
                           )}
                         >
-                          <td className="px-4 py-3.5">
+                          <td className="px-2 py-2.5">
+                            {row.report ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedReportIds.includes(row.report.id)}
+                                onChange={(event) => toggleReportSelection(row.report!.id, event.target.checked)}
+                                aria-label={`Select ${row.user.name ?? row.user.email ?? "report"}`}
+                              />
+                            ) : null}
+                          </td>
+                          <td className="px-2 py-2.5">
                             <div className="flex items-center gap-3">
                               <span className={cn("h-2 w-2 rounded-full", unread ? "bg-[#2563eb]" : "bg-transparent")} />
                               <Avatar name={row.user.name ?? row.user.email} />
-                              <span className="font-semibold text-[#101828] dark:text-foreground">{row.user.name ?? row.user.email ?? "Employee"}</span>
+                              <span className="truncate text-xs font-semibold text-[#101828] dark:text-foreground">{row.user.name ?? row.user.email ?? "Employee"}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-3.5">
-                            <span className={cn("inline-flex rounded-full px-4 py-1.5 text-xs font-semibold", statusClass(status))}>{status}</span>
+                          <td className="px-2 py-2.5 text-xs text-[#475467] dark:text-muted-foreground">{userDepartmentLabel(row.user)}</td>
+                          <td className="px-2 py-2.5">
+                            <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold", statusClass(status))}>{status}</span>
                           </td>
-                          <td className="px-4 py-3.5">
-                            <div className="flex items-center gap-2">
+                          <td className="px-2 py-2.5">
+                            <div className="flex min-w-[120px] flex-wrap items-center gap-1.5">
                               {flags.length === 0 ? (
                                 <span className="text-[#98a2b3]">-</span>
                               ) : (
@@ -739,7 +822,7 @@ export function ReviewerDashboard({
                                     key={flag.key}
                                     title={flag.label}
                                     className={cn(
-                                      "inline-flex h-8 w-8 items-center justify-center rounded-full border bg-white dark:bg-[#0b1523]",
+                                      "inline-flex h-6 w-6 items-center justify-center rounded-full border bg-white [&_svg]:h-3.5 [&_svg]:w-3.5 dark:bg-[#0b1523]",
                                       flag.key === "blockers" && "border-red-200 text-[#ef4444] dark:border-red-300/25",
                                       flag.key === "activities" && "border-blue-200 text-[#2563eb] dark:border-blue-300/25",
                                       flag.key === "edited" && "border-purple-200 text-[#8b5cf6] dark:border-purple-300/25",
@@ -752,15 +835,15 @@ export function ReviewerDashboard({
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-3.5">{row.report ? titleCase(row.report.workLocation) : "-"}</td>
-                          <td className="px-4 py-3.5">{formatTimestamp(row.report?.submittedAt)}</td>
-                          <td className="px-4 py-3.5 text-center">
+                          <td className="px-2 py-2.5 text-xs">{row.report ? titleCase(row.report.workLocation) : "-"}</td>
+                          <td className="px-2 py-2.5 text-xs">{formatTimestamp(row.report?.submittedAt)}</td>
+                          <td className="px-2 py-2.5 text-center">
                             {row.report ? (
-                              <Button variant="outline" className="h-9 rounded-[7px] px-5 text-[#2563eb]" onClick={() => setActiveReportUserId(row.user.id)}>
+                              <Button variant="outline" className="h-8 rounded-[7px] px-3 text-xs text-[#2563eb]" onClick={() => openReport(row)}>
                                 Review
                               </Button>
                             ) : (
-                              <Button variant="outline" className="h-9 rounded-[7px] px-5 text-[#64748b]" disabled title="Reminder emails are coming soon">
+                              <Button variant="outline" className="h-8 rounded-[7px] px-3 text-xs text-[#64748b]" disabled title="Reminder emails are coming soon">
                                 Remind (coming soon)
                               </Button>
                             )}
@@ -905,7 +988,6 @@ function ReportReviewPage({
   reviewerId,
   notice,
   onBack,
-  onSetRead,
   onAddComment,
   onPrint
 }: {
@@ -914,7 +996,6 @@ function ReportReviewPage({
   reviewerId?: string | null;
   notice: string | null;
   onBack: () => void;
-  onSetRead: (read: boolean) => void;
   onAddComment: (body: string) => Promise<boolean>;
   onPrint: () => void;
 }) {
@@ -922,8 +1003,14 @@ function ReportReviewPage({
   const activities = includedActivities(report);
   const blockers = blockerItems(report);
   const unread = isUnreadForReviewer(report, reviewerId);
+  const comments = visibleReviewComments(report);
+  const commentPageSize = 3;
   const [commentBody, setCommentBody] = useState("");
+  const [commentPage, setCommentPage] = useState(1);
   const [isAddingComment, setIsAddingComment] = useState(false);
+  const commentPageCount = Math.max(1, Math.ceil(comments.length / commentPageSize));
+  const currentCommentPage = Math.min(commentPage, commentPageCount);
+  const pagedComments = comments.slice((currentCommentPage - 1) * commentPageSize, currentCommentPage * commentPageSize);
 
   async function handleCommentSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -964,9 +1051,6 @@ function ReportReviewPage({
           </div>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="h-12 rounded-[8px] bg-white px-6 dark:bg-[#0b1523]" onClick={() => onSetRead(unread)} disabled={!report}>
-            {unread ? "Mark as read" : "Mark unread"}
-          </Button>
           <Button className="h-12 rounded-[8px] bg-[#2563eb] px-6 text-white hover:bg-[#1d4ed8]" onClick={onPrint} disabled={!report}>
             <Download className="mr-2 h-4 w-4" />
             Download PDF
@@ -983,8 +1067,8 @@ function ReportReviewPage({
       <section className="mb-4 grid gap-0 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55] md:grid-cols-4 md:divide-x md:divide-[#d8dee8] md:dark:divide-[#263a55]">
         <ReportMetric label="Submitted" value={formatTimestamp(report?.submittedAt)} />
         <ReportMetric label="Last edited" value={formatTimestamp(report?.updatedAt)} />
+        <ReportMetric label="Department" value={userDepartmentLabel(row.user)} />
         <ReportMetric label="Location" value={report ? titleCase(report.workLocation) : "-"} />
-        <ReportMetric label="Read status" value={unread ? "Unread" : report ? "Read" : "-"} />
       </section>
 
       <section className="mb-4 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
@@ -1056,24 +1140,40 @@ function ReportReviewPage({
 
       <section className="mb-4 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">Reviewer comments</h2>
-          <span className="text-sm font-medium text-[#667085] dark:text-muted-foreground">{report?.comments.length ?? 0} comment{report?.comments.length === 1 ? "" : "s"}</span>
+          <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">Review comments</h2>
+          <span className="text-sm font-medium text-[#667085] dark:text-muted-foreground">{comments.length} comment{comments.length === 1 ? "" : "s"}</span>
         </div>
 
         <div className="mt-4 space-y-3">
-          {report?.comments.length ? (
-            report.comments.map((comment) => (
+          {comments.length ? (
+            pagedComments.map((comment) => (
               <div key={comment.id} className="rounded-[10px] bg-[#f6f9fd] px-4 py-3 ring-1 ring-[#e5eaf2] dark:bg-[#0b1523] dark:ring-[#263a55]">
                 <p className="whitespace-pre-wrap text-sm leading-6 text-[#101828] dark:text-foreground">{comment.body}</p>
                 <p className="mt-2 text-xs font-medium text-[#667085] dark:text-muted-foreground">
-                  {formatTimestamp(comment.createdAt)} by {comment.author.name ?? comment.author.email ?? "Reviewer"}
+                  {formatTimestamp(comment.createdAt)} by {comment.author.name ?? comment.author.email ?? "Review team"}
                 </p>
               </div>
             ))
           ) : (
-            <EmptyReferenceState>No reviewer comments yet.</EmptyReferenceState>
+            <EmptyReferenceState>No review comments yet.</EmptyReferenceState>
           )}
         </div>
+
+        {comments.length > commentPageSize ? (
+          <div className="mt-4 flex items-center justify-between border-t border-[#e5eaf2] pt-3 text-sm text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">
+            <span>
+              Page {currentCommentPage} of {commentPageCount}
+            </span>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setCommentPage(Math.max(1, currentCommentPage - 1))} disabled={currentCommentPage === 1}>
+                Previous
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setCommentPage(Math.min(commentPageCount, currentCommentPage + 1))} disabled={currentCommentPage === commentPageCount}>
+                Next
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         <form className="mt-4" onSubmit={handleCommentSubmit}>
           <Textarea

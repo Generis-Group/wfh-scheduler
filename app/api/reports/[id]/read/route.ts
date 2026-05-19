@@ -1,6 +1,6 @@
-import { requireRole } from "@/lib/access";
+import { assertCanAccessReport, requireRole } from "@/lib/access";
 import { handleRouteError, json } from "@/lib/http";
-import { setReportReadState } from "@/lib/services/reports";
+import { getReportById, setReportReadState } from "@/lib/services/reports";
 import { reportReadStateSchema } from "@/lib/validation";
 
 type Context = {
@@ -13,6 +13,8 @@ export async function PATCH(request: Request, { params }: Context) {
   try {
     const session = await requireRole(["REVIEWER", "ADMIN"]);
     const input = reportReadStateSchema.parse(await request.json());
+    const existingReport = await getReportById(params.id);
+    await assertCanAccessReport(session, existingReport);
     const report = await setReportReadState(params.id, session.user.id, input.read);
 
     return json({ report });

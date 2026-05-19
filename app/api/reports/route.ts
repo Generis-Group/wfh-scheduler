@@ -1,4 +1,4 @@
-import { assertCanAccessUser, requireSession } from "@/lib/access";
+import { assertCanAccessUserData, requireSession } from "@/lib/access";
 import { ensureDailyReport, getDashboardMetrics, getDailyReport, listReportsForDate, updateReport } from "@/lib/services/reports";
 import { handleRouteError, HttpError, json } from "@/lib/http";
 import { createReportSchema, reportQuerySchema } from "@/lib/validation";
@@ -13,16 +13,17 @@ export async function GET(request: Request) {
     });
 
     if (!query.userId && (session.user.role === "REVIEWER" || session.user.role === "ADMIN")) {
+      const scope = { userId: session.user.id, role: session.user.role };
       const [reports, metrics] = await Promise.all([
-        listReportsForDate(query.date),
-        getDashboardMetrics(query.date)
+        listReportsForDate(query.date, scope),
+        getDashboardMetrics(query.date, scope)
       ]);
 
       return json({ reports, metrics });
     }
 
     const userId = query.userId ?? session.user.id;
-    assertCanAccessUser(session, userId);
+    await assertCanAccessUserData(session, userId);
 
     const report = await getDailyReport(userId, query.date);
 

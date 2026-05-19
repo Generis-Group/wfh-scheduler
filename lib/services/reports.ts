@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { parseReportDate } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
+import { departmentMembershipInclude, getReviewableEmployeeWhere, type ReviewScope } from "@/lib/services/departments";
 import type { updateReportSchema } from "@/lib/validation";
 import type { z } from "zod";
 
@@ -18,7 +19,9 @@ function extractBlockerLines(value: string) {
 }
 
 const reportInclude = {
-  user: true,
+  user: {
+    include: departmentMembershipInclude
+  },
   activities: {
     orderBy: [{ startedAt: "asc" as const }, { createdAt: "asc" as const }]
   },
@@ -264,23 +267,28 @@ export async function setReportReadState(reportId: string, reviewerId: string, r
   return getReportById(reportId);
 }
 
-export async function listReportsForDate(dateString: string) {
+export async function listReportsForDate(dateString: string, scope?: ReviewScope) {
   const reportDate = parseReportDate(dateString);
+  const employeeWhere = await getReviewableEmployeeWhere(scope);
 
   const users = await prisma.user.findMany({
-    where: { role: "EMPLOYEE", status: { not: "DISABLED" } },
+    where: employeeWhere,
     orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
-    include: {
-      reports: {
-        where: { reportDate },
-        include: reportInclude
-      }
-    }
+    include: departmentMembershipInclude,
   });
+
+  const reports = await prisma.dailyReport.findMany({
+    where: {
+      reportDate,
+      user: employeeWhere
+    },
+    include: reportInclude
+  });
+  const reportsByUserId = new Map(reports.map((report) => [report.userId, report]));
 
   return users.map((user) => ({
     user,
-    report: user.reports[0] ?? null
+    report: reportsByUserId.get(user.id) ?? null
   }));
 }
 
@@ -290,6 +298,9 @@ export async function listReportHistory(userId: string, limit = 30) {
     orderBy: { reportDate: "desc" },
     take: limit,
     include: {
+      user: {
+        include: departmentMembershipInclude
+      },
       activities: {
         where: { selected: true },
         orderBy: [{ startedAt: "asc" }, { createdAt: "asc" }],
@@ -315,11 +326,11 @@ export async function listReportHistory(userId: string, limit = 30) {
   });
 }
 
-export async function getDashboardMetrics(dateString: string) {
+export async function getDashboardMetrics(dateString: string, scope?: ReviewScope) {
   const reportDate = parseReportDate(dateString);
   const trendStart = new Date(reportDate);
   trendStart.setUTCDate(trendStart.getUTCDate() - 6);
-  const employeeWhere = { role: "EMPLOYEE" as const, status: { not: "DISABLED" as const } };
+  const employeeWhere = await getReviewableEmployeeWhere(scope);
   const users = await prisma.user.count({ where: employeeWhere });
   const submitted = await prisma.dailyReport.count({ where: { reportDate, status: "SUBMITTED", user: employeeWhere } });
   const activities = await prisma.activityItem.groupBy({

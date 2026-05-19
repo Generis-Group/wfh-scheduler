@@ -56,6 +56,11 @@ type HistoryReport = {
   blockers: string;
   submittedAt?: string | Date | null;
   updatedAt?: string | Date | null;
+  user?: {
+    departments?: Array<{
+      department?: { name?: string | null } | null;
+    }>;
+  } | null;
   activities: HistoryActivity[];
   comments?: HistoryComment[];
   revisions: Array<{ id: string; createdAt: string | Date; editedBy?: { name?: string | null; email?: string | null } | null }>;
@@ -152,6 +157,15 @@ function editedAfterDate(report: HistoryReport) {
 
 function sourceLabel(source?: string | null) {
   return source ? titleCase(source) : "Activity";
+}
+
+function reportDepartmentLabel(report: HistoryReport) {
+  const departments = report.user?.departments?.map((membership) => membership.department?.name).filter(Boolean) ?? [];
+  return departments.length ? departments.join(", ") : "No department";
+}
+
+function visibleReviewComments(report: HistoryReport) {
+  return report.comments?.filter((comment) => comment.body.trim().toLowerCase() !== "reviewed") ?? [];
 }
 
 function statusLabel(report: HistoryReport) {
@@ -698,7 +712,8 @@ function OpenedReportView({
   onDownload: () => void;
 }) {
   const includedActivities = report.activities;
-  const reviewed = Boolean(report.comments?.length);
+  const departmentLabel = reportDepartmentLabel(report);
+  const comments = visibleReviewComments(report);
 
   return (
     <main className="reference-page !pb-4 !pt-3">
@@ -753,7 +768,7 @@ function OpenedReportView({
           <Metric icon={<CalendarDays className="h-4 w-4" />} label="Submitted" value={formatTimestamp(report.submittedAt)} />
           <Metric icon={<ClockIcon />} label="Last saved" value={formatTimestamp(report.updatedAt)} />
           <Metric icon={<ListChecks className="h-4 w-4" />} label="Included activities" value={String(includedActivities.length)} />
-          <Metric icon={<UserRound className="h-4 w-4" />} label="Reviewer status" value={reviewed ? "Reviewed" : "Not reviewed"} />
+          <Metric icon={<UserRound className="h-4 w-4" />} label="Department" value={departmentLabel} />
         </section>
 
         <ReportSection title="1. Summary">
@@ -787,23 +802,23 @@ function OpenedReportView({
           <p className="whitespace-pre-wrap text-sm leading-6 text-[#111827] dark:text-foreground">{report.blockers || "No blockers recorded."}</p>
         </ReportSection>
 
-        <ReportSection title="4. Reviewer comments">
-          {report.comments?.length ? (
+        <ReportSection title="4. Review comments">
+          {comments.length ? (
             <div className="space-y-2">
-              {report.comments.map((comment) => (
+              {comments.map((comment) => (
                 <div key={comment.id} className="flex gap-3 rounded-[8px] bg-[#eff6ff] p-2.5 ring-1 ring-[#bfdbfe] dark:bg-blue-400/10 dark:ring-blue-300/15">
                   <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#2563eb]" />
                   <div>
                     <p className="text-sm leading-6 text-[#1f3b68] dark:text-blue-100">{comment.body}</p>
                     <p className="mt-1 text-xs text-[#667085] dark:text-muted-foreground">
-                      {formatTimestamp(comment.createdAt)} by {comment.author?.name ?? comment.author?.email ?? "Reviewer"}
+                      {formatTimestamp(comment.createdAt)} by {departmentLabel === "No department" ? "Review team" : `${departmentLabel} review`}
                     </p>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-[#667085] dark:text-muted-foreground">No reviewer comments yet.</p>
+            <p className="text-sm text-[#667085] dark:text-muted-foreground">No review comments yet.</p>
           )}
         </ReportSection>
 

@@ -5,6 +5,11 @@ import { requirePreviewBypass } from "@/lib/preview";
 export default function PreviewEmployeesPage() {
   requirePreviewBypass();
 
+  const departments = [
+    { id: "preview-department-1", name: "Operations", slug: "operations" },
+    { id: "preview-department-2", name: "Sales", slug: "sales" }
+  ];
+
   return (
     <ReferenceAppShell
       active="employees"
@@ -18,6 +23,7 @@ export default function PreviewEmployeesPage() {
     >
       <AdminUsers
         isPreview
+        initialDepartments={departments}
         initialUsers={[
           {
             id: "preview-user-1",
@@ -25,7 +31,9 @@ export default function PreviewEmployeesPage() {
             email: "employee.preview@generisgp.com",
             role: "EMPLOYEE",
             status: "ACTIVE",
-            timezone: "America/Toronto"
+            timezone: "America/Toronto",
+            reviewerAllDepartments: false,
+            departments: [{ departmentId: departments[0].id, department: departments[0] }]
           },
           {
             id: "preview-user-2",
@@ -33,7 +41,9 @@ export default function PreviewEmployeesPage() {
             email: "reviewer.preview@generisgp.com",
             role: "REVIEWER",
             status: "ACTIVE",
-            timezone: "America/Toronto"
+            timezone: "America/Toronto",
+            reviewerAllDepartments: false,
+            departments: [{ departmentId: departments[0].id, department: departments[0] }]
           }
         ]}
         initialSettings={{
