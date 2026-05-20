@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { EmptyReferenceState, ReferenceAppShell } from "@/components/reports/reference-shell";
+import { SummaryRenderer, summaryPlainText } from "@/components/reports/summary-renderer";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
 import { reportDayEnd } from "@/lib/dates";
 import { cn, titleCase } from "@/lib/utils";
@@ -572,7 +573,7 @@ export function ReportHistory({
                     <StatusPill tone={statusTone(report)}>{statusLabel(report)}</StatusPill>
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate text-base text-[#111827] dark:text-foreground">{report.summary || "No summary entered."}</div>
+                    <div className="truncate text-base text-[#111827] dark:text-foreground">{summaryPlainText(report.summary)}</div>
                     <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
                       {report.activities.length} activit{report.activities.length === 1 ? "y" : "ies"} included
                     </div>
@@ -733,7 +734,7 @@ function OpenedReportView({
         </section>
 
         <ReportSection title="1. Summary">
-          <p className="whitespace-pre-wrap text-sm leading-6 text-[#111827] dark:text-foreground">{report.summary || "No summary entered."}</p>
+          <SummaryRenderer value={report.summary} blockers={report.blockers} />
         </ReportSection>
 
         <ReportSection title={`2. Included activities (${includedActivities.length})`}>

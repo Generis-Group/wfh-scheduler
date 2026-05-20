@@ -195,4 +195,51 @@
     @apply inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-[#64748b] transition-colors hover:bg-[#eef2f7] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground;
   }
 
+  .summary-rich-editor:empty::before {
+    content: attr(data-placeholder);
+    @apply text-[#98a2b3];
+  }
+
+  .summary-rich-editor {
+    tab-size: 2;
+    @apply whitespace-pre-wrap;
+  }
+
+  .summary-rich-editor h1,
+  .summary-rich-editor h2,
+  .summary-rich-editor h3 {
+    @apply my-0 text-xl font-normal leading-7 text-[#111827] dark:text-foreground;
+  }
+
+  .summary-rich-editor div,
+  .summary-rich-editor p {
+    @apply min-h-6;
+  }
+
+  .summary-rich-editor ul,
+  .summary-rich-editor ol {
+    @apply my-0 pl-5;
+  }
+
+  .summary-rich-editor ul {
+    @apply list-disc;
+  }
+
+  .summary-rich-editor ol {
+    @apply list-decimal;
+  }
+
+  .summary-rich-editor li {
+    @apply min-h-6 pl-1;
+  }
+
+  .summary-rich-editor blockquote {
+    @apply my-0 border-l-2 border-[#c7d2fe] pl-3 italic text-[#475467] dark:border-blue-300/30 dark:text-muted-foreground;
+  }
+
+  .summary-rich-editor .summary-blocker-highlight {
+    background-image: repeating-linear-gradient(135deg, #fff1f2 0, #fff1f2 6px, #fee2e2 6px, #fee2e2 10px);
+    @apply rounded-[4px] px-0.5 text-[#7f1d1d] ring-1 ring-[#fecaca] dark:text-red-100 dark:ring-red-300/20;
+  }
+
 }

@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import type { MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent } from "react";
 import { signIn } from "next-auth/react";
 import {
   Ban,
+  Bold,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
@@ -16,19 +17,22 @@ import {
   Download,
   Edit3,
   ExternalLink,
-  Lightbulb,
+  Heading2,
+  Italic,
+  List,
+  ListOrdered,
   MoreHorizontal,
   PenLine,
+  Quote,
   Save,
+  Search,
   Send,
-  Sparkles,
   Trash2
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { EmptyReferenceState, ReferenceAppShell, ReferenceBadge } from "@/components/reports/reference-shell";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
@@ -64,6 +68,8 @@ type Report = {
 };
 
 type WorkLocation = Report["workLocation"];
+type SummaryFormat = "heading" | "bold" | "italic" | "bullet" | "numbered" | "quote";
+type SummaryFormatState = Record<SummaryFormat, boolean>;
 
 type IntegrationStatus = {
   google: boolean;
@@ -98,6 +104,16 @@ const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
   { value: "PTO", label: "PTO" },
   { value: "OUT_OF_OFFICE", label: "Out of office" }
 ];
+
+const activityPageSize = 5;
+const inactiveSummaryFormats: SummaryFormatState = {
+  heading: false,
+  bold: false,
+  italic: false,
+  bullet: false,
+  numbered: false,
+  quote: false
+};
 
 function toDate(value?: string | Date | null) {
   if (!value) {
@@ -222,6 +238,424 @@ function extractBlockerLines(value: string) {
     .join("\n");
 }
 
+function stripLegacyBlockerPrefixes(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.match(/^\s*blockers?:\s*(.*)$/i)?.[1] ?? line)
+    .join("\n");
+}
+
+function uniqueLines(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+    )
+  ).join("\n");
+}
+
+function lineItems(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function editorSummaryForReport(report: Report) {
+  return stripLegacyBlockerPrefixes(report.summary);
+}
+
+function blockersForReport(report: Report) {
+  return uniqueLines([report.blockers, extractBlockerLines(report.summary)].filter(Boolean).join("\n"));
+}
+
+function splitSummaryForBlockerHighlights(value: string, blockerItems: string[]) {
+  const blockers = blockerItems
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length);
+
+  if (blockers.length === 0 || value.length === 0) {
+    return [{ text: value, blocker: false }];
+  }
+
+  const lowerValue = value.toLowerCase();
+  const lowerBlockers = blockers.map((blocker) => ({ value: blocker, lower: blocker.toLowerCase() }));
+  const segments: Array<{ text: string; blocker: boolean }> = [];
+  let index = 0;
+
+  while (index < value.length) {
+    let nextMatch: { start: number; blocker: string } | null = null;
+
+    for (const blocker of lowerBlockers) {
+      const start = lowerValue.indexOf(blocker.lower, index);
+
+      if (start === -1) {
+        continue;
+      }
+
+      if (!nextMatch || start < nextMatch.start || (start === nextMatch.start && blocker.value.length > nextMatch.blocker.length)) {
+        nextMatch = { start, blocker: blocker.value };
+      }
+    }
+
+    if (!nextMatch) {
+      segments.push({ text: value.slice(index), blocker: false });
+      break;
+    }
+
+    if (nextMatch.start > index) {
+      segments.push({ text: value.slice(index, nextMatch.start), blocker: false });
+    }
+
+    segments.push({
+      text: value.slice(nextMatch.start, nextMatch.start + nextMatch.blocker.length),
+      blocker: true
+    });
+    index = nextMatch.start + nextMatch.blocker.length;
+  }
+
+  return segments.length ? segments : [{ text: value, blocker: false }];
+}
+
+function stripInlineFormatMarkers(value: string) {
+  return value.replace(/\*\*(.*?)\*\*/g, "$1").replace(/_(.*?)_/g, "$1");
+}
+
+function formattedInlineMarkdown(content: string, marker: "**" | "_") {
+  if (!content.trim()) {
+    return content;
+  }
+
+  const leading = content.match(/^\s*/)?.[0] ?? "";
+  const trailing = content.match(/\s*$/)?.[0] ?? "";
+  const body = content.slice(leading.length, content.length - trailing.length);
+
+  return body ? `${leading}${marker}${body}${marker}${trailing}` : content;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buttonTone(active: boolean, extraClassName = "") {
+  return cn(
+    "reference-menu-button",
+    active && "bg-[#eef2ff] text-[#4338ca] ring-1 ring-[#c7d2fe] dark:bg-blue-400/15 dark:text-blue-100 dark:ring-blue-300/20",
+    extraClassName
+  );
+}
+
+function renderInlineSummaryHtml(text: string, blockerItems: string[]): string {
+  const nodes: string[] = [];
+  let index = 0;
+
+  while (index < text.length) {
+    if (text.startsWith("**", index)) {
+      const close = text.indexOf("**", index + 2);
+
+      if (close !== -1) {
+        nodes.push(`<strong>${renderInlineSummaryHtml(text.slice(index + 2, close), blockerItems)}</strong>`);
+        index = close + 2;
+        continue;
+      }
+    }
+
+    if (text[index] === "_") {
+      const close = text.indexOf("_", index + 1);
+
+      if (close !== -1) {
+        nodes.push(`<em>${renderInlineSummaryHtml(text.slice(index + 1, close), blockerItems)}</em>`);
+        index = close + 1;
+        continue;
+      }
+    }
+
+    const nextBold = text.indexOf("**", index);
+    const nextItalic = text.indexOf("_", index);
+    let nextMarker = [nextBold, nextItalic].filter((position) => position !== -1).sort((left, right) => left - right)[0] ?? text.length;
+
+    if (nextMarker === index) {
+      nextMarker = index + 1;
+    }
+
+    const plainText = text.slice(index, nextMarker);
+
+    splitSummaryForBlockerHighlights(plainText, blockerItems).forEach((segment, segmentIndex) => {
+      const escapedText = escapeHtml(segment.text);
+      nodes.push(segment.blocker ? `<mark class="summary-blocker-highlight">${escapedText}</mark>` : escapedText);
+    });
+    index = nextMarker;
+  }
+
+  return nodes.join("");
+}
+
+type MarkdownListLine = {
+  content: string;
+  level: number;
+  ordered: boolean;
+};
+
+function markdownListLevel(whitespace: string) {
+  const columns = whitespace.split("").reduce((total, character) => total + (character === "\t" ? 2 : 1), 0);
+  return Math.floor(columns / 2);
+}
+
+function renderMarkdownList(lines: MarkdownListLine[], startIndex: number, level: number, ordered: boolean, blockerItems: string[]) {
+  const tagName = ordered ? "ol" : "ul";
+  let html = `<${tagName}>`;
+  let index = startIndex;
+
+  while (index < lines.length) {
+    const line = lines[index];
+
+    if (line.level < level || line.level !== level || line.ordered !== ordered) {
+      break;
+    }
+
+    html += `<li>${renderInlineSummaryHtml(line.content, blockerItems)}`;
+    index += 1;
+
+    while (index < lines.length && lines[index].level > level) {
+      const nested = renderMarkdownList(lines, index, lines[index].level, lines[index].ordered, blockerItems);
+      html += nested.html;
+      index = nested.index;
+    }
+
+    html += "</li>";
+  }
+
+  html += `</${tagName}>`;
+
+  return { html, index };
+}
+
+function renderMarkdownListBlock(lines: string[], startIndex: number, blockerItems: string[]) {
+  const listLines: MarkdownListLine[] = [];
+  let index = startIndex;
+
+  while (index < lines.length) {
+    const match = lines[index].match(/^(\s*)(-|\d+\.)\s+(.*)$/);
+
+    if (!match) {
+      break;
+    }
+
+    listLines.push({
+      content: match[3],
+      level: markdownListLevel(match[1]),
+      ordered: /^\d+\.$/.test(match[2])
+    });
+    index += 1;
+  }
+
+  let html = "";
+  let listIndex = 0;
+
+  while (listIndex < listLines.length) {
+    const rendered = renderMarkdownList(listLines, listIndex, listLines[listIndex].level, listLines[listIndex].ordered, blockerItems);
+    html += rendered.html;
+    listIndex = rendered.index;
+  }
+
+  return { html, index };
+}
+
+function markdownToEditorHtml(value: string, blockerItems: string[]) {
+  if (!value) {
+    return "";
+  }
+
+  const lines = value.split("\n");
+  const html: string[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+
+    if (/^\s*(-|\d+\.)\s+/.test(line)) {
+      const rendered = renderMarkdownListBlock(lines, index, blockerItems);
+      html.push(rendered.html);
+      index = rendered.index;
+      continue;
+    }
+
+    const heading = line.match(/^##\s+(.*)$/);
+    if (heading) {
+      html.push(`<h2>${renderInlineSummaryHtml(heading[1], blockerItems)}</h2>`);
+      index += 1;
+      continue;
+    }
+
+    const quote = line.match(/^>\s?(.*)$/);
+    if (quote) {
+      const quoteLines: string[] = [];
+      while (index < lines.length) {
+        const nextQuote = lines[index].match(/^>\s?(.*)$/);
+        if (!nextQuote) {
+          break;
+        }
+        quoteLines.push(renderInlineSummaryHtml(nextQuote[1], blockerItems));
+        index += 1;
+      }
+      html.push(`<blockquote>${quoteLines.join("<br>")}</blockquote>`);
+      continue;
+    }
+
+    html.push(line ? `<div>${renderInlineSummaryHtml(line, blockerItems)}</div>` : "<div><br></div>");
+    index += 1;
+  }
+
+  return html.join("");
+}
+
+function inlineNodeToMarkdown(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent ?? "";
+  }
+
+  if (!(node instanceof HTMLElement)) {
+    return Array.from(node.childNodes).map(inlineNodeToMarkdown).join("");
+  }
+
+  const content = Array.from(node.childNodes).map(inlineNodeToMarkdown).join("");
+  const tagName = node.tagName.toLowerCase();
+
+  if (tagName === "br") {
+    return "\n";
+  }
+
+  if (tagName === "strong" || tagName === "b") {
+    return formattedInlineMarkdown(content, "**");
+  }
+
+  if (tagName === "em" || tagName === "i") {
+    return formattedInlineMarkdown(content, "_");
+  }
+
+  return content;
+}
+
+function listItemTextToMarkdown(item: Element) {
+  return Array.from(item.childNodes)
+    .filter((child) => !(child instanceof HTMLElement && (child.tagName.toLowerCase() === "ul" || child.tagName.toLowerCase() === "ol")))
+    .map(inlineNodeToMarkdown)
+    .join("")
+    .trim();
+}
+
+function listNodeToMarkdown(node: HTMLElement, depth = 0): string[] {
+  const ordered = node.tagName.toLowerCase() === "ol";
+  const indent = "  ".repeat(depth);
+  const lines: string[] = [];
+
+  Array.from(node.children).forEach((child, index) => {
+    if (!(child instanceof HTMLElement) || child.tagName.toLowerCase() !== "li") {
+      return;
+    }
+
+    const text = listItemTextToMarkdown(child);
+
+    if (text) {
+      lines.push(`${indent}${ordered ? `${index + 1}.` : "-"} ${text}`);
+    }
+
+    Array.from(child.children)
+      .filter((nested): nested is HTMLElement => nested instanceof HTMLElement && (nested.tagName.toLowerCase() === "ul" || nested.tagName.toLowerCase() === "ol"))
+      .forEach((nested) => {
+        lines.push(...listNodeToMarkdown(nested, depth + 1));
+      });
+  });
+
+  return lines;
+}
+
+function blockNodeToMarkdown(node: Node): string[] {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.textContent ?? "";
+    return text ? [text] : [];
+  }
+
+  if (!(node instanceof HTMLElement)) {
+    return Array.from(node.childNodes).flatMap(blockNodeToMarkdown);
+  }
+
+  const tagName = node.tagName.toLowerCase();
+
+  if (tagName === "h1" || tagName === "h2" || tagName === "h3") {
+    const text = inlineNodeToMarkdown(node).trim();
+    return text ? [`## ${text}`] : [""];
+  }
+
+  if (tagName === "blockquote") {
+    const lines = inlineNodeToMarkdown(node)
+      .split(/\n/)
+      .map((line) => line.trim());
+
+    return lines.map((line) => (line ? `> ${line}` : ""));
+  }
+
+  if (tagName === "ul") {
+    return listNodeToMarkdown(node);
+  }
+
+  if (tagName === "ol") {
+    return listNodeToMarkdown(node);
+  }
+
+  if (tagName === "div" || tagName === "p") {
+    return [inlineNodeToMarkdown(node).replace(/\n$/g, "")];
+  }
+
+  if (tagName === "br") {
+    return [""];
+  }
+
+  return Array.from(node.childNodes).flatMap(blockNodeToMarkdown);
+}
+
+function editorElementToMarkdown(element: HTMLElement) {
+  return Array.from(element.childNodes)
+    .flatMap(blockNodeToMarkdown)
+    .join("\n")
+    .replace(/\u00a0/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
+}
+
+function unwrapElement(element: HTMLElement) {
+  element.replaceWith(...Array.from(element.childNodes));
+}
+
+function editorBlockerMarks(editor: HTMLElement) {
+  return uniqueLines(
+    Array.from(editor.querySelectorAll<HTMLElement>("mark.summary-blocker-highlight"))
+      .map((mark) => mark.textContent?.trim() ?? "")
+      .filter(Boolean)
+      .join("\n")
+  );
+}
+
+function refreshBlockerHighlights(editor: HTMLElement) {
+  const normalizedBlockers = new Set(lineItems(editorBlockerMarks(editor)).map((item) => item.toLowerCase()));
+
+  editor.querySelectorAll<HTMLElement>("mark.summary-blocker-highlight").forEach((mark) => {
+    const text = mark.textContent?.trim().toLowerCase() ?? "";
+
+    if (!normalizedBlockers.has(text)) {
+      unwrapElement(mark);
+    }
+  });
+}
+
 export function DailyReportApp({
   initialReport,
   date,
@@ -247,7 +681,8 @@ export function DailyReportApp({
 }) {
   const router = useRouter();
   const [report, setReport] = useState(initialReport);
-  const [summary, setSummary] = useState(initialReport.summary);
+  const [summary, setSummary] = useState(() => editorSummaryForReport(initialReport));
+  const [blockers, setBlockers] = useState(() => blockersForReport(initialReport));
   const [workLocation, setWorkLocation] = useState<WorkLocation>(initialReport.workLocation);
   const [activities, setActivities] = useState(initialReport.activities);
   const [deletedActivityIds, setDeletedActivityIds] = useState<string[]>([]);
@@ -255,20 +690,40 @@ export function DailyReportApp({
   const [importMenuOpen, setImportMenuOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [activityPage, setActivityPage] = useState(1);
+  const [activitySearch, setActivitySearch] = useState("");
+  const [activeSummaryFormats, setActiveSummaryFormats] = useState<SummaryFormatState>(inactiveSummaryFormats);
+  const summaryEditorRef = useRef<HTMLDivElement>(null);
 
   const reportDate = dateInputValue(date);
-  const blockers = extractBlockerLines(summary);
 
   useEffect(() => {
     setReport(initialReport);
-    setSummary(initialReport.summary);
+    setSummary(editorSummaryForReport(initialReport));
+    setBlockers(blockersForReport(initialReport));
     setWorkLocation(initialReport.workLocation);
     setActivities(initialReport.activities);
     setDeletedActivityIds([]);
     setOpenActivityMenu(null);
     setImportMenuOpen(false);
     setMessage(null);
+    setActivityPage(1);
+    setActivitySearch("");
+    setActiveSummaryFormats(inactiveSummaryFormats);
   }, [initialReport, date]);
+
+  useEffect(() => {
+    const editor = summaryEditorRef.current;
+
+    if (!editor) {
+      return;
+    }
+
+    editor.innerHTML = markdownToEditorHtml(
+      editorSummaryForReport(initialReport),
+      blockersForReport(initialReport).split(/\n/).filter(Boolean)
+    );
+  }, [initialReport]);
 
   function setActivity(id: string, patch: Partial<Activity>) {
     setActivities((items) => items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -276,6 +731,254 @@ export function DailyReportApp({
 
   function updateSummary(nextSummary: string) {
     setSummary(nextSummary);
+  }
+
+  function currentSummarySelection() {
+    const editor = summaryEditorRef.current;
+    const selection = document.getSelection();
+
+    if (!editor || !selection?.anchorNode || !editor.contains(selection.anchorNode)) {
+      return null;
+    }
+
+    return { editor, selection };
+  }
+
+  function summarySelectionIsWhitespaceRange() {
+    const current = currentSummarySelection();
+
+    if (!current) {
+      return false;
+    }
+
+    const selectedText = current.selection.toString();
+
+    return !current.selection.isCollapsed && selectedText.length > 0 && !selectedText.trim();
+  }
+
+  function selectionHasExplicitInlineFormat(format: Extract<SummaryFormat, "bold" | "italic">) {
+    const current = currentSummarySelection();
+
+    if (!current) {
+      return false;
+    }
+
+    function nodeHasFormat(node: Node | null) {
+      let currentNode: Node | null = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+
+      while (currentNode instanceof HTMLElement && currentNode !== current?.editor) {
+        const tagName = currentNode.tagName.toLowerCase();
+
+        if (format === "bold" && (tagName === "strong" || tagName === "b" || currentNode.style.fontWeight === "bold")) {
+          return true;
+        }
+
+        if (format === "italic" && (tagName === "em" || tagName === "i" || currentNode.style.fontStyle === "italic")) {
+          return true;
+        }
+
+        currentNode = currentNode.parentElement;
+      }
+
+      return false;
+    }
+
+    return nodeHasFormat(current.selection.anchorNode) || nodeHasFormat(current.selection.focusNode);
+  }
+
+  function inlineFormatIsActive(format: Extract<SummaryFormat, "bold" | "italic">) {
+    if (selectionHasExplicitInlineFormat(format)) {
+      return true;
+    }
+
+    const block = document.queryCommandValue("formatBlock").toLowerCase();
+    const command = format === "bold" ? "bold" : "italic";
+    const active = document.queryCommandState(command);
+
+    if (format === "bold" && (block === "h1" || block === "h2" || block === "h3")) {
+      return false;
+    }
+
+    if (format === "italic" && block === "blockquote") {
+      return false;
+    }
+
+    return active;
+  }
+
+  function updateToolbarState() {
+    if (summarySelectionIsWhitespaceRange()) {
+      setActiveSummaryFormats(inactiveSummaryFormats);
+      return;
+    }
+
+    setActiveSummaryFormats({
+      bold: inlineFormatIsActive("bold"),
+      italic: inlineFormatIsActive("italic"),
+      bullet: document.queryCommandState("insertUnorderedList"),
+      numbered: document.queryCommandState("insertOrderedList"),
+      heading: document.queryCommandValue("formatBlock").toLowerCase() === "h2",
+      quote: document.queryCommandValue("formatBlock").toLowerCase() === "blockquote"
+    });
+  }
+
+  function syncSummaryFromEditor() {
+    const snapshot = readSummaryEditorSnapshot();
+
+    if (!snapshot) {
+      return;
+    }
+
+    setSummary(snapshot.summary);
+    setBlockers(snapshot.blockers);
+    updateToolbarState();
+  }
+
+  function readSummaryEditorSnapshot() {
+    const editor = summaryEditorRef.current;
+
+    if (!editor) {
+      return null;
+    }
+
+    refreshBlockerHighlights(editor);
+
+    return {
+      summary: editorElementToMarkdown(editor),
+      blockers: editorBlockerMarks(editor)
+    };
+  }
+
+  function shouldIgnoreSummaryCommand(command: string) {
+    return (
+      summarySelectionIsWhitespaceRange() &&
+      ["bold", "italic", "formatBlock", "insertUnorderedList", "insertOrderedList"].includes(command)
+    );
+  }
+
+  function runSummaryCommand(command: string, value?: string) {
+    if (shouldIgnoreSummaryCommand(command)) {
+      updateToolbarState();
+      return;
+    }
+
+    summaryEditorRef.current?.focus();
+    document.execCommand(command, false, value);
+    syncSummaryFromEditor();
+    window.requestAnimationFrame(() => {
+      updateToolbarState();
+    });
+  }
+
+  function toggleSummaryBlock(format: Extract<SummaryFormat, "heading" | "quote">) {
+    const currentBlock = document.queryCommandValue("formatBlock").toLowerCase();
+    const block = format === "heading" ? "h2" : "blockquote";
+
+    runSummaryCommand("formatBlock", currentBlock === block ? "div" : block);
+  }
+
+  function placePlainSummaryCursorAtEnd() {
+    const editor = summaryEditorRef.current;
+
+    if (!editor) {
+      return;
+    }
+
+    editor.focus();
+
+    if (!editor.lastElementChild || editor.lastElementChild.textContent?.trim()) {
+      editor.appendChild(document.createElement("div"));
+      editor.lastElementChild?.appendChild(document.createElement("br"));
+    }
+
+    const target = editor.lastElementChild ?? editor;
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    range.collapse(false);
+
+    const selection = document.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    if (document.queryCommandState("bold")) {
+      document.execCommand("bold");
+    }
+
+    if (document.queryCommandState("italic")) {
+      document.execCommand("italic");
+    }
+
+    document.execCommand("formatBlock", false, "div");
+    setActiveSummaryFormats(inactiveSummaryFormats);
+  }
+
+  function handleSummaryMouseDown(event: MouseEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+
+    event.preventDefault();
+    placePlainSummaryCursorAtEnd();
+    syncSummaryFromEditor();
+  }
+
+  function handleSummaryMouseUp() {
+    window.requestAnimationFrame(() => {
+      updateToolbarState();
+    });
+  }
+
+  function handleSummaryKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.shiftKey) {
+      runSummaryCommand("outdent");
+      return;
+    }
+
+    if (document.queryCommandState("insertUnorderedList") || document.queryCommandState("insertOrderedList")) {
+      runSummaryCommand("indent");
+      return;
+    }
+
+    runSummaryCommand("insertText", "\t");
+  }
+
+  function handleSummaryKeyUp() {
+    updateToolbarState();
+  }
+
+  function markSummarySelectionAsBlocker() {
+    const selected = window.getSelection()?.toString() ?? "";
+    const selectedBlockers = selected
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^\s*blockers?:\s*/i, "").trim())
+      .map(stripInlineFormatMarkers)
+      .filter(Boolean);
+
+    if (selectedBlockers.length === 0) {
+      setMessage("Select summary text to mark as a blocker.");
+      return;
+    }
+
+    const nextBlockers = uniqueLines([blockers, selectedBlockers.join("\n")].filter(Boolean).join("\n"));
+
+    setBlockers(nextBlockers);
+    window.requestAnimationFrame(() => {
+      const editor = summaryEditorRef.current;
+
+      if (editor) {
+        const nextSummary = editorElementToMarkdown(editor);
+
+        setSummary(nextSummary);
+        editor.innerHTML = markdownToEditorHtml(nextSummary, lineItems(nextBlockers));
+        editor.focus();
+      }
+    });
   }
 
   function removeActivity(activity: Activity) {
@@ -339,6 +1042,14 @@ export function DailyReportApp({
   async function saveReport(submit = false) {
     setIsBusy(true);
     setMessage(null);
+    const editorSnapshot = readSummaryEditorSnapshot();
+    const payloadSummary = editorSnapshot?.summary ?? summary;
+    const payloadBlockers = editorSnapshot?.blockers ?? blockers;
+
+    if (editorSnapshot) {
+      setSummary(editorSnapshot.summary);
+      setBlockers(editorSnapshot.blockers);
+    }
 
     const manualActivities = activities
       .filter((activity) => activity.id.startsWith("manual-new-"))
@@ -350,8 +1061,8 @@ export function DailyReportApp({
       }));
 
     const reportPayload = {
-      summary,
-      blockers,
+      summary: payloadSummary,
+      blockers: payloadBlockers,
       workLocation,
       activityUpdates: activities
         .map((activity) => ({
@@ -390,6 +1101,8 @@ export function DailyReportApp({
     }
 
     setReport(nextReport);
+    setSummary(editorSummaryForReport(nextReport));
+    setBlockers(blockersForReport(nextReport));
     setActivities(nextReport.activities);
     setDeletedActivityIds([]);
     setWorkLocation(nextReport.workLocation);
@@ -427,6 +1140,10 @@ export function DailyReportApp({
       updatedAt: null
     }));
     setSummary("");
+    setBlockers("");
+    if (summaryEditorRef.current) {
+      summaryEditorRef.current.innerHTML = "";
+    }
     setWorkLocation("UNKNOWN");
     setActivities([]);
     setDeletedActivityIds([]);
@@ -458,6 +1175,7 @@ export function DailyReportApp({
         const data = (await activityResponse.json()) as { activities: Activity[] };
         setActivities(data.activities);
         setReport((current) => ({ ...current, activities: data.activities }));
+        setActivityPage(1);
       }
 
       setMessage(
@@ -507,56 +1225,46 @@ export function DailyReportApp({
   const canSyncGoogle = integrationStatus.google;
   const hasPendingManual = activities.some((activity) => activity.id.startsWith("manual-new-"));
   const selectedCount = activities.filter((activity) => activity.selected).length;
-  const totalSelectedMinutes = activities
-    .filter((activity) => activity.selected)
-    .reduce((total, activity) => total + (activity.durationMinutes ?? 0), 0);
   const lastSavedLabel = formatTimestamp(report.updatedAt);
-  const hasBlockers = blockers.trim().length > 0;
+  const blockerItems = blockers
+    .split(/\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const normalizedActivitySearch = activitySearch.trim().toLowerCase();
+  const filteredActivities = normalizedActivitySearch
+    ? activities.filter((activity) =>
+        [
+          activity.title,
+          activity.description,
+          activity.status,
+          sourceLabels[activity.source],
+          formatDuration(activity.durationMinutes)
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedActivitySearch)
+      )
+    : activities;
+  const filteredSelectedCount = filteredActivities.filter((activity) => activity.selected).length;
+  const activityPageCount = Math.max(1, Math.ceil(filteredActivities.length / activityPageSize));
+  const currentActivityPage = Math.min(activityPage, activityPageCount);
+  const activityPageStart = filteredActivities.length === 0 ? 0 : (currentActivityPage - 1) * activityPageSize + 1;
+  const activityPageEnd = Math.min(currentActivityPage * activityPageSize, filteredActivities.length);
+  const pagedActivities = filteredActivities.slice((currentActivityPage - 1) * activityPageSize, currentActivityPage * activityPageSize);
+
+  useEffect(() => {
+    const pageCount = Math.max(1, Math.ceil(filteredActivities.length / activityPageSize));
+
+    setActivityPage((current) => Math.min(current, pageCount));
+  }, [filteredActivities.length]);
   const hasUnsavedChanges =
-    summary !== report.summary ||
-    blockers !== report.blockers ||
+    summary !== editorSummaryForReport(report) ||
+    blockers !== blockersForReport(report) ||
     workLocation !== report.workLocation ||
     !sameActivityState(activities, report.activities) ||
     deletedActivityIds.length > 0 ||
     hasPendingManual;
-  function appendToSummary(text: string) {
-    const trimmed = summary.trimEnd();
-    updateSummary(trimmed ? `${trimmed}\n${text}` : text);
-  }
-
-  function insertSelectedWork() {
-    const selected = activities.filter((activity) => activity.selected);
-
-    if (selected.length === 0) {
-      setMessage("Select at least one work item first.");
-      return;
-    }
-
-    appendToSummary(
-      selected
-        .map((activity) => {
-          const note = activity.employeeNote?.trim();
-          return `Task: ${activity.title}${note ? ` - ${note}` : ""}`;
-        })
-        .join("\n")
-    );
-    setMessage("Selected work added to the summary.");
-  }
-
-  function updateBlockerSummary(nextBlockers: string) {
-    const withoutBlockers = summary
-      .split(/\r?\n/)
-      .filter((line) => !/^\s*blockers?:\s*/i.test(line))
-      .join("\n")
-      .trimEnd();
-    const blockerLines = nextBlockers
-      .split(/\r?\n|;/)
-      .filter((line) => line.trim().length > 0)
-      .map((line) => `Blocker: ${line}`)
-      .join("\n");
-
-    updateSummary([withoutBlockers, blockerLines].filter(Boolean).join("\n"));
-  }
 
   function goToReportDate(nextDate: string) {
     if (!nextDate) {
@@ -688,7 +1396,7 @@ export function DailyReportApp({
           </div>
 
           <div className="grid gap-4 border-t border-[#e8ecf3] px-6 py-5 dark:border-[#213149] min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)] min-[1200px]:px-8">
-            <section className="flex min-h-[468px] flex-col rounded-[12px] bg-white p-5 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
+            <section className="flex min-h-[660px] flex-col rounded-[12px] bg-white p-5 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
@@ -752,11 +1460,27 @@ export function DailyReportApp({
                 </div>
               </div>
 
-              <div className="mt-5 space-y-2.5">
+              <label className="relative mt-4 block">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98a2b3]" />
+                <Input
+                  value={activitySearch}
+                  onChange={(event) => {
+                    setActivitySearch(event.target.value);
+                    setActivityPage(1);
+                  }}
+                  placeholder="Search work items"
+                  className="h-10 rounded-[8px] bg-white pl-9 text-sm shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                  aria-label="Search work items"
+                />
+              </label>
+
+              <div className="mt-4 h-[412px] space-y-2.5 overflow-y-auto pr-1">
                 {activities.length === 0 ? (
                   <EmptyReferenceState>No activities yet. Import work from Jira, Calendar, or Tasks.</EmptyReferenceState>
+                ) : pagedActivities.length === 0 ? (
+                  <EmptyReferenceState>No work items match your search.</EmptyReferenceState>
                 ) : (
-                  activities.map((activity) => (
+                  pagedActivities.map((activity) => (
                     <article
                       key={activity.id}
                       className="grid min-h-[74px] grid-cols-[28px_40px_minmax(0,1fr)_auto_68px_28px] items-center gap-3 rounded-[10px] bg-white px-4 py-3 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
@@ -807,62 +1531,154 @@ export function DailyReportApp({
 
               <div className="mt-auto border-t border-[#e6eaf2] pt-4 dark:border-[#263a55]">
                 <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[#667085] dark:text-muted-foreground">
-                  <span>{selectedCount} of {activities.length} items selected</span>
-                  <span className="inline-flex items-center gap-5">
-                    <span>Total time</span>
-                    <strong className="font-semibold text-[#111827] dark:text-foreground">{formatDuration(totalSelectedMinutes)}</strong>
+                  <span>
+                    {selectedCount} of {activities.length} items selected
+                    {activities.length > 0
+                      ? normalizedActivitySearch
+                        ? `, showing ${activityPageStart}-${activityPageEnd} of ${filteredActivities.length} matches (${filteredSelectedCount} selected)`
+                        : `, showing ${activityPageStart}-${activityPageEnd}`
+                      : ""}
                   </span>
+                </div>
+                <div className="mt-3 flex min-h-8 justify-end">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 w-8 rounded-[7px] bg-white p-0 dark:bg-[#0f1b2a]"
+                      aria-label="Previous work items page"
+                      disabled={currentActivityPage === 1 || filteredActivities.length === 0}
+                      onClick={() => setActivityPage((page) => Math.max(1, page - 1))}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="min-w-20 text-center text-xs font-medium text-[#667085] dark:text-muted-foreground">
+                      Page {currentActivityPage} of {activityPageCount}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 w-8 rounded-[7px] bg-white p-0 dark:bg-[#0f1b2a]"
+                      aria-label="Next work items page"
+                      disabled={currentActivityPage === activityPageCount || filteredActivities.length === 0}
+                      onClick={() => setActivityPage((page) => Math.min(activityPageCount, page + 1))}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </section>
 
-            <aside className="min-h-[468px] rounded-[12px] bg-white p-5 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
+            <aside className="min-h-[600px] rounded-[12px] bg-white p-5 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
               <div>
                 <h2 className="text-xl font-semibold tracking-normal text-[#111827] dark:text-foreground">Summary</h2>
                 <p className="mt-2 text-sm text-[#667085] dark:text-muted-foreground">Add a brief summary of your work.</p>
               </div>
-              <div className="relative mt-4">
-                <Textarea
-                  value={summary}
-                  placeholder="What did you work on today?"
-                  onChange={(event) => updateSummary(event.target.value)}
-                  className="min-h-[168px] resize-none rounded-[8px] bg-white px-4 py-4 text-sm leading-6 shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+              <div className="mt-4 rounded-[10px] bg-[#f7f9fc] p-2 ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]">
+                <div className="mb-2 flex flex-wrap items-center gap-1">
+                  <button
+                    type="button"
+                    className={buttonTone(activeSummaryFormats.heading)}
+                    title="Heading"
+                    aria-label="Heading"
+                    aria-pressed={activeSummaryFormats.heading}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => toggleSummaryBlock("heading")}
+                  >
+                    <Heading2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className={buttonTone(activeSummaryFormats.bold)}
+                    title="Bold"
+                    aria-label="Bold"
+                    aria-pressed={activeSummaryFormats.bold}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => runSummaryCommand("bold")}
+                  >
+                    <Bold className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className={buttonTone(activeSummaryFormats.italic)}
+                    title="Italic"
+                    aria-label="Italic"
+                    aria-pressed={activeSummaryFormats.italic}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => runSummaryCommand("italic")}
+                  >
+                    <Italic className="h-4 w-4" />
+                  </button>
+                  <span className="mx-1 h-5 w-px bg-[#d8dee8] dark:bg-[#263a55]" />
+                  <button
+                    type="button"
+                    className={buttonTone(activeSummaryFormats.bullet)}
+                    title="Bulleted list"
+                    aria-label="Bulleted list"
+                    aria-pressed={activeSummaryFormats.bullet}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => runSummaryCommand("insertUnorderedList")}
+                  >
+                    <List className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className={buttonTone(activeSummaryFormats.numbered)}
+                    title="Numbered list"
+                    aria-label="Numbered list"
+                    aria-pressed={activeSummaryFormats.numbered}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => runSummaryCommand("insertOrderedList")}
+                  >
+                    <ListOrdered className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className={buttonTone(activeSummaryFormats.quote)}
+                    title="Quote"
+                    aria-label="Quote"
+                    aria-pressed={activeSummaryFormats.quote}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => toggleSummaryBlock("quote")}
+                  >
+                    <Quote className="h-4 w-4" />
+                  </button>
+                  <span className="mx-1 h-5 w-px bg-[#d8dee8] dark:bg-[#263a55]" />
+                  <button
+                    type="button"
+                    className="reference-menu-button w-auto gap-2 px-2.5 text-[#b42318] hover:bg-[#fff1f0] hover:text-[#b42318] dark:text-red-300 dark:hover:bg-red-400/10"
+                    title="Mark as blocker"
+                    aria-label="Mark as blocker"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={markSummarySelectionAsBlocker}
+                  >
+                    <Ban className="h-4 w-4" />
+                    <span className="text-xs font-medium">Mark as blocker</span>
+                  </button>
+                </div>
+                <div
+                  ref={summaryEditorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  role="textbox"
+                  aria-label="Summary"
+                  data-placeholder="What did you work on today?"
+                  className="summary-rich-editor h-[430px] overflow-y-auto rounded-[8px] bg-white px-4 py-4 text-sm leading-6 text-[#111827] shadow-none ring-1 ring-[#dfe4ee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55]"
+                  onInput={syncSummaryFromEditor}
+                  onKeyDown={handleSummaryKeyDown}
+                  onKeyUp={handleSummaryKeyUp}
+                  onMouseDown={handleSummaryMouseDown}
+                  onMouseUp={handleSummaryMouseUp}
+                  onBlur={syncSummaryFromEditor}
+                  onPaste={(event) => {
+                    event.preventDefault();
+                    document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
+                    syncSummaryFromEditor();
+                  }}
                 />
-                <Button
-                  variant="outline"
-                  className="absolute bottom-4 right-4 h-9 rounded-[8px] bg-white px-4 text-xs font-medium text-[#344054] ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]"
-                  onClick={insertSelectedWork}
-                >
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Generate from selected
-                </Button>
-              </div>
-
-              <div className="mt-5">
-                <h3 className="text-lg font-semibold text-[#111827] dark:text-foreground">Blockers</h3>
-                <p className="mt-1.5 text-sm text-[#667085] dark:text-muted-foreground">Add any blockers or issues.</p>
-                <div className="relative mt-3">
-                  <Input
-                    value={blockers.replace(/\n/g, "; ")}
-                    placeholder="No blockers"
-                    onChange={(event) => updateBlockerSummary(event.target.value)}
-                    className="h-12 rounded-[8px] bg-white px-4 pr-12 text-sm shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#0f1b2a] dark:ring-[#263a55]"
-                    aria-label="Blockers"
-                  />
-                  <Ban className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#98a2b3]" />
-                </div>
-              </div>
-
-              <div className="mt-5 rounded-[10px] bg-[#f7f8ff] p-4 ring-1 ring-[#e0e6ff] dark:bg-blue-400/10 dark:ring-blue-300/15">
-                <div className="flex items-start gap-3">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#edf2ff] text-[#4f46e5] dark:bg-blue-400/15 dark:text-blue-200">
-                    <Lightbulb className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <div className="text-sm font-semibold text-[#111827] dark:text-foreground">Tip</div>
-                    <p className="mt-1.5 text-sm leading-5 text-[#344054] dark:text-muted-foreground">Keep your update clear and concise. Focus on impact and outcomes.</p>
-                  </div>
-                </div>
               </div>
             </aside>
           </div>

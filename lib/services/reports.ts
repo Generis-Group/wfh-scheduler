@@ -267,7 +267,7 @@ export async function updateReport(reportId: string, editedById: string, input: 
       where: { id: report.id },
       data: {
         summary: input.summary,
-        blockers: input.summary === undefined ? input.blockers : extractBlockerLines(input.summary),
+        blockers: input.blockers !== undefined ? input.blockers : input.summary === undefined ? undefined : extractBlockerLines(input.summary),
         workLocation: input.workLocation
       }
     });

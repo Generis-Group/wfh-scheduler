@@ -23,6 +23,7 @@ import {
 import type { FormEvent, ReactNode } from "react";
 
 import { EmptyReferenceState, ReferenceAppShell } from "@/components/reports/reference-shell";
+import { SummaryRenderer } from "@/components/reports/summary-renderer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -1031,7 +1032,7 @@ function ReportReviewPage({
       <section className="mb-4 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
         <h2 className="mb-3 text-xl font-semibold text-[#101828] dark:text-foreground">Summary</h2>
         <div className="max-h-[190px] overflow-y-auto rounded-[8px] border border-[#d8dee8] bg-white px-4 py-4 text-sm leading-6 text-[#101828] dark:border-[#263a55] dark:bg-[#0b1523] dark:text-foreground">
-          {report?.summary ? <p className="whitespace-pre-wrap">{report.summary}</p> : <p className="text-[#667085] dark:text-muted-foreground">No summary recorded.</p>}
+          <SummaryRenderer value={report?.summary} blockers={report?.blockers} emptyText="No summary recorded." />
         </div>
       </section>
 
