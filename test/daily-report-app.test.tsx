@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-import { DailyReportApp } from "@/components/reports/daily-report-app";
 
 const { mockRouterPush, mockSignIn } = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
@@ -29,7 +27,7 @@ vi.mock("next/image", async () => {
   const ReactModule = await vi.importActual<typeof import("react")>("react");
 
   return {
-    default: ({ src, alt, ...props }: { src: string | { src: string }; alt: string }) =>
+    default: ({ src, alt, priority: _priority, ...props }: { src: string | { src: string }; alt: string; priority?: boolean }) =>
       ReactModule.createElement("img", {
         ...props,
         src: typeof src === "string" ? src : src.src,
@@ -46,7 +44,68 @@ vi.mock("@/components/theme-toggle", async () => {
   };
 });
 
-const emptyReport = {
+vi.mock("@/components/reports/summary-editor", async () => {
+  const ReactModule = await vi.importActual<typeof import("react")>("react");
+  type Snapshot = { summary: string; blockers: string };
+
+  return {
+    SummaryEditor: ReactModule.forwardRef(function MockSummaryEditor(
+      {
+        initialSummary,
+        initialBlockers,
+        resetKey,
+        onChange
+      }: {
+        initialSummary: string;
+        initialBlockers: string;
+        resetKey: string;
+        onChange: (snapshot: Snapshot) => void;
+      },
+      ref
+    ) {
+      const [snapshot, setSnapshot] = ReactModule.useState<Snapshot>({ summary: initialSummary, blockers: initialBlockers });
+      const snapshotRef = ReactModule.useRef(snapshot);
+      const onChangeRef = ReactModule.useRef(onChange);
+
+      ReactModule.useEffect(() => {
+        onChangeRef.current = onChange;
+      }, [onChange]);
+
+      ReactModule.useEffect(() => {
+        const next = { summary: initialSummary, blockers: initialBlockers };
+        snapshotRef.current = next;
+        setSnapshot(next);
+        onChangeRef.current(next);
+      }, [initialSummary, initialBlockers, resetKey]);
+
+      ReactModule.useImperativeHandle(ref, () => ({
+        getSnapshot: () => snapshotRef.current,
+        setSnapshot: (next: Snapshot) => {
+          snapshotRef.current = next;
+          setSnapshot(next);
+          onChangeRef.current(next);
+        }
+      }));
+
+      return ReactModule.createElement("textarea", {
+        "aria-label": "Summary",
+        value: snapshot.summary,
+        onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+          const next = { ...snapshotRef.current, summary: event.target.value };
+          snapshotRef.current = next;
+          setSnapshot(next);
+          onChangeRef.current(next);
+        }
+      });
+    })
+  };
+});
+
+import { DailyReportApp } from "@/components/reports/daily-report-app";
+
+type DailyReportProps = React.ComponentProps<typeof DailyReportApp>;
+
+const emptyReport: DailyReportProps["initialReport"] = {
   id: "",
   reportDate: "2026-05-20",
   workLocation: "UNKNOWN" as const,
@@ -59,7 +118,19 @@ const emptyReport = {
   revisions: []
 };
 
-const importedTask = {
+const savedDraft: DailyReportProps["initialReport"] = {
+  ...emptyReport,
+  id: "report-1",
+  updatedAt: "2026-05-20T14:00:00.000Z"
+};
+
+const submittedReport: DailyReportProps["initialReport"] = {
+  ...savedDraft,
+  status: "SUBMITTED" as const,
+  submittedAt: "2026-05-20T14:10:00.000Z"
+};
+
+const importedTask: DailyReportProps["initialReport"]["activities"][number] = {
   id: "task-1",
   source: "GOOGLE_TASKS" as const,
   title: "Imported task",
@@ -72,10 +143,10 @@ const importedTask = {
   employeeNote: null
 };
 
-function renderDailyReportApp() {
+function renderDailyReportApp(initialReport: DailyReportProps["initialReport"] = emptyReport) {
   return render(
     <DailyReportApp
-      initialReport={emptyReport}
+      initialReport={initialReport}
       date="2026-05-20"
       userName="Employee"
       userEmail="employee@generisgp.com"
@@ -97,19 +168,31 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+async function advanceAutoSave() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(600);
+  });
+}
+
+async function flushReact() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
-describe("DailyReportApp", () => {
-  it("treats imported activities as unsaved changes and warns before refresh", async () => {
+describe("DailyReportApp auto-draft", () => {
+  it("auto-creates a draft after editing summary", async () => {
+    vi.useFakeTimers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-
-      if (url.includes("/api/sync/google-tasks")) {
-        return Response.json({ importedCount: 1, skippedCount: 0, staleCount: 0, activities: [importedTask] });
+      if (String(input) === "/api/reports") {
+        return Response.json({ report: { ...savedDraft, summary: "Finished the rollout note" } }, { status: 201 });
       }
 
       return Response.json({ error: "Unexpected request." }, { status: 500 });
@@ -118,38 +201,35 @@ describe("DailyReportApp", () => {
 
     renderDailyReportApp();
 
-    expect(screen.getByText("No saved draft")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Import" }));
-    fireEvent.click(screen.getByRole("button", { name: "Import Tasks" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), { target: { value: "Finished the rollout note" } });
+    await advanceAutoSave();
 
-    await waitFor(() => {
-      expect(screen.getByText("Unsaved changes")).toBeTruthy();
-    });
-    expect(screen.getByText("Imported task")).toBeTruthy();
-
-    const beforeUnload = new Event("beforeunload", { cancelable: true });
-    window.dispatchEvent(beforeUnload);
-
-    expect(beforeUnload.defaultPrevented).toBe(true);
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/activity"))).toBe(false);
-
-    await screen.findByText(/Tasks import complete/);
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss message" }));
-
-    expect(screen.queryByText(/Tasks import complete/)).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/reports",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("Finished the rollout note")
+      })
+    );
+    expect(screen.getByText("Saved")).toBeTruthy();
   });
 
-  it("keeps save and submit labels stable while an import is running", async () => {
-    const sync = deferred<Response>();
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+  it("imports tasks and autosaves the imported work item", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
 
       if (url.includes("/api/sync/google-tasks")) {
-        return sync.promise;
+        return Response.json({ importedCount: 1, skippedCount: 0, staleCount: 0, activities: [importedTask] });
       }
 
-      return Promise.resolve(Response.json({ error: "Unexpected request." }, { status: 500 }));
+      if (url === "/api/reports") {
+        return Response.json({ report: { ...savedDraft, activities: [importedTask] } }, { status: 201 });
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -158,20 +238,164 @@ describe("DailyReportApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     fireEvent.click(screen.getByRole("button", { name: "Import Tasks" }));
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Importing tasks..." })).toBeTruthy();
+    await flushReact();
+    expect(screen.getByText("Imported task")).toBeTruthy();
+    await advanceAutoSave();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/reports",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("task-1")
+      })
+    );
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/activity"))).toBe(false);
+  });
+
+  it("coalesces rapid edits into one debounced save", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({ report: { ...savedDraft, summary: "Second edit" } }, { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+
+    const summaryBox = screen.getByRole("textbox", { name: "Summary" });
+    fireEvent.change(summaryBox, { target: { value: "First edit" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
     });
+    fireEvent.change(summaryBox, { target: { value: "Second edit" } });
+    await advanceAutoSave();
 
-    expect(screen.getByRole("button", { name: "Save draft" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("button", { name: "Submit update" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.queryByText("Saving...")).toBeNull();
-    expect(screen.queryByText("Submitting...")).toBeNull();
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ body: expect.stringContaining("Second edit") }));
+  });
 
-    sync.resolve(Response.json({ importedCount: 1, skippedCount: 0, staleCount: 0, activities: [importedTask] }));
+  it("queues a follow-up save when edits happen during an in-flight save", async () => {
+    vi.useFakeTimers();
+    const firstSave = deferred<Response>();
+    const secondSave = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/reports") {
+        return firstSave.promise;
+      }
+
+      if (url === "/api/reports/report-1") {
+        return secondSave.promise;
+      }
+
+      return Promise.resolve(Response.json({ error: "Unexpected request." }, { status: 500 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+
+    const summaryBox = screen.getByRole("textbox", { name: "Summary" });
+    fireEvent.change(summaryBox, { target: { value: "First edit" } });
+    await advanceAutoSave();
+    fireEvent.change(summaryBox, { target: { value: "Second edit" } });
+
+    firstSave.resolve(Response.json({ report: { ...savedDraft, summary: "First edit" } }, { status: 201 }));
+    await flushReact();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/reports/report-1", expect.objectContaining({ method: "PUT" }));
+    secondSave.resolve(Response.json({ report: { ...savedDraft, summary: "Second edit" } }));
+    await flushReact();
+
+    expect((screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement).value).toBe("Second edit");
+  });
+
+  it("blocks date navigation when the autosave flush fails", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => Response.json({ error: "Nope" }, { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), { target: { value: "Needs saving" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next day" }));
+
+    await flushReact();
+    expect(screen.getByText("Save failed")).toBeTruthy();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it("creates a draft before submitting a new report", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/reports") {
+        return Response.json({ report: savedDraft }, { status: 201 });
+      }
+
+      if (url === "/api/reports/report-1/submit") {
+        return Response.json({ report: submittedReport });
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit update" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Imported task")).toBeTruthy();
+      expect(fetchMock).toHaveBeenCalledWith("/api/reports", expect.objectContaining({ method: "POST" }));
+      expect(fetchMock).toHaveBeenCalledWith("/api/reports/report-1/submit", expect.objectContaining({ method: "POST" }));
     });
+    expect(await screen.findByText("Submitted")).toBeTruthy();
+  });
+
+  it("autosaves submitted report edits through the update route", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/reports/report-1") {
+        return Response.json({ report: { ...submittedReport, summary: "Submitted edit" } });
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp(submittedReport);
+
+    expect(screen.queryByRole("button", { name: "Submit update" })).toBeNull();
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), { target: { value: "Submitted edit" } });
+    await advanceAutoSave();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/reports/report-1", expect.objectContaining({ method: "PUT" }));
+  });
+
+  it("deletes a draft without immediately recreating it", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/reports/report-1" && init?.method === "DELETE") {
+        return Response.json({ ok: true });
+      }
+
+      if (String(input) === "/api/reports") {
+        return Response.json({ report: { ...savedDraft, summary: "Fresh draft" } }, { status: 201 });
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp(savedDraft);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete draft" }));
+
+    await flushReact();
+    expect(screen.getByText("Draft deleted.")).toBeTruthy();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input) === "/api/reports")).toHaveLength(0);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), { target: { value: "Fresh draft" } });
+    await advanceAutoSave();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/reports", expect.objectContaining({ method: "POST" }));
   });
 });

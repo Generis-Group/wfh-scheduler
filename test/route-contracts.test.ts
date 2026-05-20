@@ -45,9 +45,9 @@ vi.mock("@/lib/services/activity", () => ({
 }));
 
 vi.mock("@/lib/services/sync", () => ({
-  syncJira: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0 })),
-  syncGoogleCalendar: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0 })),
-  syncGoogleTasks: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0 }))
+  syncJira: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0, activities: [] })),
+  syncGoogleCalendar: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0, activities: [] })),
+  syncGoogleTasks: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0, activities: [] }))
 }));
 
 vi.mock("@/lib/services/admin", () => ({
@@ -126,7 +126,7 @@ describe("route contracts", () => {
     await expect(response.json()).resolves.toEqual({ report: { id: "report-1" } });
   });
 
-  it("creates a report only through an explicit save request", async () => {
+  it("creates a report through autosave or submit requests", async () => {
     const reports = await import("@/lib/services/reports");
     const { POST } = await import("@/app/api/reports/route");
     vi.mocked(reports.ensureDailyReport).mockClear();
@@ -136,7 +136,7 @@ describe("route contracts", () => {
         method: "POST",
         body: JSON.stringify({
           date: "2026-05-13",
-          summary: "Saved draft"
+          summary: "Autosaved draft"
         })
       })
     );
@@ -155,7 +155,7 @@ describe("route contracts", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ importedCount: 0, skippedCount: 0, staleCount: 0 });
+    await expect(response.json()).resolves.toEqual({ importedCount: 0, skippedCount: 0, staleCount: 0, activities: [] });
   });
 
   it("creates admin-managed credentials users", async () => {

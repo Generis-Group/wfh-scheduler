@@ -18,7 +18,6 @@ import {
   Loader2,
   MoreHorizontal,
   PenLine,
-  Save,
   Search,
   Send,
   Trash2,
@@ -101,12 +100,36 @@ const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
 ];
 
 const activityPageSize = 5;
-type BusyAction = "save" | "submit" | "delete";
+const autoSaveDelayMs = 600;
+type BusyAction = "submit" | "delete";
+type AutoSaveStatus = "saved" | "error";
 type SyncProviderKey = keyof typeof syncProviderLabels;
 const syncProviderSources: Record<SyncProviderKey, ActivitySource> = {
   jira: "JIRA",
   "google-calendar": "GOOGLE_CALENDAR",
   "google-tasks": "GOOGLE_TASKS"
+};
+
+type ReportPayload = {
+  summary: string;
+  blockers: string;
+  workLocation: WorkLocation;
+  activityUpdates: Array<{ id: string; selected: boolean; employeeNote: string | null }>;
+  deletedActivityIds: string[];
+  manualActivities: Array<{
+    title: string;
+    employeeNote: string | null;
+    status?: string | null;
+    durationMinutes?: number | null;
+  }>;
+};
+
+type AutoDraftSnapshot = {
+  reportId: string;
+  reportDate: string;
+  payload: ReportPayload;
+  signature: string;
+  hasMeaningfulContent: boolean;
 };
 
 function toDate(value?: string | Date | null) {
@@ -157,21 +180,6 @@ function formatReportDate(value: string | Date) {
   const lookup = Object.fromEntries(formatted.map((part) => [part.type, part.value]));
 
   return `${lookup.month} ${lookup.day}, ${lookup.year} (${lookup.weekday})`;
-}
-
-function formatTimestamp(value?: string | Date | null) {
-  const date = toDate(value);
-
-  if (!date) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(date);
 }
 
 function formatDuration(minutes?: number | null) {
@@ -228,28 +236,61 @@ function sourceIcon(source: ActivitySource) {
   return <div className="h-2.5 w-2.5 rotate-45 rounded-[2px] bg-white" />;
 }
 
-function sameActivityState(left: Activity[], right: Activity[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((activity, index) => {
-    const other = right[index];
-    return Boolean(
-      other &&
-        activity.id === other.id &&
-        activity.selected === other.selected &&
-        (activity.employeeNote ?? "") === (other.employeeNote ?? "")
-    );
-  });
-}
-
 function editorSummaryForReport(report: Report) {
   return stripLegacyBlockerPrefixes(report.summary);
 }
 
 function blockersForReport(report: Report) {
   return uniqueLines([report.blockers, extractBlockerLines(report.summary)].filter(Boolean).join("\n"));
+}
+
+function isNewManualActivity(activity: Activity) {
+  return activity.id.startsWith("manual-new-");
+}
+
+function buildReportPayload(
+  summary: string,
+  blockers: string,
+  workLocation: WorkLocation,
+  activities: Activity[],
+  deletedActivityIds: string[]
+): ReportPayload {
+  return {
+    summary,
+    blockers,
+    workLocation,
+    activityUpdates: activities
+      .filter((activity) => !isNewManualActivity(activity))
+      .map((activity) => ({
+        id: activity.id,
+        selected: activity.selected,
+        employeeNote: activity.employeeNote ?? null
+      })),
+    deletedActivityIds,
+    manualActivities: activities
+      .filter(isNewManualActivity)
+      .map((activity) => ({
+        title: activity.title,
+        employeeNote: activity.employeeNote ?? null,
+        status: activity.status,
+        durationMinutes: activity.durationMinutes ?? null
+      }))
+  };
+}
+
+function draftPayloadSignature(reportDate: string, payload: ReportPayload) {
+  return JSON.stringify({ reportDate, ...payload });
+}
+
+function hasMeaningfulDraftPayload(payload: ReportPayload) {
+  return Boolean(
+    payload.summary.trim() ||
+      payload.blockers.trim() ||
+      payload.workLocation !== "UNKNOWN" ||
+      payload.activityUpdates.length > 0 ||
+      payload.deletedActivityIds.length > 0 ||
+      payload.manualActivities.length > 0
+  );
 }
 
 export function DailyReportApp({
@@ -276,36 +317,68 @@ export function DailyReportApp({
   oauthConfig?: OAuthProviderConfig;
 }) {
   const router = useRouter();
+  const reportDate = dateInputValue(date);
+  const initialSummary = editorSummaryForReport(initialReport);
+  const initialBlockers = blockersForReport(initialReport);
+  const initialPayload = buildReportPayload(initialSummary, initialBlockers, initialReport.workLocation, initialReport.activities, []);
   const [report, setReport] = useState(initialReport);
-  const [summary, setSummary] = useState(() => editorSummaryForReport(initialReport));
-  const [blockers, setBlockers] = useState(() => blockersForReport(initialReport));
+  const [summary, setSummary] = useState(() => initialSummary);
+  const [blockers, setBlockers] = useState(() => initialBlockers);
   const [workLocation, setWorkLocation] = useState<WorkLocation>(initialReport.workLocation);
   const [activities, setActivities] = useState(initialReport.activities);
   const [deletedActivityIds, setDeletedActivityIds] = useState<string[]>([]);
   const [openActivityMenu, setOpenActivityMenu] = useState<{ id: string; top: number; left: number } | null>(null);
   const [importMenuOpen, setImportMenuOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>("saved");
   const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
   const [importingProvider, setImportingProvider] = useState<SyncProviderKey | null>(null);
   const [activityPage, setActivityPage] = useState(1);
   const [activitySearch, setActivitySearch] = useState("");
   const summaryEditorRef = useRef<SummaryEditorHandle>(null);
-
-  const reportDate = dateInputValue(date);
+  const autoSaveTimerRef = useRef<number | null>(null);
+  const saveInFlightRef = useRef<Promise<Report | null> | null>(null);
+  const saveGenerationRef = useRef(0);
+  const reportRef = useRef(initialReport);
+  const latestDraftRef = useRef<AutoDraftSnapshot | null>(null);
+  const flushAutoDraftSaveRef = useRef<() => Promise<Report | null>>(async () => null);
+  const lastSavedSignatureRef = useRef(draftPayloadSignature(reportDate, initialPayload));
 
   useEffect(() => {
+    const nextSummary = editorSummaryForReport(initialReport);
+    const nextBlockers = blockersForReport(initialReport);
+    const nextPayload = buildReportPayload(nextSummary, nextBlockers, initialReport.workLocation, initialReport.activities, []);
+
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
+    saveGenerationRef.current += 1;
+    saveInFlightRef.current = null;
+    reportRef.current = initialReport;
+    lastSavedSignatureRef.current = draftPayloadSignature(reportDate, nextPayload);
+    latestDraftRef.current = {
+      reportId: initialReport.id,
+      reportDate,
+      payload: nextPayload,
+      signature: lastSavedSignatureRef.current,
+      hasMeaningfulContent: hasMeaningfulDraftPayload(nextPayload)
+    };
+
     setReport(initialReport);
-    setSummary(editorSummaryForReport(initialReport));
-    setBlockers(blockersForReport(initialReport));
+    setSummary(nextSummary);
+    setBlockers(nextBlockers);
     setWorkLocation(initialReport.workLocation);
     setActivities(initialReport.activities);
     setDeletedActivityIds([]);
     setOpenActivityMenu(null);
     setImportMenuOpen(false);
     setMessage(null);
+    setAutoSaveStatus("saved");
     setActivityPage(1);
     setActivitySearch("");
-  }, [initialReport, date]);
+  }, [initialReport, date, reportDate]);
 
   function setActivity(id: string, patch: Partial<Activity>) {
     setActivities((items) => items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -320,16 +393,14 @@ export function DailyReportApp({
     if (activity.source !== "MANUAL") {
       setActivity(activity.id, { selected: false });
       setOpenActivityMenu(null);
-      setMessage("Work item removed from this report. Save the draft to keep this change.");
       return;
     }
 
     setActivities((items) => items.filter((item) => item.id !== activity.id));
-    if (!activity.id.startsWith("manual-new-")) {
+    if (!isNewManualActivity(activity)) {
       setDeletedActivityIds((current) => [...new Set([...current, activity.id])]);
     }
     setOpenActivityMenu(null);
-    setMessage("Manual work item deleted. Save the draft to keep this change.");
   }
 
   function toggleActivityMenu(activityId: string, event: MouseEvent<HTMLButtonElement>) {
@@ -374,73 +445,88 @@ export function DailyReportApp({
     };
   }, [openActivityMenu]);
 
-  async function saveReport(submit = false) {
-    if (busyAction || importingProvider) {
+  function clearAutoDraftTimer() {
+    if (!autoSaveTimerRef.current) {
       return;
     }
 
-    setBusyAction(submit ? "submit" : "save");
-    setMessage(null);
-    const editorSnapshot = summaryEditorRef.current?.getSnapshot();
-    const payloadSummary = editorSnapshot?.summary ?? summary;
-    const payloadBlockers = editorSnapshot?.blockers ?? blockers;
+    window.clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = null;
+  }
 
-    if (editorSnapshot) {
-      setSummary(editorSnapshot.summary);
-      setBlockers(editorSnapshot.blockers);
+  function shouldAutoSaveSnapshot(snapshot: AutoDraftSnapshot) {
+    if (snapshot.signature === lastSavedSignatureRef.current) {
+      return false;
     }
 
-    const manualActivities = activities
-      .filter((activity) => activity.id.startsWith("manual-new-"))
-      .map((activity) => ({
-        title: activity.title,
-        employeeNote: activity.employeeNote ?? null,
-        status: activity.status,
-        durationMinutes: activity.durationMinutes ?? null
-      }));
+    return Boolean(snapshot.reportId || reportRef.current.id || snapshot.hasMeaningfulContent);
+  }
 
-    const reportPayload = {
-      summary: payloadSummary,
-      blockers: payloadBlockers,
-      workLocation,
-      activityUpdates: activities
-        .map((activity) => ({
-          id: activity.id,
-          selected: activity.selected,
-          employeeNote: activity.employeeNote ?? null
-        }))
-        .filter((activity) => !activity.id.startsWith("manual-new-")),
-      deletedActivityIds,
-      manualActivities
+  function captureCurrentDraftSnapshot() {
+    const editorSnapshot = summaryEditorRef.current?.getSnapshot();
+    const currentSummary = editorSnapshot?.summary ?? summary;
+    const currentBlockers = editorSnapshot?.blockers ?? blockers;
+    const payload = buildReportPayload(currentSummary, currentBlockers, workLocation, activities, deletedActivityIds);
+    const signature = draftPayloadSignature(reportDate, payload);
+    const snapshot: AutoDraftSnapshot = {
+      reportId: reportRef.current.id,
+      reportDate,
+      payload,
+      signature,
+      hasMeaningfulContent: hasMeaningfulDraftPayload(payload)
     };
 
-    const response = await fetch(report.id ? `/api/reports/${report.id}` : "/api/reports", {
-      method: report.id ? "PUT" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(report.id ? reportPayload : { ...reportPayload, date: reportDate })
-    });
-
-    if (!response.ok) {
-      setMessage((await response.json()).error ?? "Unable to save report.");
-      setBusyAction(null);
-      return;
+    if (editorSnapshot && (currentSummary !== summary || currentBlockers !== blockers)) {
+      setSummary(currentSummary);
+      setBlockers(currentBlockers);
     }
 
-    const data = await response.json();
-    let nextReport = data.report as Report;
+    latestDraftRef.current = snapshot;
+    return snapshot;
+  }
 
-    if (submit) {
-      const submitResponse = await fetch(`/api/reports/${nextReport.id}/submit`, { method: "POST" });
-      if (!submitResponse.ok) {
-        setMessage((await submitResponse.json()).error ?? "Unable to submit report.");
-        setBusyAction(null);
-        return;
+  function applySavedReport(nextReport: Report, replaceLocalState: boolean, savedSignature: string) {
+    if (!replaceLocalState) {
+      const current = reportRef.current;
+      const nextCurrent = {
+        ...current,
+        id: nextReport.id,
+        reportDate: nextReport.reportDate,
+        status: nextReport.status,
+        submittedAt: nextReport.submittedAt,
+        updatedAt: nextReport.updatedAt,
+        revisions: nextReport.revisions ?? current.revisions
+      };
+
+      reportRef.current = nextCurrent;
+      setReport(nextCurrent);
+      lastSavedSignatureRef.current = savedSignature;
+
+      if (latestDraftRef.current) {
+        latestDraftRef.current = {
+          ...latestDraftRef.current,
+          reportId: nextReport.id
+        };
       }
-      nextReport = (await submitResponse.json()).report as Report;
+
+      return;
     }
 
     const nextSummary = editorSummaryForReport(nextReport);
     const nextBlockers = blockersForReport(nextReport);
+    const nextPayload = buildReportPayload(nextSummary, nextBlockers, nextReport.workLocation, nextReport.activities, []);
+    const nextReportDate = dateInputValue(nextReport.reportDate);
+    const nextSignature = draftPayloadSignature(nextReportDate, nextPayload);
+
+    reportRef.current = nextReport;
+    lastSavedSignatureRef.current = nextSignature;
+    latestDraftRef.current = {
+      reportId: nextReport.id,
+      reportDate: nextReportDate,
+      payload: nextPayload,
+      signature: nextSignature,
+      hasMeaningfulContent: hasMeaningfulDraftPayload(nextPayload)
+    };
 
     setReport(nextReport);
     setSummary(nextSummary);
@@ -449,7 +535,131 @@ export function DailyReportApp({
     setDeletedActivityIds([]);
     setWorkLocation(nextReport.workLocation);
     summaryEditorRef.current?.setSnapshot({ summary: nextSummary, blockers: nextBlockers });
-    setMessage(submit ? "Submitted for review." : "Draft saved.");
+  }
+
+  function startAutoDraftSave(snapshot: AutoDraftSnapshot, forceCreate = false) {
+    if (!forceCreate && !shouldAutoSaveSnapshot(snapshot)) {
+      return Promise.resolve(reportRef.current.id ? reportRef.current : null);
+    }
+
+    const reportId = snapshot.reportId || reportRef.current.id;
+    const generation = saveGenerationRef.current;
+    const savedSignature = snapshot.signature;
+    const request = (async (): Promise<Report | null> => {
+      try {
+        const response = await fetch(reportId ? `/api/reports/${reportId}` : "/api/reports", {
+          method: reportId ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(reportId ? snapshot.payload : { ...snapshot.payload, date: snapshot.reportDate })
+        });
+
+        if (!response.ok) {
+          throw new Error(await responseErrorMessage(response, "Unable to save report."));
+        }
+
+        const data = await response.json();
+        const nextReport = data.report as Report;
+
+        if (generation !== saveGenerationRef.current) {
+          return nextReport;
+        }
+
+        applySavedReport(nextReport, false, savedSignature);
+        setAutoSaveStatus("saved");
+
+        return nextReport;
+      } catch {
+        if (generation === saveGenerationRef.current) {
+          setAutoSaveStatus("error");
+        }
+
+        return null;
+      }
+    })();
+
+    saveInFlightRef.current = request;
+    request.finally(() => {
+      if (saveInFlightRef.current === request) {
+        saveInFlightRef.current = null;
+      }
+    });
+
+    return request;
+  }
+
+  async function flushAutoDraftSave(options: { forceCreate?: boolean } = {}) {
+    clearAutoDraftTimer();
+    captureCurrentDraftSnapshot();
+
+    let forceCreate = options.forceCreate ?? false;
+    let savedReport: Report | null = reportRef.current.id ? reportRef.current : null;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if (saveInFlightRef.current) {
+        savedReport = await saveInFlightRef.current;
+      }
+
+      const snapshot = latestDraftRef.current;
+      if (!snapshot) {
+        return savedReport;
+      }
+
+      if (!forceCreate && !shouldAutoSaveSnapshot(snapshot)) {
+        return savedReport;
+      }
+
+      savedReport = await startAutoDraftSave(snapshot, forceCreate);
+      forceCreate = false;
+
+      if (!savedReport) {
+        return null;
+      }
+
+      const nextSnapshot = latestDraftRef.current;
+      if (!nextSnapshot || !shouldAutoSaveSnapshot(nextSnapshot)) {
+        return savedReport;
+      }
+    }
+
+    scheduleAutoDraftSave();
+    return savedReport;
+  }
+
+  function scheduleAutoDraftSave() {
+    clearAutoDraftTimer();
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      void flushAutoDraftSaveRef.current();
+    }, autoSaveDelayMs);
+  }
+
+  async function submitReport() {
+    if (busyAction || importingProvider || report.status === "SUBMITTED") {
+      return;
+    }
+
+    setBusyAction("submit");
+    setMessage(null);
+
+    const saved = await flushAutoDraftSave({ forceCreate: true });
+
+    if (!saved?.id) {
+      setMessage("Save failed. Try again before submitting.");
+      setBusyAction(null);
+      return;
+    }
+
+    const submitResponse = await fetch(`/api/reports/${saved.id}/submit`, { method: "POST" });
+
+    if (!submitResponse.ok) {
+      setMessage((await submitResponse.json()).error ?? "Unable to submit report.");
+      setBusyAction(null);
+      return;
+    }
+
+    const nextReport = (await submitResponse.json()).report as Report;
+    applySavedReport(nextReport, true, draftPayloadSignature(reportDate, buildReportPayload(summary, blockers, workLocation, activities, deletedActivityIds)));
+    setAutoSaveStatus("saved");
+    setMessage("Submitted for review.");
     setBusyAction(null);
   }
 
@@ -468,6 +678,9 @@ export function DailyReportApp({
 
     setBusyAction("delete");
     setMessage(null);
+    clearAutoDraftTimer();
+    saveGenerationRef.current += 1;
+    saveInFlightRef.current = null;
 
     const response = await fetch(`/api/reports/${report.id}`, { method: "DELETE" });
 
@@ -477,21 +690,37 @@ export function DailyReportApp({
       return;
     }
 
-    setReport((current) => ({
-      ...current,
+    const clearedReport: Report = {
+      ...reportRef.current,
       id: "",
       summary: "",
       blockers: "",
-      workLocation: "UNKNOWN",
+      workLocation: "UNKNOWN" as WorkLocation,
+      status: "DRAFT",
       activities: [],
+      submittedAt: null,
       updatedAt: null
-    }));
+    };
+    const clearedPayload = buildReportPayload("", "", "UNKNOWN", [], []);
+
+    reportRef.current = clearedReport;
+    lastSavedSignatureRef.current = draftPayloadSignature(reportDate, clearedPayload);
+    latestDraftRef.current = {
+      reportId: "",
+      reportDate,
+      payload: clearedPayload,
+      signature: lastSavedSignatureRef.current,
+      hasMeaningfulContent: false
+    };
+
+    setReport(clearedReport);
     setSummary("");
     setBlockers("");
     setWorkLocation("UNKNOWN");
     setActivities([]);
     setDeletedActivityIds([]);
     summaryEditorRef.current?.setSnapshot({ summary: "", blockers: "" });
+    setAutoSaveStatus("saved");
     setMessage("Draft deleted.");
     setBusyAction(null);
   }
@@ -566,19 +795,24 @@ export function DailyReportApp({
 
   const canSyncJira = integrationStatus.atlassian;
   const canSyncGoogle = integrationStatus.google;
-  const isSaving = busyAction === "save";
   const isSubmitting = busyAction === "submit";
   const isDeleting = busyAction === "delete";
   const isImporting = importingProvider !== null;
   const importStatusLabel = importingProvider ? `Importing ${syncProviderLabels[importingProvider].toLowerCase()}...` : "Import";
   const isBusy = busyAction !== null || isImporting;
-  const hasPendingManual = activities.some((activity) => activity.id.startsWith("manual-new-"));
   const selectedCount = activities.filter((activity) => activity.selected).length;
-  const lastSavedLabel = formatTimestamp(report.updatedAt);
-  const blockerItems = blockers
-    .split(/\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const currentPayload = buildReportPayload(summary, blockers, workLocation, activities, deletedActivityIds);
+  const currentDraftSignature = draftPayloadSignature(reportDate, currentPayload);
+  const currentDraftSnapshot: AutoDraftSnapshot = {
+    reportId: report.id,
+    reportDate,
+    payload: currentPayload,
+    signature: currentDraftSignature,
+    hasMeaningfulContent: hasMeaningfulDraftPayload(currentPayload)
+  };
+  reportRef.current = report;
+  latestDraftRef.current = currentDraftSnapshot;
+  flushAutoDraftSaveRef.current = flushAutoDraftSave;
   const normalizedActivitySearch = activitySearch.trim().toLowerCase();
   const filteredActivities = normalizedActivitySearch
     ? activities.filter((activity) =>
@@ -607,37 +841,45 @@ export function DailyReportApp({
 
     setActivityPage((current) => Math.min(current, pageCount));
   }, [filteredActivities.length]);
-  const hasUnsavedChanges =
-    summary !== editorSummaryForReport(report) ||
-    blockers !== blockersForReport(report) ||
-    workLocation !== report.workLocation ||
-    !sameActivityState(activities, report.activities) ||
-    deletedActivityIds.length > 0 ||
-    hasPendingManual;
 
   useEffect(() => {
-    if (!hasUnsavedChanges) {
+    const snapshot = latestDraftRef.current;
+
+    if (!snapshot || !shouldAutoSaveSnapshot(snapshot)) {
+      clearAutoDraftTimer();
       return;
     }
 
-    function handleBeforeUnload(event: BeforeUnloadEvent) {
-      event.preventDefault();
-      event.returnValue = "";
-    }
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
+    clearAutoDraftTimer();
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      void flushAutoDraftSaveRef.current();
+    }, autoSaveDelayMs);
 
     return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
+      clearAutoDraftTimer();
     };
-  }, [hasUnsavedChanges]);
+  }, [currentDraftSignature, report.id, report.status]);
 
-  function goToReportDate(nextDate: string) {
+  async function goToReportDate(nextDate: string) {
     if (!nextDate) {
       return;
     }
 
-    if (nextDate !== reportDate && hasUnsavedChanges && !window.confirm("You have unsaved changes. Leave this date without saving?")) {
+    if (nextDate === reportDate) {
+      router.push(`/?date=${nextDate}`);
+      return;
+    }
+
+    if (busyAction || importingProvider) {
+      return;
+    }
+
+    const snapshot = latestDraftRef.current;
+    const needsSave = snapshot ? shouldAutoSaveSnapshot(snapshot) : false;
+    const saved = await flushAutoDraftSave();
+
+    if (needsSave && !saved) {
+      setMessage("Save failed. Stay on this date and try again.");
       return;
     }
 
@@ -647,7 +889,7 @@ export function DailyReportApp({
   function shiftReportDate(days: number) {
     const nextDate = toDate(reportDate) ?? new Date();
     nextDate.setDate(nextDate.getDate() + days);
-    goToReportDate(nextDate.toISOString().slice(0, 10));
+    void goToReportDate(nextDate.toISOString().slice(0, 10));
   }
 
   const menuActivity = openActivityMenu ? activities.find((activity) => activity.id === openActivityMenu.id) : null;
@@ -683,23 +925,21 @@ export function DailyReportApp({
                   {isDeleting ? "Deleting..." : "Delete draft"}
                 </Button>
               ) : null}
-              <Button
-                variant="outline"
-                className="h-11 rounded-[8px] bg-white px-6 text-sm font-medium text-[#111827] shadow-[0_2px_7px_rgba(15,23,42,0.06)] ring-1 ring-[#d9dee8] hover:bg-[#f8fafc] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]"
-                disabled={isBusy}
-                onClick={() => saveReport(false)}
-              >
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                {isSaving ? "Saving..." : "Save draft"}
-              </Button>
-              <Button
-                className="h-11 rounded-[8px] bg-gradient-to-br from-[#4f6dfd] to-[#4a28df] px-6 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(79,109,253,0.34)] hover:from-[#4663ed] hover:to-[#3f21c8]"
-                disabled={isBusy || (report.status === "SUBMITTED" && !hasUnsavedChanges)}
-                onClick={() => saveReport(true)}
-              >
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                {isSubmitting ? "Submitting..." : "Submit update"}
-              </Button>
+              {report.status === "SUBMITTED" ? (
+                <span className="inline-flex h-11 items-center gap-2 rounded-[8px] bg-emerald-50 px-5 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-300/20">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Submitted
+                </span>
+              ) : (
+                <Button
+                  className="h-11 rounded-[8px] bg-gradient-to-br from-[#4f6dfd] to-[#4a28df] px-6 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(79,109,253,0.34)] hover:from-[#4663ed] hover:to-[#3f21c8]"
+                  disabled={isBusy}
+                  onClick={submitReport}
+                >
+                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                  {isSubmitting ? "Submitting..." : "Submit update"}
+                </Button>
+              )}
             </div>
           </div>
 
@@ -721,7 +961,7 @@ export function DailyReportApp({
                 <Input
                   type="date"
                   value={reportDate}
-                  onChange={(event) => goToReportDate(event.target.value)}
+                  onChange={(event) => void goToReportDate(event.target.value)}
                   className="absolute inset-0 h-full cursor-pointer border-0 bg-transparent opacity-0"
                   aria-label="Select report date"
                 />
@@ -752,12 +992,11 @@ export function DailyReportApp({
               </Select>
             </label>
 
-            <div className="flex min-h-11 w-full items-center gap-4 rounded-[8px] bg-white px-4 text-sm shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]">
-              <span className={cn("inline-flex items-center gap-2 rounded-full px-2.5 py-1 font-medium", hasUnsavedChanges ? "bg-orange-50 text-orange-700 dark:bg-orange-400/10 dark:text-orange-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300")}>
+            <div className="flex min-h-11 w-full items-center gap-4 rounded-[8px] bg-white px-4 text-sm shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]" aria-live="polite">
+              <span className={cn("inline-flex items-center gap-2 rounded-full px-2.5 py-1 font-medium", autoSaveStatus === "error" ? "bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300")}>
                 <CheckCircle2 className="h-4 w-4" />
-                {hasUnsavedChanges ? "Unsaved changes" : report.status === "SUBMITTED" ? "Submitted" : report.id ? "Draft saved" : "No saved draft"}
+                {autoSaveStatus === "error" ? "Save failed" : "Saved"}
               </span>
-              <span className="text-[#667085] dark:text-muted-foreground">{lastSavedLabel === "-" ? "Not saved yet" : `Last saved ${lastSavedLabel}`}</span>
             </div>
           </div>
 
