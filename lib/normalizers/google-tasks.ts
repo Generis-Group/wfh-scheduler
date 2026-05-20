@@ -7,7 +7,7 @@ export function normalizeGoogleTask(
   taskListId: string,
   taskListTitle: string
 ): NormalizedActivity | null {
-  if (!task.id || task.deleted || task.hidden) {
+  if (!task.id || task.deleted) {
     return null;
   }
 
@@ -15,6 +15,9 @@ export function normalizeGoogleTask(
   const updatedAt = task.updated ? new Date(task.updated) : null;
   const dueAt = task.due ? new Date(`${task.due.slice(0, 10)}T12:00:00.000Z`) : null;
   const activityAt = completedAt ?? dueAt ?? updatedAt;
+  const assignmentInfo = task.assignmentInfo;
+  const spaceInfo = assignmentInfo?.spaceInfo;
+  const sourceUrl = assignmentInfo?.linkToTask ?? task.webViewLink ?? null;
 
   return {
     source: "GOOGLE_TASKS",
@@ -23,14 +26,17 @@ export function normalizeGoogleTask(
     title: task.title ?? "Untitled task",
     description: task.notes ?? null,
     status: task.status ?? null,
-    sourceUrl: task.webViewLink ?? null,
+    sourceUrl,
     startedAt: activityAt,
     endedAt: completedAt ?? activityAt,
     metadata: {
       taskListTitle,
       due: task.due,
       completed: task.completed,
-      position: task.position
+      hidden: task.hidden,
+      position: task.position,
+      assignmentSurface: assignmentInfo?.surfaceType,
+      assignmentSpace: spaceInfo?.space
     }
   };
 }

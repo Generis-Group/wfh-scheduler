@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { normalizeCalendarEvent } from "@/lib/normalizers/google-calendar";
 import { normalizeGoogleTask } from "@/lib/normalizers/google-tasks";
-import { normalizeJiraChangelog, normalizeJiraIssue, normalizeJiraWorklog } from "@/lib/normalizers/jira";
+import { normalizeJiraChangelog, normalizeJiraComment, normalizeJiraIssue, normalizeJiraWorklog } from "@/lib/normalizers/jira";
 
 describe("provider normalizers", () => {
   it("normalizes Jira issues, worklogs, and changelogs without raw payload retention", () => {
@@ -56,6 +56,22 @@ describe("provider normalizers", () => {
     ).toMatchObject({
       sourceId: "changelog:10001:700",
       title: "GEN-42: changed status"
+    });
+
+    expect(
+      normalizeJiraComment(
+        issue,
+        {
+          id: "900",
+          created: "2026-05-13T16:00:00.000Z",
+          author: { displayName: "Alex", accountId: "a1" },
+          body: "I left a note"
+        },
+        "https://generis.atlassian.net"
+      )
+    ).toMatchObject({
+      sourceId: "comment:10001:900",
+      title: "GEN-42: comment added"
     });
   });
 
@@ -131,6 +147,35 @@ describe("provider normalizers", () => {
       sourceId: "task-1",
       sourceContainerId: "list-1",
       status: "completed"
+    });
+
+    expect(
+      normalizeGoogleTask(
+        {
+          id: "chat-task-1",
+          title: "Follow up from space",
+          status: "completed",
+          hidden: true,
+          completed: "2026-05-13T18:30:00.000Z",
+          assignmentInfo: {
+            surfaceType: "SPACE",
+            linkToTask: "https://chat.google.com/space/task",
+            spaceInfo: { space: "spaces/AAAA" }
+          }
+        },
+        "assigned",
+        "Assigned to me"
+      )
+    ).toMatchObject({
+      source: "GOOGLE_TASKS",
+      sourceId: "chat-task-1",
+      sourceUrl: "https://chat.google.com/space/task",
+      metadata: {
+        taskListTitle: "Assigned to me",
+        hidden: true,
+        assignmentSurface: "SPACE",
+        assignmentSpace: "spaces/AAAA"
+      }
     });
   });
 });

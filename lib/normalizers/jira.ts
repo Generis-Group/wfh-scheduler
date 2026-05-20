@@ -28,6 +28,14 @@ type JiraChangelog = {
   items?: Array<{ field?: string; fromString?: string; toString?: string }>;
 };
 
+type JiraComment = {
+  id: string;
+  created?: string;
+  updated?: string;
+  body?: unknown;
+  author?: { accountId?: string; displayName?: string };
+};
+
 function issueUrl(siteUrl: string | undefined, issueKey: string) {
   return siteUrl ? `${siteUrl.replace(/\/$/, "")}/browse/${issueKey}` : undefined;
 }
@@ -124,6 +132,27 @@ export function normalizeJiraChangelog(
       key: issue.key,
       author: changelog.author?.displayName,
       fields
+    }
+  };
+}
+
+export function normalizeJiraComment(issue: JiraIssue, comment: JiraComment, siteUrl?: string): NormalizedActivity {
+  const createdAt = comment.created ? new Date(comment.created) : null;
+
+  return {
+    source: "JIRA",
+    sourceId: `comment:${issue.id}:${comment.id}`,
+    sourceContainerId: issue.key,
+    title: `${issue.key}: comment added`,
+    description: commentToText(comment.body),
+    status: issue.fields?.status?.name ?? null,
+    sourceUrl: issueUrl(siteUrl, issue.key),
+    startedAt: createdAt,
+    endedAt: createdAt,
+    metadata: {
+      kind: "comment",
+      key: issue.key,
+      author: comment.author?.displayName
     }
   };
 }
