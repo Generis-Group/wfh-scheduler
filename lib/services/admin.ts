@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { isGenerisEmail, normalizeEmail } from "@/lib/auth-domain";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import { createDepartment as createDepartmentRecord, departmentMembershipInclude } from "@/lib/services/departments";
+import { createDepartment as createDepartmentRecord, departmentMembershipSelect } from "@/lib/services/departments";
 import type { accountProfileSchema, changePasswordSchema, createUserSchema, resetPasswordSchema, updateUserSchema } from "@/lib/validation";
 import type { z } from "zod";
 
@@ -14,8 +14,15 @@ type CreateUserInput = z.infer<typeof createUserSchema>;
 type UpdateUserInput = z.infer<typeof updateUserSchema>;
 type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 
-export const adminUserInclude = {
-  ...departmentMembershipInclude
+export const adminUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  status: true,
+  timezone: true,
+  reviewerAllDepartments: true,
+  ...departmentMembershipSelect
 };
 
 function generateTemporaryPassword() {
@@ -49,7 +56,7 @@ export async function createAppUser(input: CreateUserInput) {
           }
         : undefined
     },
-    include: adminUserInclude
+    select: adminUserSelect
   });
 
   return { user, temporaryPassword };
@@ -86,7 +93,7 @@ export async function updateAppUser(userId: string, input: UpdateUserInput) {
 
     return tx.user.findUniqueOrThrow({
       where: { id: user.id },
-      include: adminUserInclude
+      select: adminUserSelect
     });
   });
 }
@@ -142,7 +149,8 @@ export async function resetAppUserPassword(userId: string, input: ResetPasswordI
       passwordHash,
       mustChangePassword: true,
       status: "ACTIVE"
-    }
+    },
+    select: adminUserSelect
   });
 
   return { user, temporaryPassword };

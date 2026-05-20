@@ -1,5 +1,5 @@
 import { assertCanAccessUserData, requireSession } from "@/lib/access";
-import { ensureDailyReport, getDashboardMetrics, getDailyReport, listReportsForDate, updateReport } from "@/lib/services/reports";
+import { ensureDailyReport, getDailyReport, getReviewDashboardData, updateReport } from "@/lib/services/reports";
 import { handleRouteError, HttpError, json } from "@/lib/http";
 import { createReportSchema, reportQuerySchema } from "@/lib/validation";
 
@@ -14,10 +14,7 @@ export async function GET(request: Request) {
 
     if (!query.userId && (session.user.role === "REVIEWER" || session.user.role === "ADMIN")) {
       const scope = { userId: session.user.id, role: session.user.role };
-      const [reports, metrics] = await Promise.all([
-        listReportsForDate(query.date, scope),
-        getDashboardMetrics(query.date, scope)
-      ]);
+      const { rows: reports, metrics } = await getReviewDashboardData(query.date, scope);
 
       return json({ reports, metrics });
     }

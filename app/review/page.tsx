@@ -4,7 +4,7 @@ import { ReviewerDashboard } from "@/components/reports/reviewer-dashboard";
 import { auth } from "@/lib/auth";
 import { todayDateString } from "@/lib/dates";
 import { serialize } from "@/lib/serializers";
-import { getDashboardMetrics, listReportsForDate } from "@/lib/services/reports";
+import { getReviewDashboardData } from "@/lib/services/reports";
 
 export default async function ReviewPage({
   searchParams
@@ -33,7 +33,7 @@ export default async function ReviewPage({
 
   const date = searchParams?.date ?? todayDateString(session.user.timezone);
   const scope = { userId: session.user.id, role: session.user.role };
-  const [rows, metrics] = await Promise.all([listReportsForDate(date, scope), getDashboardMetrics(date, scope)]);
+  const { rows, metrics } = await getReviewDashboardData(date, scope);
 
   return (
     <ReviewerDashboard

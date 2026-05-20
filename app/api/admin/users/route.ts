@@ -1,7 +1,7 @@
 import { requireRole } from "@/lib/access";
 import { handleRouteError, json } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import { adminUserInclude, createAppUser } from "@/lib/services/admin";
+import { adminUserSelect, createAppUser } from "@/lib/services/admin";
 import { createUserSchema } from "@/lib/validation";
 
 export async function GET() {
@@ -10,7 +10,7 @@ export async function GET() {
 
     const users = await prisma.user.findMany({
       orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
-      include: adminUserInclude
+      select: adminUserSelect
     });
 
     return json({ users });

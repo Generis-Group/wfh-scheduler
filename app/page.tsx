@@ -6,8 +6,7 @@ import { todayDateString } from "@/lib/dates";
 import { getOAuthProviderConfig } from "@/lib/oauth-config";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serializers";
-import { listActivities } from "@/lib/services/activity";
-import { getDailyReport } from "@/lib/services/reports";
+import { getDailyReportEditorData } from "@/lib/services/reports";
 
 export default async function HomePage({
   searchParams
@@ -35,9 +34,8 @@ export default async function HomePage({
   }
 
   const date = searchParams?.date ?? todayDateString(session.user.timezone);
-  const [report, activities, accounts] = await Promise.all([
-    getDailyReport(session.user.id, date),
-    listActivities(session.user.id, date),
+  const [{ report, activities }, accounts] = await Promise.all([
+    getDailyReportEditorData(session.user.id, date),
     prisma.account.findMany({
       where: { userId: session.user.id },
       select: { provider: true }

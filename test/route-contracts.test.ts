@@ -28,6 +28,10 @@ vi.mock("@/lib/services/reports", () => ({
   getDailyReport: vi.fn(async () => ({ id: "report-1" })),
   listReportsForDate: vi.fn(async () => []),
   getDashboardMetrics: vi.fn(async () => ({ users: 1, submitted: 0, blockers: 0, blockerTrend: [], sourceMix: [] })),
+  getReviewDashboardData: vi.fn(async () => ({
+    rows: [],
+    metrics: { users: 1, submitted: 0, blockers: 0, blockerTrend: [], sourceMix: [] }
+  })),
   getReportById: vi.fn(async () => ({ id: "report-1", userId: "user-1" })),
   updateReport: vi.fn(async () => ({ id: "report-1" })),
   submitReport: vi.fn(async () => ({ id: "report-1", status: "SUBMITTED" })),

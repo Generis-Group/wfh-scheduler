@@ -21,6 +21,26 @@ export const departmentMembershipInclude = {
   }
 };
 
+export const departmentMembershipSelect = {
+  departments: {
+    select: {
+      departmentId: true,
+      department: {
+        select: {
+          id: true,
+          name: true,
+          slug: true
+        }
+      }
+    },
+    orderBy: {
+      department: {
+        name: "asc" as const
+      }
+    }
+  }
+};
+
 function slugifyDepartmentName(name: string) {
   return name
     .trim()
