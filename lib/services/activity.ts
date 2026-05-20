@@ -28,16 +28,6 @@ export async function upsertImportedActivities(
   activities: NormalizedActivity[]
 ) {
   const reportDate = parseReportDate(dateString);
-  const report = await prisma.dailyReport.findUnique({
-    where: {
-      userId_reportDate: {
-        userId,
-        reportDate
-      }
-    },
-    select: { id: true }
-  });
-
   let importedCount = 0;
   let skippedCount = 0;
   const importedSourceIds = new Set<string>();
@@ -60,7 +50,6 @@ export async function upsertImportedActivities(
         }
       },
       update: {
-        dailyReportId: report?.id,
         sourceContainerId: item.sourceContainerId ?? null,
         title: item.title,
         description: item.description ?? null,
@@ -74,7 +63,6 @@ export async function upsertImportedActivities(
       },
       create: {
         userId,
-        dailyReportId: report?.id,
         reportDate,
         source: item.source,
         sourceId: item.sourceId,
@@ -107,5 +95,18 @@ export async function upsertImportedActivities(
     }
   });
 
-  return { importedCount, skippedCount, staleCount: staleResult.count };
+  const importedActivities = importedSourceIds.size
+    ? await prisma.activityItem.findMany({
+        where: {
+          userId,
+          reportDate,
+          source,
+          staleAt: null,
+          sourceId: { in: [...importedSourceIds] }
+        },
+        orderBy: [{ startedAt: "asc" }, { createdAt: "asc" }]
+      })
+    : [];
+
+  return { importedCount, skippedCount, staleCount: staleResult.count, activities: importedActivities };
 }

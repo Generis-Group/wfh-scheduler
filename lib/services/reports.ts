@@ -185,30 +185,26 @@ export async function getDailyReport(userId: string, dateString: string) {
 export async function getDailyReportEditorData(userId: string, dateString: string) {
   const reportDate = parseReportDate(dateString);
 
-  const [report, activities] = await Promise.all([
-    prisma.dailyReport.findUnique({
-      where: {
-        userId_reportDate: {
-          userId,
-          reportDate
-        }
-      },
-      select: editorReportSelect
-    }),
-    prisma.activityItem.findMany({
-      where: {
+  const report = await prisma.dailyReport.findUnique({
+    where: {
+      userId_reportDate: {
         userId,
-        reportDate,
-        staleAt: null
-      },
-      orderBy: [{ startedAt: "asc" }, { createdAt: "asc" }],
-      select: reportActivitySelect
-    })
-  ]);
+        reportDate
+      }
+    },
+    select: {
+      ...editorReportSelect,
+      activities: {
+        where: { staleAt: null },
+        orderBy: [{ startedAt: "asc" }, { createdAt: "asc" }],
+        select: reportActivitySelect
+      }
+    }
+  });
 
   return {
-    report: report ? { ...report, activities } : null,
-    activities
+    report,
+    activities: report?.activities ?? []
   };
 }
 

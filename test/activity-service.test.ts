@@ -41,10 +41,11 @@ describe("activity service", () => {
     );
   });
 
-  it("preserves stale imported rows while hiding missing active imports", async () => {
-    mockDailyReportFindUnique.mockResolvedValue({ id: "report-1" });
+  it("preserves stale imported rows while leaving new imports unattached until save", async () => {
+    const importedActivity = { id: "activity-1", source: "JIRA", sourceId: "issue:10001" };
     mockActivityUpsert.mockResolvedValue({});
     mockActivityUpdateMany.mockResolvedValue({ count: 2 });
+    mockActivityFindMany.mockResolvedValue([importedActivity]);
 
     const { upsertImportedActivities } = await import("@/lib/services/activity");
     const result = await upsertImportedActivities("JIRA", "user-1", "2026-05-14", [
@@ -55,7 +56,14 @@ describe("activity service", () => {
       }
     ]);
 
-    expect(result).toEqual({ importedCount: 1, skippedCount: 0, staleCount: 2 });
+    expect(result).toEqual({ importedCount: 1, skippedCount: 0, staleCount: 2, activities: [importedActivity] });
+    expect(mockDailyReportFindUnique).not.toHaveBeenCalled();
+    expect(mockActivityUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.not.objectContaining({ dailyReportId: expect.anything() }),
+        create: expect.not.objectContaining({ dailyReportId: expect.anything() })
+      })
+    );
     expect(mockActivityUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
         update: expect.objectContaining({ staleAt: null }),
@@ -72,6 +80,16 @@ describe("activity service", () => {
         }),
         data: expect.objectContaining({
           staleAt: expect.any(Date)
+        })
+      })
+    );
+    expect(mockActivityFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: "user-1",
+          source: "JIRA",
+          staleAt: null,
+          sourceId: { in: ["issue:10001"] }
         })
       })
     );

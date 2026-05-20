@@ -15,12 +15,14 @@ import {
   Download,
   Edit3,
   ExternalLink,
+  Loader2,
   MoreHorizontal,
   PenLine,
   Save,
   Search,
   Send,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -99,6 +101,13 @@ const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
 ];
 
 const activityPageSize = 5;
+type BusyAction = "save" | "submit" | "delete";
+type SyncProviderKey = keyof typeof syncProviderLabels;
+const syncProviderSources: Record<SyncProviderKey, ActivitySource> = {
+  jira: "JIRA",
+  "google-calendar": "GOOGLE_CALENDAR",
+  "google-tasks": "GOOGLE_TASKS"
+};
 
 function toDate(value?: string | Date | null) {
   if (!value) {
@@ -111,6 +120,26 @@ function toDate(value?: string | Date | null) {
 
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function activityStartedSortValue(activity: Activity) {
+  return toDate(activity.startedAt)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+}
+
+function sortActivitiesForDisplay(items: Activity[]) {
+  return [...items].sort((first, second) => {
+    const startedDelta = activityStartedSortValue(first) - activityStartedSortValue(second);
+
+    if (startedDelta !== 0) {
+      return startedDelta;
+    }
+
+    return first.title.localeCompare(second.title) || first.id.localeCompare(second.id);
+  });
+}
+
+function mergeSyncedActivities(current: Activity[], source: ActivitySource, synced: Activity[]) {
+  return sortActivitiesForDisplay([...current.filter((activity) => activity.source !== source), ...synced]);
 }
 
 function dateInputValue(value: string | Date) {
@@ -256,7 +285,8 @@ export function DailyReportApp({
   const [openActivityMenu, setOpenActivityMenu] = useState<{ id: string; top: number; left: number } | null>(null);
   const [importMenuOpen, setImportMenuOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [isBusy, setIsBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
+  const [importingProvider, setImportingProvider] = useState<SyncProviderKey | null>(null);
   const [activityPage, setActivityPage] = useState(1);
   const [activitySearch, setActivitySearch] = useState("");
   const summaryEditorRef = useRef<SummaryEditorHandle>(null);
@@ -345,7 +375,11 @@ export function DailyReportApp({
   }, [openActivityMenu]);
 
   async function saveReport(submit = false) {
-    setIsBusy(true);
+    if (busyAction || importingProvider) {
+      return;
+    }
+
+    setBusyAction(submit ? "submit" : "save");
     setMessage(null);
     const editorSnapshot = summaryEditorRef.current?.getSnapshot();
     const payloadSummary = editorSnapshot?.summary ?? summary;
@@ -388,7 +422,7 @@ export function DailyReportApp({
 
     if (!response.ok) {
       setMessage((await response.json()).error ?? "Unable to save report.");
-      setIsBusy(false);
+      setBusyAction(null);
       return;
     }
 
@@ -399,7 +433,7 @@ export function DailyReportApp({
       const submitResponse = await fetch(`/api/reports/${nextReport.id}/submit`, { method: "POST" });
       if (!submitResponse.ok) {
         setMessage((await submitResponse.json()).error ?? "Unable to submit report.");
-        setIsBusy(false);
+        setBusyAction(null);
         return;
       }
       nextReport = (await submitResponse.json()).report as Report;
@@ -416,7 +450,7 @@ export function DailyReportApp({
     setWorkLocation(nextReport.workLocation);
     summaryEditorRef.current?.setSnapshot({ summary: nextSummary, blockers: nextBlockers });
     setMessage(submit ? "Submitted for review." : "Draft saved.");
-    setIsBusy(false);
+    setBusyAction(null);
   }
 
   async function deleteDraft() {
@@ -428,14 +462,18 @@ export function DailyReportApp({
       return;
     }
 
-    setIsBusy(true);
+    if (busyAction || importingProvider) {
+      return;
+    }
+
+    setBusyAction("delete");
     setMessage(null);
 
     const response = await fetch(`/api/reports/${report.id}`, { method: "DELETE" });
 
     if (!response.ok) {
       setMessage((await response.json()).error ?? "Unable to delete draft.");
-      setIsBusy(false);
+      setBusyAction(null);
       return;
     }
 
@@ -455,13 +493,17 @@ export function DailyReportApp({
     setDeletedActivityIds([]);
     summaryEditorRef.current?.setSnapshot({ summary: "", blockers: "" });
     setMessage("Draft deleted.");
-    setIsBusy(false);
+    setBusyAction(null);
   }
 
-  async function sync(provider: "jira" | "google-calendar" | "google-tasks") {
-    setIsBusy(true);
+  async function sync(provider: SyncProviderKey) {
+    if (busyAction || importingProvider) {
+      return;
+    }
+
     const providerLabel = syncProviderLabels[provider];
-    setMessage(`Importing ${providerLabel.toLowerCase()}...`);
+    setImportingProvider(provider);
+    setMessage(null);
 
     try {
       const response = await fetch(`/api/sync/${provider}`, {
@@ -475,15 +517,9 @@ export function DailyReportApp({
         return;
       }
 
-      const result = (await response.json()) as { importedCount: number; skippedCount: number; staleCount?: number };
-      const activityResponse = await fetch(`/api/activity?date=${encodeURIComponent(reportDate)}`);
-
-      if (activityResponse.ok) {
-        const data = (await activityResponse.json()) as { activities: Activity[] };
-        setActivities(data.activities);
-        setReport((current) => ({ ...current, activities: data.activities }));
-        setActivityPage(1);
-      }
+      const result = (await response.json()) as { importedCount: number; skippedCount: number; staleCount?: number; activities?: Activity[] };
+      setActivities((current) => mergeSyncedActivities(current, syncProviderSources[provider], result.activities ?? []));
+      setActivityPage(1);
 
       setMessage(
         result.importedCount > 0
@@ -493,7 +529,7 @@ export function DailyReportApp({
     } catch {
       setMessage(`${providerLabel} import failed. Check your connection and try again.`);
     } finally {
-      setIsBusy(false);
+      setImportingProvider(null);
     }
   }
 
@@ -530,6 +566,12 @@ export function DailyReportApp({
 
   const canSyncJira = integrationStatus.atlassian;
   const canSyncGoogle = integrationStatus.google;
+  const isSaving = busyAction === "save";
+  const isSubmitting = busyAction === "submit";
+  const isDeleting = busyAction === "delete";
+  const isImporting = importingProvider !== null;
+  const importStatusLabel = importingProvider ? `Importing ${syncProviderLabels[importingProvider].toLowerCase()}...` : "Import";
+  const isBusy = busyAction !== null || isImporting;
   const hasPendingManual = activities.some((activity) => activity.id.startsWith("manual-new-"));
   const selectedCount = activities.filter((activity) => activity.selected).length;
   const lastSavedLabel = formatTimestamp(report.updatedAt);
@@ -572,6 +614,23 @@ export function DailyReportApp({
     !sameActivityState(activities, report.activities) ||
     deletedActivityIds.length > 0 ||
     hasPendingManual;
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      return;
+    }
+
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [hasUnsavedChanges]);
 
   function goToReportDate(nextDate: string) {
     if (!nextDate) {
@@ -620,8 +679,8 @@ export function DailyReportApp({
                   disabled={isBusy}
                   onClick={deleteDraft}
                 >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete draft
+                  {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                  {isDeleting ? "Deleting..." : "Delete draft"}
                 </Button>
               ) : null}
               <Button
@@ -630,16 +689,16 @@ export function DailyReportApp({
                 disabled={isBusy}
                 onClick={() => saveReport(false)}
               >
-                <Save className="mr-2 h-4 w-4" />
-                {isBusy ? "Saving..." : "Save draft"}
+                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                {isSaving ? "Saving..." : "Save draft"}
               </Button>
               <Button
                 className="h-11 rounded-[8px] bg-gradient-to-br from-[#4f6dfd] to-[#4a28df] px-6 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(79,109,253,0.34)] hover:from-[#4663ed] hover:to-[#3f21c8]"
                 disabled={isBusy || (report.status === "SUBMITTED" && !hasUnsavedChanges)}
                 onClick={() => saveReport(true)}
               >
-                <Send className="mr-2 h-4 w-4" />
-                {isBusy ? "Submitting..." : "Submit update"}
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                {isSubmitting ? "Submitting..." : "Submit update"}
               </Button>
             </div>
           </div>
@@ -719,9 +778,9 @@ export function DailyReportApp({
                     disabled={isBusy}
                     onClick={() => setImportMenuOpen((open) => !open)}
                   >
-                    <Download className="mr-2 h-4 w-4" />
-                    Import
-                    <ChevronDown className="ml-2 h-4 w-4" />
+                    {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                    {importStatusLabel}
+                    {!isImporting ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
                   </Button>
                   {importMenuOpen ? (
                     <div className="absolute right-0 top-12 z-30 w-64 rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
@@ -954,11 +1013,19 @@ export function DailyReportApp({
       ) : null}
       {message ? (
         <div
-          className="fixed bottom-5 right-5 z-50 max-w-[min(420px,calc(100vw-2.5rem))] rounded-[12px] bg-white px-4 py-3 text-sm font-medium text-[#334155] shadow-[0_18px_42px_rgba(15,23,42,0.18)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:text-[#d7e0ec] dark:ring-[#263a55]"
+          className="fixed bottom-5 right-5 z-50 flex max-w-[min(420px,calc(100vw-2.5rem))] items-start gap-3 rounded-[12px] bg-white px-4 py-3 text-sm font-medium text-[#334155] shadow-[0_18px_42px_rgba(15,23,42,0.18)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:text-[#d7e0ec] dark:ring-[#263a55]"
           role="status"
           aria-live="polite"
         >
-          {message}
+          <span className="min-w-0 flex-1">{message}</span>
+          <button
+            type="button"
+            className="-mr-1 -mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-[#64748b] transition-colors hover:bg-[#eef2f7] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+            aria-label="Dismiss message"
+            onClick={() => setMessage(null)}
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       ) : null}
     </ReferenceAppShell>

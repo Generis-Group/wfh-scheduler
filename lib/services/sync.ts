@@ -1,4 +1,4 @@
-import type { SyncProvider } from "@prisma/client";
+import type { ActivityItem, SyncProvider } from "@prisma/client";
 import type { calendar_v3, tasks_v1 } from "googleapis";
 
 import { parseReportDate, reportDateString, zonedDayRange } from "@/lib/dates";
@@ -86,6 +86,7 @@ type SyncResult = {
   importedCount: number;
   skippedCount: number;
   staleCount: number;
+  activities: ActivityItem[];
 };
 
 function isInRange(date: Date | null | undefined, start: Date, end: Date) {
