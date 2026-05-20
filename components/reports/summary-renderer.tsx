@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { lineItems, splitBlockerText, summaryPlainText } from "@/lib/summary-format";
 import { cn } from "@/lib/utils";
 
 type SummaryRendererProps = {
@@ -15,89 +16,11 @@ type MarkdownListLine = {
   ordered: boolean;
 };
 
-function lineItems(value?: string | null) {
-  return (value ?? "")
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
+export { summaryPlainText };
 
 function markdownListLevel(whitespace: string) {
   const columns = whitespace.split("").reduce((total, character) => total + (character === "\t" ? 2 : 1), 0);
   return Math.floor(columns / 2);
-}
-
-function stripInlineFormatMarkers(value: string) {
-  return value.replace(/\*\*(.*?)\*\*/g, "$1").replace(/_(.*?)_/g, "$1");
-}
-
-function stripBlockMarkers(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((line) =>
-      line
-        .replace(/^##\s+/, "")
-        .replace(/^>\s?/, "")
-        .replace(/^\s*(-|\d+\.)\s+/, "")
-    )
-    .join(" ");
-}
-
-export function summaryPlainText(value?: string | null, emptyText = "No summary entered.") {
-  const text = stripInlineFormatMarkers(stripBlockMarkers(value ?? ""))
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return text || emptyText;
-}
-
-function splitBlockerText(value: string, blockerItems: string[]) {
-  const blockers = blockerItems
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .sort((left, right) => right.length - left.length);
-
-  if (blockers.length === 0 || value.length === 0) {
-    return [{ text: value, blocker: false }];
-  }
-
-  const lowerValue = value.toLowerCase();
-  const lowerBlockers = blockers.map((blocker) => ({ value: blocker, lower: blocker.toLowerCase() }));
-  const segments: Array<{ text: string; blocker: boolean }> = [];
-  let index = 0;
-
-  while (index < value.length) {
-    let nextMatch: { start: number; blocker: string } | null = null;
-
-    for (const blocker of lowerBlockers) {
-      const start = lowerValue.indexOf(blocker.lower, index);
-
-      if (start === -1) {
-        continue;
-      }
-
-      if (!nextMatch || start < nextMatch.start || (start === nextMatch.start && blocker.value.length > nextMatch.blocker.length)) {
-        nextMatch = { start, blocker: blocker.value };
-      }
-    }
-
-    if (!nextMatch) {
-      segments.push({ text: value.slice(index), blocker: false });
-      break;
-    }
-
-    if (nextMatch.start > index) {
-      segments.push({ text: value.slice(index, nextMatch.start), blocker: false });
-    }
-
-    segments.push({
-      text: value.slice(nextMatch.start, nextMatch.start + nextMatch.blocker.length),
-      blocker: true
-    });
-    index = nextMatch.start + nextMatch.blocker.length;
-  }
-
-  return segments.length ? segments : [{ text: value, blocker: false }];
 }
 
 function renderPlainText(value: string, blockerItems: string[], keyPrefix: string) {
@@ -270,7 +193,7 @@ function renderBlocks(value: string, blockerItems: string[]) {
         index += 1;
       }
       nodes.push(
-        <blockquote key={`quote-${index}`} className="my-0 border-l-2 border-[#c7d2fe] pl-3 italic text-[#475467] dark:border-blue-300/30 dark:text-muted-foreground">
+        <blockquote key={`quote-${index}`} className="my-0 border-l-2 border-[#c7d2fe] pl-3 text-[#475467] dark:border-blue-300/30 dark:text-muted-foreground">
           {quoteLines}
         </blockquote>
       );

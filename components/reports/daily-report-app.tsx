@@ -3,11 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent } from "react";
+import type { MouseEvent } from "react";
 import { signIn } from "next-auth/react";
 import {
-  Ban,
-  Bold,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
@@ -17,13 +15,8 @@ import {
   Download,
   Edit3,
   ExternalLink,
-  Heading2,
-  Italic,
-  List,
-  ListOrdered,
   MoreHorizontal,
   PenLine,
-  Quote,
   Save,
   Search,
   Send,
@@ -34,9 +27,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { EmptyReferenceState, ReferenceAppShell, ReferenceBadge } from "@/components/reports/reference-shell";
+import { SummaryEditor, type SummaryEditorHandle, type SummarySnapshot } from "@/components/reports/summary-editor";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
+import { extractBlockerLines, stripLegacyBlockerPrefixes, uniqueLines } from "@/lib/summary-format";
 import { cn } from "@/lib/utils";
 
 type ActivitySource = "JIRA" | "GOOGLE_CALENDAR" | "GOOGLE_TASKS" | "MANUAL";
@@ -68,8 +63,6 @@ type Report = {
 };
 
 type WorkLocation = Report["workLocation"];
-type SummaryFormat = "heading" | "bold" | "italic" | "bullet" | "numbered" | "quote";
-type SummaryFormatState = Record<SummaryFormat, boolean>;
 
 type IntegrationStatus = {
   google: boolean;
@@ -106,14 +99,6 @@ const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
 ];
 
 const activityPageSize = 5;
-const inactiveSummaryFormats: SummaryFormatState = {
-  heading: false,
-  bold: false,
-  italic: false,
-  bullet: false,
-  numbered: false,
-  quote: false
-};
 
 function toDate(value?: string | Date | null) {
   if (!value) {
@@ -230,430 +215,12 @@ function sameActivityState(left: Activity[], right: Activity[]) {
   });
 }
 
-function extractBlockerLines(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.match(/^\s*blockers?:\s*(.*)$/i)?.[1])
-    .filter((line): line is string => line !== undefined && line.trim().length > 0)
-    .join("\n");
-}
-
-function stripLegacyBlockerPrefixes(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.match(/^\s*blockers?:\s*(.*)$/i)?.[1] ?? line)
-    .join("\n");
-}
-
-function uniqueLines(value: string) {
-  return Array.from(
-    new Set(
-      value
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-    )
-  ).join("\n");
-}
-
-function lineItems(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 function editorSummaryForReport(report: Report) {
   return stripLegacyBlockerPrefixes(report.summary);
 }
 
 function blockersForReport(report: Report) {
   return uniqueLines([report.blockers, extractBlockerLines(report.summary)].filter(Boolean).join("\n"));
-}
-
-function splitSummaryForBlockerHighlights(value: string, blockerItems: string[]) {
-  const blockers = blockerItems
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .sort((left, right) => right.length - left.length);
-
-  if (blockers.length === 0 || value.length === 0) {
-    return [{ text: value, blocker: false }];
-  }
-
-  const lowerValue = value.toLowerCase();
-  const lowerBlockers = blockers.map((blocker) => ({ value: blocker, lower: blocker.toLowerCase() }));
-  const segments: Array<{ text: string; blocker: boolean }> = [];
-  let index = 0;
-
-  while (index < value.length) {
-    let nextMatch: { start: number; blocker: string } | null = null;
-
-    for (const blocker of lowerBlockers) {
-      const start = lowerValue.indexOf(blocker.lower, index);
-
-      if (start === -1) {
-        continue;
-      }
-
-      if (!nextMatch || start < nextMatch.start || (start === nextMatch.start && blocker.value.length > nextMatch.blocker.length)) {
-        nextMatch = { start, blocker: blocker.value };
-      }
-    }
-
-    if (!nextMatch) {
-      segments.push({ text: value.slice(index), blocker: false });
-      break;
-    }
-
-    if (nextMatch.start > index) {
-      segments.push({ text: value.slice(index, nextMatch.start), blocker: false });
-    }
-
-    segments.push({
-      text: value.slice(nextMatch.start, nextMatch.start + nextMatch.blocker.length),
-      blocker: true
-    });
-    index = nextMatch.start + nextMatch.blocker.length;
-  }
-
-  return segments.length ? segments : [{ text: value, blocker: false }];
-}
-
-function stripInlineFormatMarkers(value: string) {
-  return value.replace(/\*\*(.*?)\*\*/g, "$1").replace(/_(.*?)_/g, "$1");
-}
-
-function formattedInlineMarkdown(content: string, marker: "**" | "_") {
-  if (!content.trim()) {
-    return content;
-  }
-
-  const leading = content.match(/^\s*/)?.[0] ?? "";
-  const trailing = content.match(/\s*$/)?.[0] ?? "";
-  const body = content.slice(leading.length, content.length - trailing.length);
-
-  return body ? `${leading}${marker}${body}${marker}${trailing}` : content;
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function buttonTone(active: boolean, extraClassName = "") {
-  return cn(
-    "reference-menu-button",
-    active && "bg-[#eef2ff] text-[#4338ca] ring-1 ring-[#c7d2fe] dark:bg-blue-400/15 dark:text-blue-100 dark:ring-blue-300/20",
-    extraClassName
-  );
-}
-
-function renderInlineSummaryHtml(text: string, blockerItems: string[]): string {
-  const nodes: string[] = [];
-  let index = 0;
-
-  while (index < text.length) {
-    if (text.startsWith("**", index)) {
-      const close = text.indexOf("**", index + 2);
-
-      if (close !== -1) {
-        nodes.push(`<strong>${renderInlineSummaryHtml(text.slice(index + 2, close), blockerItems)}</strong>`);
-        index = close + 2;
-        continue;
-      }
-    }
-
-    if (text[index] === "_") {
-      const close = text.indexOf("_", index + 1);
-
-      if (close !== -1) {
-        nodes.push(`<em>${renderInlineSummaryHtml(text.slice(index + 1, close), blockerItems)}</em>`);
-        index = close + 1;
-        continue;
-      }
-    }
-
-    const nextBold = text.indexOf("**", index);
-    const nextItalic = text.indexOf("_", index);
-    let nextMarker = [nextBold, nextItalic].filter((position) => position !== -1).sort((left, right) => left - right)[0] ?? text.length;
-
-    if (nextMarker === index) {
-      nextMarker = index + 1;
-    }
-
-    const plainText = text.slice(index, nextMarker);
-
-    splitSummaryForBlockerHighlights(plainText, blockerItems).forEach((segment, segmentIndex) => {
-      const escapedText = escapeHtml(segment.text);
-      nodes.push(segment.blocker ? `<mark class="summary-blocker-highlight">${escapedText}</mark>` : escapedText);
-    });
-    index = nextMarker;
-  }
-
-  return nodes.join("");
-}
-
-type MarkdownListLine = {
-  content: string;
-  level: number;
-  ordered: boolean;
-};
-
-function markdownListLevel(whitespace: string) {
-  const columns = whitespace.split("").reduce((total, character) => total + (character === "\t" ? 2 : 1), 0);
-  return Math.floor(columns / 2);
-}
-
-function renderMarkdownList(lines: MarkdownListLine[], startIndex: number, level: number, ordered: boolean, blockerItems: string[]) {
-  const tagName = ordered ? "ol" : "ul";
-  let html = `<${tagName}>`;
-  let index = startIndex;
-
-  while (index < lines.length) {
-    const line = lines[index];
-
-    if (line.level < level || line.level !== level || line.ordered !== ordered) {
-      break;
-    }
-
-    html += `<li>${renderInlineSummaryHtml(line.content, blockerItems)}`;
-    index += 1;
-
-    while (index < lines.length && lines[index].level > level) {
-      const nested = renderMarkdownList(lines, index, lines[index].level, lines[index].ordered, blockerItems);
-      html += nested.html;
-      index = nested.index;
-    }
-
-    html += "</li>";
-  }
-
-  html += `</${tagName}>`;
-
-  return { html, index };
-}
-
-function renderMarkdownListBlock(lines: string[], startIndex: number, blockerItems: string[]) {
-  const listLines: MarkdownListLine[] = [];
-  let index = startIndex;
-
-  while (index < lines.length) {
-    const match = lines[index].match(/^(\s*)(-|\d+\.)\s+(.*)$/);
-
-    if (!match) {
-      break;
-    }
-
-    listLines.push({
-      content: match[3],
-      level: markdownListLevel(match[1]),
-      ordered: /^\d+\.$/.test(match[2])
-    });
-    index += 1;
-  }
-
-  let html = "";
-  let listIndex = 0;
-
-  while (listIndex < listLines.length) {
-    const rendered = renderMarkdownList(listLines, listIndex, listLines[listIndex].level, listLines[listIndex].ordered, blockerItems);
-    html += rendered.html;
-    listIndex = rendered.index;
-  }
-
-  return { html, index };
-}
-
-function markdownToEditorHtml(value: string, blockerItems: string[]) {
-  if (!value) {
-    return "";
-  }
-
-  const lines = value.split("\n");
-  const html: string[] = [];
-  let index = 0;
-
-  while (index < lines.length) {
-    const line = lines[index];
-
-    if (/^\s*(-|\d+\.)\s+/.test(line)) {
-      const rendered = renderMarkdownListBlock(lines, index, blockerItems);
-      html.push(rendered.html);
-      index = rendered.index;
-      continue;
-    }
-
-    const heading = line.match(/^##\s+(.*)$/);
-    if (heading) {
-      html.push(`<h2>${renderInlineSummaryHtml(heading[1], blockerItems)}</h2>`);
-      index += 1;
-      continue;
-    }
-
-    const quote = line.match(/^>\s?(.*)$/);
-    if (quote) {
-      const quoteLines: string[] = [];
-      while (index < lines.length) {
-        const nextQuote = lines[index].match(/^>\s?(.*)$/);
-        if (!nextQuote) {
-          break;
-        }
-        quoteLines.push(renderInlineSummaryHtml(nextQuote[1], blockerItems));
-        index += 1;
-      }
-      html.push(`<blockquote>${quoteLines.join("<br>")}</blockquote>`);
-      continue;
-    }
-
-    html.push(line ? `<div>${renderInlineSummaryHtml(line, blockerItems)}</div>` : "<div><br></div>");
-    index += 1;
-  }
-
-  return html.join("");
-}
-
-function inlineNodeToMarkdown(node: Node): string {
-  if (node.nodeType === Node.TEXT_NODE) {
-    return node.textContent ?? "";
-  }
-
-  if (!(node instanceof HTMLElement)) {
-    return Array.from(node.childNodes).map(inlineNodeToMarkdown).join("");
-  }
-
-  const content = Array.from(node.childNodes).map(inlineNodeToMarkdown).join("");
-  const tagName = node.tagName.toLowerCase();
-
-  if (tagName === "br") {
-    return "\n";
-  }
-
-  if (tagName === "strong" || tagName === "b") {
-    return formattedInlineMarkdown(content, "**");
-  }
-
-  if (tagName === "em" || tagName === "i") {
-    return formattedInlineMarkdown(content, "_");
-  }
-
-  return content;
-}
-
-function listItemTextToMarkdown(item: Element) {
-  return Array.from(item.childNodes)
-    .filter((child) => !(child instanceof HTMLElement && (child.tagName.toLowerCase() === "ul" || child.tagName.toLowerCase() === "ol")))
-    .map(inlineNodeToMarkdown)
-    .join("")
-    .trim();
-}
-
-function listNodeToMarkdown(node: HTMLElement, depth = 0): string[] {
-  const ordered = node.tagName.toLowerCase() === "ol";
-  const indent = "  ".repeat(depth);
-  const lines: string[] = [];
-
-  Array.from(node.children).forEach((child, index) => {
-    if (!(child instanceof HTMLElement) || child.tagName.toLowerCase() !== "li") {
-      return;
-    }
-
-    const text = listItemTextToMarkdown(child);
-
-    if (text) {
-      lines.push(`${indent}${ordered ? `${index + 1}.` : "-"} ${text}`);
-    }
-
-    Array.from(child.children)
-      .filter((nested): nested is HTMLElement => nested instanceof HTMLElement && (nested.tagName.toLowerCase() === "ul" || nested.tagName.toLowerCase() === "ol"))
-      .forEach((nested) => {
-        lines.push(...listNodeToMarkdown(nested, depth + 1));
-      });
-  });
-
-  return lines;
-}
-
-function blockNodeToMarkdown(node: Node): string[] {
-  if (node.nodeType === Node.TEXT_NODE) {
-    const text = node.textContent ?? "";
-    return text ? [text] : [];
-  }
-
-  if (!(node instanceof HTMLElement)) {
-    return Array.from(node.childNodes).flatMap(blockNodeToMarkdown);
-  }
-
-  const tagName = node.tagName.toLowerCase();
-
-  if (tagName === "h1" || tagName === "h2" || tagName === "h3") {
-    const text = inlineNodeToMarkdown(node).trim();
-    return text ? [`## ${text}`] : [""];
-  }
-
-  if (tagName === "blockquote") {
-    const lines = inlineNodeToMarkdown(node)
-      .split(/\n/)
-      .map((line) => line.trim());
-
-    return lines.map((line) => (line ? `> ${line}` : ""));
-  }
-
-  if (tagName === "ul") {
-    return listNodeToMarkdown(node);
-  }
-
-  if (tagName === "ol") {
-    return listNodeToMarkdown(node);
-  }
-
-  if (tagName === "div" || tagName === "p") {
-    return [inlineNodeToMarkdown(node).replace(/\n$/g, "")];
-  }
-
-  if (tagName === "br") {
-    return [""];
-  }
-
-  return Array.from(node.childNodes).flatMap(blockNodeToMarkdown);
-}
-
-function editorElementToMarkdown(element: HTMLElement) {
-  return Array.from(element.childNodes)
-    .flatMap(blockNodeToMarkdown)
-    .join("\n")
-    .replace(/\u00a0/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trimEnd();
-}
-
-function unwrapElement(element: HTMLElement) {
-  element.replaceWith(...Array.from(element.childNodes));
-}
-
-function editorBlockerMarks(editor: HTMLElement) {
-  return uniqueLines(
-    Array.from(editor.querySelectorAll<HTMLElement>("mark.summary-blocker-highlight"))
-      .map((mark) => mark.textContent?.trim() ?? "")
-      .filter(Boolean)
-      .join("\n")
-  );
-}
-
-function refreshBlockerHighlights(editor: HTMLElement) {
-  const normalizedBlockers = new Set(lineItems(editorBlockerMarks(editor)).map((item) => item.toLowerCase()));
-
-  editor.querySelectorAll<HTMLElement>("mark.summary-blocker-highlight").forEach((mark) => {
-    const text = mark.textContent?.trim().toLowerCase() ?? "";
-
-    if (!normalizedBlockers.has(text)) {
-      unwrapElement(mark);
-    }
-  });
 }
 
 export function DailyReportApp({
@@ -692,8 +259,7 @@ export function DailyReportApp({
   const [isBusy, setIsBusy] = useState(false);
   const [activityPage, setActivityPage] = useState(1);
   const [activitySearch, setActivitySearch] = useState("");
-  const [activeSummaryFormats, setActiveSummaryFormats] = useState<SummaryFormatState>(inactiveSummaryFormats);
-  const summaryEditorRef = useRef<HTMLDivElement>(null);
+  const summaryEditorRef = useRef<SummaryEditorHandle>(null);
 
   const reportDate = dateInputValue(date);
 
@@ -709,276 +275,15 @@ export function DailyReportApp({
     setMessage(null);
     setActivityPage(1);
     setActivitySearch("");
-    setActiveSummaryFormats(inactiveSummaryFormats);
   }, [initialReport, date]);
-
-  useEffect(() => {
-    const editor = summaryEditorRef.current;
-
-    if (!editor) {
-      return;
-    }
-
-    editor.innerHTML = markdownToEditorHtml(
-      editorSummaryForReport(initialReport),
-      blockersForReport(initialReport).split(/\n/).filter(Boolean)
-    );
-  }, [initialReport]);
 
   function setActivity(id: string, patch: Partial<Activity>) {
     setActivities((items) => items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
 
-  function updateSummary(nextSummary: string) {
-    setSummary(nextSummary);
-  }
-
-  function currentSummarySelection() {
-    const editor = summaryEditorRef.current;
-    const selection = document.getSelection();
-
-    if (!editor || !selection?.anchorNode || !editor.contains(selection.anchorNode)) {
-      return null;
-    }
-
-    return { editor, selection };
-  }
-
-  function summarySelectionIsWhitespaceRange() {
-    const current = currentSummarySelection();
-
-    if (!current) {
-      return false;
-    }
-
-    const selectedText = current.selection.toString();
-
-    return !current.selection.isCollapsed && selectedText.length > 0 && !selectedText.trim();
-  }
-
-  function selectionHasExplicitInlineFormat(format: Extract<SummaryFormat, "bold" | "italic">) {
-    const current = currentSummarySelection();
-
-    if (!current) {
-      return false;
-    }
-
-    function nodeHasFormat(node: Node | null) {
-      let currentNode: Node | null = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-
-      while (currentNode instanceof HTMLElement && currentNode !== current?.editor) {
-        const tagName = currentNode.tagName.toLowerCase();
-
-        if (format === "bold" && (tagName === "strong" || tagName === "b" || currentNode.style.fontWeight === "bold")) {
-          return true;
-        }
-
-        if (format === "italic" && (tagName === "em" || tagName === "i" || currentNode.style.fontStyle === "italic")) {
-          return true;
-        }
-
-        currentNode = currentNode.parentElement;
-      }
-
-      return false;
-    }
-
-    return nodeHasFormat(current.selection.anchorNode) || nodeHasFormat(current.selection.focusNode);
-  }
-
-  function inlineFormatIsActive(format: Extract<SummaryFormat, "bold" | "italic">) {
-    if (selectionHasExplicitInlineFormat(format)) {
-      return true;
-    }
-
-    const block = document.queryCommandValue("formatBlock").toLowerCase();
-    const command = format === "bold" ? "bold" : "italic";
-    const active = document.queryCommandState(command);
-
-    if (format === "bold" && (block === "h1" || block === "h2" || block === "h3")) {
-      return false;
-    }
-
-    if (format === "italic" && block === "blockquote") {
-      return false;
-    }
-
-    return active;
-  }
-
-  function updateToolbarState() {
-    if (summarySelectionIsWhitespaceRange()) {
-      setActiveSummaryFormats(inactiveSummaryFormats);
-      return;
-    }
-
-    setActiveSummaryFormats({
-      bold: inlineFormatIsActive("bold"),
-      italic: inlineFormatIsActive("italic"),
-      bullet: document.queryCommandState("insertUnorderedList"),
-      numbered: document.queryCommandState("insertOrderedList"),
-      heading: document.queryCommandValue("formatBlock").toLowerCase() === "h2",
-      quote: document.queryCommandValue("formatBlock").toLowerCase() === "blockquote"
-    });
-  }
-
-  function syncSummaryFromEditor() {
-    const snapshot = readSummaryEditorSnapshot();
-
-    if (!snapshot) {
-      return;
-    }
-
+  function handleSummaryChange(snapshot: SummarySnapshot) {
     setSummary(snapshot.summary);
     setBlockers(snapshot.blockers);
-    updateToolbarState();
-  }
-
-  function readSummaryEditorSnapshot() {
-    const editor = summaryEditorRef.current;
-
-    if (!editor) {
-      return null;
-    }
-
-    refreshBlockerHighlights(editor);
-
-    return {
-      summary: editorElementToMarkdown(editor),
-      blockers: editorBlockerMarks(editor)
-    };
-  }
-
-  function shouldIgnoreSummaryCommand(command: string) {
-    return (
-      summarySelectionIsWhitespaceRange() &&
-      ["bold", "italic", "formatBlock", "insertUnorderedList", "insertOrderedList"].includes(command)
-    );
-  }
-
-  function runSummaryCommand(command: string, value?: string) {
-    if (shouldIgnoreSummaryCommand(command)) {
-      updateToolbarState();
-      return;
-    }
-
-    summaryEditorRef.current?.focus();
-    document.execCommand(command, false, value);
-    syncSummaryFromEditor();
-    window.requestAnimationFrame(() => {
-      updateToolbarState();
-    });
-  }
-
-  function toggleSummaryBlock(format: Extract<SummaryFormat, "heading" | "quote">) {
-    const currentBlock = document.queryCommandValue("formatBlock").toLowerCase();
-    const block = format === "heading" ? "h2" : "blockquote";
-
-    runSummaryCommand("formatBlock", currentBlock === block ? "div" : block);
-  }
-
-  function placePlainSummaryCursorAtEnd() {
-    const editor = summaryEditorRef.current;
-
-    if (!editor) {
-      return;
-    }
-
-    editor.focus();
-
-    if (!editor.lastElementChild || editor.lastElementChild.textContent?.trim()) {
-      editor.appendChild(document.createElement("div"));
-      editor.lastElementChild?.appendChild(document.createElement("br"));
-    }
-
-    const target = editor.lastElementChild ?? editor;
-    const range = document.createRange();
-    range.selectNodeContents(target);
-    range.collapse(false);
-
-    const selection = document.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-
-    if (document.queryCommandState("bold")) {
-      document.execCommand("bold");
-    }
-
-    if (document.queryCommandState("italic")) {
-      document.execCommand("italic");
-    }
-
-    document.execCommand("formatBlock", false, "div");
-    setActiveSummaryFormats(inactiveSummaryFormats);
-  }
-
-  function handleSummaryMouseDown(event: MouseEvent<HTMLDivElement>) {
-    if (event.target !== event.currentTarget) {
-      return;
-    }
-
-    event.preventDefault();
-    placePlainSummaryCursorAtEnd();
-    syncSummaryFromEditor();
-  }
-
-  function handleSummaryMouseUp() {
-    window.requestAnimationFrame(() => {
-      updateToolbarState();
-    });
-  }
-
-  function handleSummaryKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "Tab") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (event.shiftKey) {
-      runSummaryCommand("outdent");
-      return;
-    }
-
-    if (document.queryCommandState("insertUnorderedList") || document.queryCommandState("insertOrderedList")) {
-      runSummaryCommand("indent");
-      return;
-    }
-
-    runSummaryCommand("insertText", "\t");
-  }
-
-  function handleSummaryKeyUp() {
-    updateToolbarState();
-  }
-
-  function markSummarySelectionAsBlocker() {
-    const selected = window.getSelection()?.toString() ?? "";
-    const selectedBlockers = selected
-      .split(/\r?\n/)
-      .map((line) => line.replace(/^\s*blockers?:\s*/i, "").trim())
-      .map(stripInlineFormatMarkers)
-      .filter(Boolean);
-
-    if (selectedBlockers.length === 0) {
-      setMessage("Select summary text to mark as a blocker.");
-      return;
-    }
-
-    const nextBlockers = uniqueLines([blockers, selectedBlockers.join("\n")].filter(Boolean).join("\n"));
-
-    setBlockers(nextBlockers);
-    window.requestAnimationFrame(() => {
-      const editor = summaryEditorRef.current;
-
-      if (editor) {
-        const nextSummary = editorElementToMarkdown(editor);
-
-        setSummary(nextSummary);
-        editor.innerHTML = markdownToEditorHtml(nextSummary, lineItems(nextBlockers));
-        editor.focus();
-      }
-    });
   }
 
   function removeActivity(activity: Activity) {
@@ -1042,7 +347,7 @@ export function DailyReportApp({
   async function saveReport(submit = false) {
     setIsBusy(true);
     setMessage(null);
-    const editorSnapshot = readSummaryEditorSnapshot();
+    const editorSnapshot = summaryEditorRef.current?.getSnapshot();
     const payloadSummary = editorSnapshot?.summary ?? summary;
     const payloadBlockers = editorSnapshot?.blockers ?? blockers;
 
@@ -1100,12 +405,16 @@ export function DailyReportApp({
       nextReport = (await submitResponse.json()).report as Report;
     }
 
+    const nextSummary = editorSummaryForReport(nextReport);
+    const nextBlockers = blockersForReport(nextReport);
+
     setReport(nextReport);
-    setSummary(editorSummaryForReport(nextReport));
-    setBlockers(blockersForReport(nextReport));
+    setSummary(nextSummary);
+    setBlockers(nextBlockers);
     setActivities(nextReport.activities);
     setDeletedActivityIds([]);
     setWorkLocation(nextReport.workLocation);
+    summaryEditorRef.current?.setSnapshot({ summary: nextSummary, blockers: nextBlockers });
     setMessage(submit ? "Submitted for review." : "Draft saved.");
     setIsBusy(false);
   }
@@ -1141,12 +450,10 @@ export function DailyReportApp({
     }));
     setSummary("");
     setBlockers("");
-    if (summaryEditorRef.current) {
-      summaryEditorRef.current.innerHTML = "";
-    }
     setWorkLocation("UNKNOWN");
     setActivities([]);
     setDeletedActivityIds([]);
+    summaryEditorRef.current?.setSnapshot({ summary: "", blockers: "" });
     setMessage("Draft deleted.");
     setIsBusy(false);
   }
@@ -1577,109 +884,13 @@ export function DailyReportApp({
                 <h2 className="text-xl font-semibold tracking-normal text-[#111827] dark:text-foreground">Summary</h2>
                 <p className="mt-2 text-sm text-[#667085] dark:text-muted-foreground">Add a brief summary of your work.</p>
               </div>
-              <div className="mt-4 rounded-[10px] bg-[#f7f9fc] p-2 ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]">
-                <div className="mb-2 flex flex-wrap items-center gap-1">
-                  <button
-                    type="button"
-                    className={buttonTone(activeSummaryFormats.heading)}
-                    title="Heading"
-                    aria-label="Heading"
-                    aria-pressed={activeSummaryFormats.heading}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => toggleSummaryBlock("heading")}
-                  >
-                    <Heading2 className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    className={buttonTone(activeSummaryFormats.bold)}
-                    title="Bold"
-                    aria-label="Bold"
-                    aria-pressed={activeSummaryFormats.bold}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => runSummaryCommand("bold")}
-                  >
-                    <Bold className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    className={buttonTone(activeSummaryFormats.italic)}
-                    title="Italic"
-                    aria-label="Italic"
-                    aria-pressed={activeSummaryFormats.italic}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => runSummaryCommand("italic")}
-                  >
-                    <Italic className="h-4 w-4" />
-                  </button>
-                  <span className="mx-1 h-5 w-px bg-[#d8dee8] dark:bg-[#263a55]" />
-                  <button
-                    type="button"
-                    className={buttonTone(activeSummaryFormats.bullet)}
-                    title="Bulleted list"
-                    aria-label="Bulleted list"
-                    aria-pressed={activeSummaryFormats.bullet}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => runSummaryCommand("insertUnorderedList")}
-                  >
-                    <List className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    className={buttonTone(activeSummaryFormats.numbered)}
-                    title="Numbered list"
-                    aria-label="Numbered list"
-                    aria-pressed={activeSummaryFormats.numbered}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => runSummaryCommand("insertOrderedList")}
-                  >
-                    <ListOrdered className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    className={buttonTone(activeSummaryFormats.quote)}
-                    title="Quote"
-                    aria-label="Quote"
-                    aria-pressed={activeSummaryFormats.quote}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => toggleSummaryBlock("quote")}
-                  >
-                    <Quote className="h-4 w-4" />
-                  </button>
-                  <span className="mx-1 h-5 w-px bg-[#d8dee8] dark:bg-[#263a55]" />
-                  <button
-                    type="button"
-                    className="reference-menu-button w-auto gap-2 px-2.5 text-[#b42318] hover:bg-[#fff1f0] hover:text-[#b42318] dark:text-red-300 dark:hover:bg-red-400/10"
-                    title="Mark as blocker"
-                    aria-label="Mark as blocker"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={markSummarySelectionAsBlocker}
-                  >
-                    <Ban className="h-4 w-4" />
-                    <span className="text-xs font-medium">Mark as blocker</span>
-                  </button>
-                </div>
-                <div
-                  ref={summaryEditorRef}
-                  contentEditable
-                  suppressContentEditableWarning
-                  role="textbox"
-                  aria-label="Summary"
-                  data-placeholder="What did you work on today?"
-                  className="summary-rich-editor h-[430px] overflow-y-auto rounded-[8px] bg-white px-4 py-4 text-sm leading-6 text-[#111827] shadow-none ring-1 ring-[#dfe4ee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55]"
-                  onInput={syncSummaryFromEditor}
-                  onKeyDown={handleSummaryKeyDown}
-                  onKeyUp={handleSummaryKeyUp}
-                  onMouseDown={handleSummaryMouseDown}
-                  onMouseUp={handleSummaryMouseUp}
-                  onBlur={syncSummaryFromEditor}
-                  onPaste={(event) => {
-                    event.preventDefault();
-                    document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
-                    syncSummaryFromEditor();
-                  }}
-                />
-              </div>
+              <SummaryEditor
+                ref={summaryEditorRef}
+                initialSummary={editorSummaryForReport(initialReport)}
+                initialBlockers={blockersForReport(initialReport)}
+                resetKey={`${date}:${initialReport.id}:${initialReport.updatedAt ?? ""}`}
+                onChange={handleSummaryChange}
+              />
             </aside>
           </div>
         </section>

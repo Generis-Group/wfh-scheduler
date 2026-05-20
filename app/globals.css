@@ -195,49 +195,46 @@
     @apply inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-[#64748b] transition-colors hover:bg-[#eef2f7] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground;
   }
 
-  .summary-rich-editor:empty::before {
+  .summary-tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);
-    @apply text-[#98a2b3];
+    @apply pointer-events-none float-left h-0 text-[#98a2b3];
   }
 
-  .summary-rich-editor {
+  .summary-tiptap-editor .ProseMirror {
     tab-size: 2;
-    @apply whitespace-pre-wrap;
+    @apply h-[430px] overflow-y-auto whitespace-pre-wrap rounded-[8px] bg-white px-4 py-4 text-sm leading-6 text-[#111827] shadow-none ring-1 ring-[#dfe4ee] focus:outline-none focus:ring-2 focus:ring-[#2563eb] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55];
   }
 
-  .summary-rich-editor h1,
-  .summary-rich-editor h2,
-  .summary-rich-editor h3 {
+  .summary-tiptap-editor .ProseMirror h2 {
     @apply my-0 text-xl font-normal leading-7 text-[#111827] dark:text-foreground;
   }
 
-  .summary-rich-editor div,
-  .summary-rich-editor p {
+  .summary-tiptap-editor .ProseMirror p {
     @apply min-h-6;
   }
 
-  .summary-rich-editor ul,
-  .summary-rich-editor ol {
+  .summary-tiptap-editor .ProseMirror ul,
+  .summary-tiptap-editor .ProseMirror ol {
     @apply my-0 pl-5;
   }
 
-  .summary-rich-editor ul {
+  .summary-tiptap-editor .ProseMirror ul {
     @apply list-disc;
   }
 
-  .summary-rich-editor ol {
+  .summary-tiptap-editor .ProseMirror ol {
     @apply list-decimal;
   }
 
-  .summary-rich-editor li {
+  .summary-tiptap-editor .ProseMirror li {
     @apply min-h-6 pl-1;
   }
 
-  .summary-rich-editor blockquote {
-    @apply my-0 border-l-2 border-[#c7d2fe] pl-3 italic text-[#475467] dark:border-blue-300/30 dark:text-muted-foreground;
+  .summary-tiptap-editor .ProseMirror blockquote {
+    @apply my-0 border-l-2 border-[#c7d2fe] pl-3 text-[#475467] dark:border-blue-300/30 dark:text-muted-foreground;
   }
 
-  .summary-rich-editor .summary-blocker-highlight {
+  .summary-blocker-highlight {
     background-image: repeating-linear-gradient(135deg, #fff1f2 0, #fff1f2 6px, #fee2e2 6px, #fee2e2 10px);
     @apply rounded-[4px] px-0.5 text-[#7f1d1d] ring-1 ring-[#fecaca] dark:text-red-100 dark:ring-red-300/20;
   }
