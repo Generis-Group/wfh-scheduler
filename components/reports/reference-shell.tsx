@@ -40,20 +40,69 @@ type NavItem = {
   label: string;
   icon: ElementType;
   key: string;
+  prefetch: "eager" | "intent";
 };
 
 const employeeNav: NavItem[] = [
-  { href: "/", label: "Daily", icon: ClipboardList, key: "report" },
-  { href: "/reports", label: "Reports", icon: History, key: "reports" },
-  { href: "/settings", label: "Settings", icon: Settings, key: "settings" },
-  { href: "/account", label: "Account", icon: CircleUser, key: "account" },
+  {
+    href: "/",
+    label: "Daily",
+    icon: ClipboardList,
+    key: "report",
+    prefetch: "eager",
+  },
+  {
+    href: "/reports",
+    label: "Reports",
+    icon: History,
+    key: "reports",
+    prefetch: "eager",
+  },
+  {
+    href: "/settings",
+    label: "Settings",
+    icon: Settings,
+    key: "settings",
+    prefetch: "intent",
+  },
+  {
+    href: "/account",
+    label: "Account",
+    icon: CircleUser,
+    key: "account",
+    prefetch: "intent",
+  },
 ];
 
 const adminNav: NavItem[] = [
-  { href: "/review", label: "Review", icon: BarChart3, key: "review" },
-  { href: "/admin", label: "Employees", icon: Users, key: "employees" },
-  { href: "/settings", label: "Settings", icon: Settings, key: "settings" },
-  { href: "/account", label: "Account", icon: CircleUser, key: "account" },
+  {
+    href: "/review",
+    label: "Review",
+    icon: BarChart3,
+    key: "review",
+    prefetch: "eager",
+  },
+  {
+    href: "/admin",
+    label: "Employees",
+    icon: Users,
+    key: "employees",
+    prefetch: "intent",
+  },
+  {
+    href: "/settings",
+    label: "Settings",
+    icon: Settings,
+    key: "settings",
+    prefetch: "intent",
+  },
+  {
+    href: "/account",
+    label: "Account",
+    icon: CircleUser,
+    key: "account",
+    prefetch: "intent",
+  },
 ];
 
 export function ReferenceAppShell({
@@ -91,7 +140,6 @@ export function ReferenceAppShell({
   const [freshServerDataVersion, setFreshServerDataVersion] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
-  const settingsHref = "/settings";
   const currentHref = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
   const logoHref = variant === "admin" ? "/review" : "/";
   const mobileLogoHref = "/";
@@ -156,9 +204,9 @@ export function ReferenceAppShell({
     const hrefs = [
       logoHref,
       mobileLogoHref,
-      settingsHref,
-      "/account",
-      ...nav.map((item) => getNavHref(item, lastReportDate)),
+      ...nav
+        .filter((item) => item.prefetch === "eager")
+        .map((item) => getNavHref(item, lastReportDate)),
     ];
 
     hrefs.forEach((href) => {
@@ -174,12 +222,15 @@ export function ReferenceAppShell({
     mobileLogoHref,
     nav,
     router,
-    settingsHref,
   ]);
 
-  function routeLinkProps(href: string, activeKey?: string) {
+  function routeLinkProps(
+    href: string,
+    activeKey?: string,
+    prefetch: NavItem["prefetch"] = "intent",
+  ) {
     return {
-      prefetch: !hasStalePrefetchedData,
+      prefetch: !hasStalePrefetchedData && prefetch === "eager",
       onMouseEnter: () => {
         if (!hasStalePrefetchedData) {
           router.prefetch(href);
@@ -314,7 +365,7 @@ export function ReferenceAppShell({
               <Link
                 key={item.key}
                 href={href}
-                {...routeLinkProps(href, item.key)}
+                {...routeLinkProps(href, item.key, item.prefetch)}
                 aria-label={sidebarCollapsed ? item.label : undefined}
                 title={sidebarCollapsed ? item.label : undefined}
                 className={cn(
@@ -369,7 +420,7 @@ export function ReferenceAppShell({
                     <Link
                       key={item.key}
                       href={href}
-                      {...routeLinkProps(href, item.key)}
+                      {...routeLinkProps(href, item.key, item.prefetch)}
                       className={cn(
                         "flex h-full items-center gap-2 border-b-[3px] px-4 text-sm font-semibold transition-colors",
                         optimisticActive === item.key
@@ -493,7 +544,7 @@ export function ReferenceAppShell({
                 <Link
                   key={item.key}
                   href={href}
-                  {...routeLinkProps(href, item.key)}
+                  {...routeLinkProps(href, item.key, item.prefetch)}
                   className={cn(
                     "flex h-full shrink-0 items-center gap-2 border-b-[3px] px-2 text-sm font-semibold transition-colors",
                     optimisticActive === item.key

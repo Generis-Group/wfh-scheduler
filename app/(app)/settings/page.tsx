@@ -1,10 +1,7 @@
 import { redirect } from "next/navigation";
-import type { tasks_v1 } from "googleapis";
 
 import { SettingsPanel } from "@/components/settings/settings-panel";
 import { auth } from "@/lib/auth";
-import { getGoogleServices } from "@/lib/integrations/google";
-import { listJiraResources } from "@/lib/integrations/jira";
 import { getOAuthProviderConfig } from "@/lib/oauth-config";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serializers";
@@ -13,25 +10,6 @@ import {
   getLastReviewDigestRun,
   getReviewDigestEmailStatus,
 } from "@/lib/services/email-digest";
-
-function errorMessage(error: unknown) {
-  return error instanceof Error
-    ? error.message
-    : "Unable to load provider settings.";
-}
-
-async function listAllGoogleTaskLists(tasks: tasks_v1.Tasks) {
-  const taskLists: tasks_v1.Schema$TaskList[] = [];
-  let pageToken: string | undefined;
-
-  do {
-    const response = await tasks.tasklists.list({ maxResults: 100, pageToken });
-    taskLists.push(...(response.data.items ?? []));
-    pageToken = response.data.nextPageToken ?? undefined;
-  } while (pageToken);
-
-  return taskLists;
-}
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -71,39 +49,12 @@ export default async function SettingsPage() {
     atlassian: accounts.some((account) => account.provider === "atlassian"),
   };
   const oauthConfig = getOAuthProviderConfig();
-  const providerErrors: { google?: string; atlassian?: string } = {};
-
-  const jiraResources = connected.atlassian
-    ? await listJiraResources(session.user.id).catch((error) => {
-        providerErrors.atlassian = errorMessage(error);
-        return [];
-      })
-    : [];
-  const taskLists = connected.google
-    ? await getGoogleServices(session.user.id)
-        .then((services) => listAllGoogleTaskLists(services.tasks))
-        .then((items) =>
-          items
-            .filter((item) => item.id)
-            .map((item) => ({
-              id: item.id!,
-              title: item.title ?? "Untitled task list",
-            })),
-        )
-        .catch((error) => {
-          providerErrors.google = errorMessage(error);
-          return [];
-        })
-    : [];
 
   return (
     <SettingsPanel
       connected={connected}
       oauthConfig={oauthConfig}
       initialSettings={serialize(settings)}
-      jiraResources={serialize(jiraResources)}
-      taskLists={serialize(taskLists)}
-      providerErrors={providerErrors}
       companySettings={companySetting}
       canManageCompanySettings={session.user.role === "ADMIN"}
       viewerKind={isReviewer ? "admin" : "employee"}

@@ -104,4 +104,26 @@ describe("authenticated app shell loading boundaries", () => {
       "resetContentScroll(contentScrollRef.current)",
     );
   });
+
+  it("does not server-load slow provider metadata on the settings page", () => {
+    const settingsPageSource = fs.readFileSync(
+      path.join(root, "app", "(app)", "settings", "page.tsx"),
+      "utf8",
+    );
+
+    expect(settingsPageSource).not.toContain("getGoogleServices");
+    expect(settingsPageSource).not.toContain("listJiraResources");
+  });
+
+  it("keeps slow app routes out of eager shell prefetch", () => {
+    const shellSource = fs.readFileSync(
+      path.join(root, "components", "reports", "reference-shell.tsx"),
+      "utf8",
+    );
+
+    expect(shellSource).toContain('href: "/settings"');
+    expect(shellSource).toContain('href: "/admin"');
+    expect(shellSource).toContain('prefetch: "intent"');
+    expect(shellSource).toContain('item.prefetch === "eager"');
+  });
 });
