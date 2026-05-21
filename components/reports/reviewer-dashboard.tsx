@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
 import { reportDayEnd } from "@/lib/dates";
 import { cn, initials, titleCase } from "@/lib/utils";
@@ -491,6 +492,7 @@ export function ReviewerDashboard({
     }
 
     const recipients = body.emailRun?.recipientEmails?.length ?? 0;
+    markServerDataStale();
     setNotice(body.skipped ? "Digest was skipped because it was already sent or had no recipients." : `Email digest sent to ${recipients} reviewer/admin recipient${recipients === 1 ? "" : "s"}.`);
     setIsSendingDigest(false);
   }
@@ -519,6 +521,7 @@ export function ReviewerDashboard({
 
     const { report } = await response.json();
     setItems((current) => current.map((item) => (item.report?.id === report.id ? { ...item, report } : item)));
+    markServerDataStale();
   }
 
   async function addComment(row: Row, body: string) {
@@ -545,6 +548,7 @@ export function ReviewerDashboard({
     }
 
     setItems((current) => current.map((item) => (item.report?.id === result.report.id ? { ...item, report: result.report } : item)));
+    markServerDataStale();
     setNotice("Comment added.");
     return true;
   }

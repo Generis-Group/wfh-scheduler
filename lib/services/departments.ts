@@ -1,4 +1,5 @@
 import type { Prisma, UserRole } from "@prisma/client";
+import { revalidateTag, unstable_cache } from "next/cache";
 
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
@@ -72,10 +73,29 @@ export function departmentLabel(
   return names.join(", ");
 }
 
-export async function listDepartments() {
+export const departmentsCacheTag = "departments";
+
+async function readDepartments() {
   return prisma.department.findMany({
     orderBy: { name: "asc" }
   });
+}
+
+const getCachedDepartments = unstable_cache(readDepartments, ["departments:list"], {
+  revalidate: 300,
+  tags: [departmentsCacheTag]
+});
+
+export async function listDepartments() {
+  try {
+    return await getCachedDepartments();
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("incrementalCache missing")) {
+      return readDepartments();
+    }
+
+    throw error;
+  }
 }
 
 export async function createDepartment(name: string) {
@@ -91,12 +111,16 @@ export async function createDepartment(name: string) {
     throw new HttpError(422, "Department name must include letters or numbers.");
   }
 
-  return prisma.department.create({
+  const department = await prisma.department.create({
     data: {
       name: trimmedName,
       slug
     }
   });
+
+  revalidateTag(departmentsCacheTag);
+
+  return department;
 }
 
 export async function getReviewableEmployeeWhere(scope?: ReviewScope): Promise<Prisma.UserWhereInput> {

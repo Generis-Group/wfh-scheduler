@@ -20,6 +20,13 @@ import {
 
 import { PageLoadingSkeleton, loadingKindFromHref } from "@/components/reports/page-loading-skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  getFreshServerDataVersion,
+  getServerDataVersion,
+  refreshStaleServerData,
+  serverDataFreshEvent,
+  serverDataStaleEvent
+} from "@/lib/client-cache-invalidation";
 import { cn, initials } from "@/lib/utils";
 import generisLogo from "@/images/Generis_logo.png";
 
@@ -78,10 +85,13 @@ export function ReferenceAppShell({
   const [lastReportDate, setLastReportDate] = useState<string | null>(currentReportDate ?? null);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [optimisticActive, setOptimisticActive] = useState(active);
+  const [serverDataVersion, setServerDataVersion] = useState(0);
+  const [freshServerDataVersion, setFreshServerDataVersion] = useState(0);
   const settingsHref = "/settings";
   const currentHref = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
   const logoHref = variant === "admin" ? "/review" : "/";
   const mobileLogoHref = "/";
+  const hasStalePrefetchedData = serverDataVersion !== freshServerDataVersion;
 
   useEffect(() => {
     if (variant !== "employee") {
@@ -106,6 +116,26 @@ export function ReferenceAppShell({
   }, [active, pathname, searchParams]);
 
   useEffect(() => {
+    function syncServerDataVersions() {
+      setServerDataVersion(getServerDataVersion());
+      setFreshServerDataVersion(getFreshServerDataVersion());
+    }
+
+    syncServerDataVersions();
+    window.addEventListener(serverDataStaleEvent, syncServerDataVersions);
+    window.addEventListener(serverDataFreshEvent, syncServerDataVersions);
+
+    return () => {
+      window.removeEventListener(serverDataStaleEvent, syncServerDataVersions);
+      window.removeEventListener(serverDataFreshEvent, syncServerDataVersions);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (hasStalePrefetchedData) {
+      return;
+    }
+
     const hrefs = [
       logoHref,
       mobileLogoHref,
@@ -119,13 +149,21 @@ export function ReferenceAppShell({
         router.prefetch(href);
       }
     });
-  }, [currentHref, lastReportDate, logoHref, mobileLogoHref, nav, router, settingsHref]);
+  }, [currentHref, hasStalePrefetchedData, lastReportDate, logoHref, mobileLogoHref, nav, router, settingsHref]);
 
   function routeLinkProps(href: string, activeKey?: string) {
     return {
-      prefetch: true,
-      onMouseEnter: () => router.prefetch(href),
-      onFocus: () => router.prefetch(href),
+      prefetch: !hasStalePrefetchedData,
+      onMouseEnter: () => {
+        if (!hasStalePrefetchedData) {
+          router.prefetch(href);
+        }
+      },
+      onFocus: () => {
+        if (!hasStalePrefetchedData) {
+          router.prefetch(href);
+        }
+      },
       onClick: (event: MouseEvent<HTMLAnchorElement>) => {
         if (
           event.defaultPrevented ||
@@ -144,6 +182,12 @@ export function ReferenceAppShell({
           setOptimisticActive(activeKey);
         }
         setProfileOpen(false);
+
+        if (hasStalePrefetchedData) {
+          event.preventDefault();
+          refreshStaleServerData(router);
+          router.push(href);
+        }
       }
     };
   }

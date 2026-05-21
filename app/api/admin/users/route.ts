@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/access";
+import { revalidateAdminRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { adminUserSelect, createAppUser } from "@/lib/services/admin";
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
     await requireRole(["ADMIN"]);
     const input = createUserSchema.parse(await request.json());
     const result = await createAppUser(input);
+    revalidateAdminRoutes();
 
     return json(result, { status: 201 });
   } catch (error) {

@@ -30,6 +30,7 @@ import { Select } from "@/components/ui/select";
 import { EmptyReferenceState, ReferenceAppShell, ReferenceBadge } from "@/components/reports/reference-shell";
 import { SummaryEditor, type SummaryEditorHandle, type SummarySnapshot } from "@/components/reports/summary-editor";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
+import { markServerDataStale, refreshStaleServerData } from "@/lib/client-cache-invalidation";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
 import { extractBlockerLines, stripLegacyBlockerPrefixes, uniqueLines } from "@/lib/summary-format";
@@ -565,6 +566,7 @@ export function DailyReportApp({
         }
 
         applySavedReport(nextReport, false, savedSignature);
+        markServerDataStale();
         setAutoSaveStatus("saved");
 
         return nextReport;
@@ -658,6 +660,7 @@ export function DailyReportApp({
 
     const nextReport = (await submitResponse.json()).report as Report;
     applySavedReport(nextReport, true, draftPayloadSignature(reportDate, buildReportPayload(summary, blockers, workLocation, activities, deletedActivityIds)));
+    markServerDataStale();
     setAutoSaveStatus("saved");
     setMessage("Submitted for review.");
     setBusyAction(null);
@@ -720,6 +723,7 @@ export function DailyReportApp({
     setActivities([]);
     setDeletedActivityIds([]);
     summaryEditorRef.current?.setSnapshot({ summary: "", blockers: "" });
+    markServerDataStale();
     setAutoSaveStatus("saved");
     setMessage("Draft deleted.");
     setBusyAction(null);
@@ -749,6 +753,7 @@ export function DailyReportApp({
       const result = (await response.json()) as { importedCount: number; skippedCount: number; staleCount?: number; activities?: Activity[] };
       setActivities((current) => mergeSyncedActivities(current, syncProviderSources[provider], result.activities ?? []));
       setActivityPage(1);
+      markServerDataStale();
 
       setMessage(
         result.importedCount > 0
@@ -866,6 +871,7 @@ export function DailyReportApp({
     }
 
     if (nextDate === reportDate) {
+      refreshStaleServerData(router);
       router.push(`/?date=${nextDate}`);
       return;
     }
@@ -883,6 +889,7 @@ export function DailyReportApp({
       return;
     }
 
+    refreshStaleServerData(router);
     router.push(`/?date=${nextDate}`);
   }
 

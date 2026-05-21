@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/access";
+import { revalidateAdminRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
 import { resetAppUserPassword } from "@/lib/services/admin";
 import { resetPasswordSchema } from "@/lib/validation";
@@ -14,6 +15,7 @@ export async function POST(request: Request, { params }: Context) {
     await requireRole(["ADMIN"]);
     const input = resetPasswordSchema.parse(await request.json().catch(() => ({})));
     const result = await resetAppUserPassword(params.id, input);
+    revalidateAdminRoutes();
 
     return json(result);
   } catch (error) {

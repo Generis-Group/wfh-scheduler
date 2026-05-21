@@ -1,18 +1,15 @@
 import { requireRole } from "@/lib/access";
+import { revalidateAdminRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
-import { prisma } from "@/lib/prisma";
+import { getCompanySettings, saveCompanySettings } from "@/lib/services/company-settings";
 import { companySettingsSchema } from "@/lib/validation";
 
 export async function GET() {
   try {
     await requireRole(["ADMIN"]);
-    const setting = await prisma.appSetting.findUnique({ where: { key: "company" } });
+    const settings = await getCompanySettings();
 
-    return json({
-      settings: setting?.value ?? {
-        jiraProjectKeys: []
-      }
-    });
+    return json({ settings });
   } catch (error) {
     return handleRouteError(error);
   }
@@ -22,13 +19,10 @@ export async function PATCH(request: Request) {
   try {
     await requireRole(["ADMIN"]);
     const input = companySettingsSchema.parse(await request.json());
-    const setting = await prisma.appSetting.upsert({
-      where: { key: "company" },
-      update: { value: input },
-      create: { key: "company", value: input }
-    });
+    const settings = await saveCompanySettings(input);
+    revalidateAdminRoutes();
 
-    return json({ settings: setting.value });
+    return json({ settings });
   } catch (error) {
     return handleRouteError(error);
   }

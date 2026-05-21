@@ -1,4 +1,5 @@
 import { assertCanAccessReport, requireRole } from "@/lib/access";
+import { revalidateReportRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
 import { addReportComment, getReportById } from "@/lib/services/reports";
 import { commentSchema } from "@/lib/validation";
@@ -16,6 +17,7 @@ export async function POST(request: Request, { params }: Context) {
     const existingReport = await getReportById(params.id);
     await assertCanAccessReport(session, existingReport);
     const report = await addReportComment(params.id, session.user.id, input.body);
+    revalidateReportRoutes();
 
     return json({ report });
   } catch (error) {

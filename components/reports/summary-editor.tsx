@@ -10,6 +10,7 @@ import type { Editor, JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Ban, Bold, Heading2, Italic, List, ListOrdered, Quote } from "lucide-react";
 
+import { Skeleton } from "@/components/ui/skeleton";
 import { markdownToSummaryHtml, lineItems, uniqueLines } from "@/lib/summary-format";
 import { cn } from "@/lib/utils";
 
@@ -392,6 +393,7 @@ export const summaryEditorExtensions = [
 function buttonTone(active: boolean, extraClassName = "") {
   return cn(
     "reference-menu-button",
+    "disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[#64748b] dark:disabled:hover:bg-transparent dark:disabled:hover:text-muted-foreground",
     active && "bg-[#eef2ff] text-[#4338ca] ring-1 ring-[#c7d2fe] dark:bg-blue-400/15 dark:text-blue-100 dark:ring-blue-300/20",
     extraClassName
   );
@@ -427,6 +429,26 @@ function SummaryToolbarButton({
     >
       {children}
     </button>
+  );
+}
+
+function SummaryEditorSkeleton() {
+  return (
+    <div
+      className="summary-tiptap-editor"
+      aria-busy="true"
+      aria-label="Loading summary editor"
+      role="status"
+    >
+      <div className="h-[430px] rounded-[8px] bg-white px-4 py-4 ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+        <Skeleton className="h-4 w-11/12 rounded-[4px]" />
+        <Skeleton className="mt-3 h-4 w-4/5 rounded-[4px]" />
+        <Skeleton className="mt-3 h-4 w-9/12 rounded-[4px]" />
+        <Skeleton className="mt-7 h-4 w-10/12 rounded-[4px]" />
+        <Skeleton className="mt-3 h-4 w-7/12 rounded-[4px]" />
+        <Skeleton className="mt-7 h-4 w-8/12 rounded-[4px]" />
+      </div>
+    </div>
   );
 }
 
@@ -523,6 +545,7 @@ export const SummaryEditor = forwardRef<SummaryEditorHandle, SummaryEditorProps>
       <div className="mb-2 flex flex-wrap items-center gap-1">
         <SummaryToolbarButton
           active={toolbarState.heading}
+          disabled={!editor}
           label="Heading"
           onClick={() => runCommand("heading")}
         >
@@ -530,6 +553,7 @@ export const SummaryEditor = forwardRef<SummaryEditorHandle, SummaryEditorProps>
         </SummaryToolbarButton>
         <SummaryToolbarButton
           active={toolbarState.bold}
+          disabled={!editor}
           label="Bold"
           onClick={() => runCommand("bold")}
         >
@@ -537,6 +561,7 @@ export const SummaryEditor = forwardRef<SummaryEditorHandle, SummaryEditorProps>
         </SummaryToolbarButton>
         <SummaryToolbarButton
           active={toolbarState.italic}
+          disabled={!editor}
           label="Italic"
           onClick={() => runCommand("italic")}
         >
@@ -545,6 +570,7 @@ export const SummaryEditor = forwardRef<SummaryEditorHandle, SummaryEditorProps>
         <span className="mx-1 h-5 w-px bg-[#d8dee8] dark:bg-[#263a55]" />
         <SummaryToolbarButton
           active={toolbarState.bullet}
+          disabled={!editor}
           label="Bulleted list"
           onClick={() => runCommand("bulletList")}
         >
@@ -552,6 +578,7 @@ export const SummaryEditor = forwardRef<SummaryEditorHandle, SummaryEditorProps>
         </SummaryToolbarButton>
         <SummaryToolbarButton
           active={toolbarState.numbered}
+          disabled={!editor}
           label="Numbered list"
           onClick={() => runCommand("orderedList")}
         >
@@ -559,6 +586,7 @@ export const SummaryEditor = forwardRef<SummaryEditorHandle, SummaryEditorProps>
         </SummaryToolbarButton>
         <SummaryToolbarButton
           active={toolbarState.quote}
+          disabled={!editor}
           label="Quote"
           onClick={() => runCommand("blockquote")}
         >
@@ -567,7 +595,7 @@ export const SummaryEditor = forwardRef<SummaryEditorHandle, SummaryEditorProps>
         <span className="mx-1 h-5 w-px bg-[#d8dee8] dark:bg-[#263a55]" />
         <SummaryToolbarButton
           active={toolbarState.blocker}
-          disabled={!toolbarState.canToggleBlocker}
+          disabled={!editor || !toolbarState.canToggleBlocker}
           label="Mark as blocker"
           className="w-auto gap-2 px-2.5 text-[#b42318] hover:bg-[#fff1f0] hover:text-[#b42318] disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-400/10"
           onClick={() => runCommand("blocker")}
@@ -576,12 +604,16 @@ export const SummaryEditor = forwardRef<SummaryEditorHandle, SummaryEditorProps>
           <span className="text-xs font-medium">Mark as blocker</span>
         </SummaryToolbarButton>
       </div>
-      <EditorContent
-        editor={editor}
-        className="summary-tiptap-editor"
-        role="textbox"
-        aria-label="Summary"
-      />
+      {editor ? (
+        <EditorContent
+          editor={editor}
+          className="summary-tiptap-editor"
+          role="textbox"
+          aria-label="Summary"
+        />
+      ) : (
+        <SummaryEditorSkeleton />
+      )}
     </div>
   );
 });

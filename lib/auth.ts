@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import AtlassianProvider from "next-auth/providers/atlassian";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
+import { cache } from "react";
 
 import { encryptedPrismaAdapter } from "@/lib/auth-adapter";
 import { isGenerisEmail, normalizeEmail } from "@/lib/auth-domain";
@@ -149,6 +150,4 @@ export const authOptions: NextAuthOptions = {
   }
 };
 
-export function auth() {
-  return getServerSession(authOptions);
-}
+export const auth = cache(() => getServerSession(authOptions));

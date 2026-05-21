@@ -15,6 +15,7 @@ import {
 } from "@/lib/normalizers";
 import { prisma } from "@/lib/prisma";
 import { upsertImportedActivities } from "@/lib/services/activity";
+import { getCompanySettings } from "@/lib/services/company-settings";
 
 type JiraIssue = {
   id: string;
@@ -270,11 +271,8 @@ async function listJiraComments(jira: JiraConnection, issueKey: string) {
 }
 
 async function getJiraProjectFilter() {
-  const setting = await prisma.appSetting.findUnique({ where: { key: "company" } });
-  const value = setting?.value as { jiraProjectKeys?: unknown } | undefined;
-  const keys = Array.isArray(value?.jiraProjectKeys)
-    ? (value.jiraProjectKeys as unknown[]).filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-    : [];
+  const settings = await getCompanySettings();
+  const keys = settings.jiraProjectKeys.filter((item) => item.trim().length > 0);
 
   return keys.map((key) => key.trim().toUpperCase());
 }

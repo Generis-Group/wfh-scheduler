@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import { cn, titleCase } from "@/lib/utils";
 
 type AccountUser = {
@@ -58,6 +59,10 @@ export function AccountSettings({ user }: { user: AccountUser }) {
     });
     const body = await response.json().catch(() => ({}));
 
+    if (response.ok) {
+      markServerDataStale();
+    }
+
     setProfileMessage(response.ok ? "Account details saved." : body.error ?? "Unable to save account details.");
     setIsSavingProfile(false);
   }
@@ -83,6 +88,7 @@ export function AccountSettings({ user }: { user: AccountUser }) {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      markServerDataStale();
     }
 
     setPasswordMessage(response.ok ? "Password updated." : body.error ?? "Unable to update password.");

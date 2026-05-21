@@ -22,6 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
 import { titleCase } from "@/lib/utils";
@@ -174,6 +175,7 @@ export function SettingsPanel({
 
       if (response?.ok) {
         lastSavedIntegrationSettings.current = serialized;
+        markServerDataStale();
         setIntegrationSaveStatus("saved");
         return;
       }
@@ -209,6 +211,9 @@ export function SettingsPanel({
     const body = await response.json().catch(() => ({}));
 
     setMessage(response.ok ? "Company settings saved." : body.error ?? "Unable to save company settings.");
+    if (response.ok) {
+      markServerDataStale();
+    }
     setIsSavingCompany(false);
   }
 
@@ -216,6 +221,7 @@ export function SettingsPanel({
     const response = await fetch(`/api/settings/providers/${provider}`, { method: "DELETE" });
 
     if (response.ok) {
+      markServerDataStale();
       window.location.reload();
       return;
     }

@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 
+import { Skeleton } from "@/components/ui/skeleton";
+
 export type PageLoadingKind = "daily" | "reports" | "review" | "employees" | "settings" | "account";
 
 function LoadingBar({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-full bg-[#e3e8f1] dark:bg-[#1f3047] ${className}`} />;
+  return <Skeleton className={className} />;
 }
 
 function LoadingCard({ children, className = "" }: { children?: ReactNode; className?: string }) {

@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { EmptyReferenceState, ReferenceAppShell } from "@/components/reports/reference-shell";
 import { SummaryRenderer, summaryPlainText } from "@/components/reports/summary-renderer";
+import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
 import { reportDayEnd } from "@/lib/dates";
 import { cn, titleCase } from "@/lib/utils";
@@ -379,6 +380,7 @@ export function ReportHistory({
 
     const { report: submitted } = (await response.json()) as { report: HistoryReport };
     setItems((current) => current.map((item) => (item.id === submitted.id ? submitted : item)));
+    markServerDataStale();
     setMessage("Draft submitted for review.");
     setIsSubmitting(false);
   }
@@ -409,6 +411,7 @@ export function ReportHistory({
       backToReports();
     }
     setRowMenu(null);
+    markServerDataStale();
     setMessage("Draft deleted.");
     setIsSubmitting(false);
   }

@@ -1,4 +1,5 @@
 import { assertCanAccessReport, requireRole } from "@/lib/access";
+import { revalidateReportRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
 import { getReportById, setReportReadState } from "@/lib/services/reports";
 import { reportReadStateSchema } from "@/lib/validation";
@@ -16,6 +17,7 @@ export async function PATCH(request: Request, { params }: Context) {
     const existingReport = await getReportById(params.id);
     await assertCanAccessReport(session, existingReport);
     const report = await setReportReadState(params.id, session.user.id, input.read);
+    revalidateReportRoutes();
 
     return json({ report });
   } catch (error) {

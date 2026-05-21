@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/access";
+import { revalidateAdminRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
 import { createDepartment, listDepartments } from "@/lib/services/departments";
 import { createDepartmentSchema } from "@/lib/validation";
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
     await requireRole(["ADMIN"]);
     const input = createDepartmentSchema.parse(await request.json());
     const department = await createDepartment(input.name);
+    revalidateAdminRoutes();
 
     return json({ department }, { status: 201 });
   } catch (error) {

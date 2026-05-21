@@ -164,6 +164,17 @@ function renderSummaryEditor() {
 }
 
 describe("SummaryEditor", () => {
+  test("uses a loading skeleton while the editor initializes", async () => {
+    renderSummaryEditor();
+
+    const loadingState = screen.queryByRole("status", { name: "Loading summary editor" });
+    if (loadingState) {
+      expect(loadingState.querySelector(".animate-pulse")).not.toBeNull();
+    }
+
+    await screen.findByRole("textbox", { name: "Summary" });
+  });
+
   test("updates toolbar state immediately after formatting shortcuts", async () => {
     renderSummaryEditor();
 

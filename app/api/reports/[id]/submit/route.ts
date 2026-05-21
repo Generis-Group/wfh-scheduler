@@ -1,4 +1,5 @@
 import { assertCanMutateReport, requireSession } from "@/lib/access";
+import { revalidateReportRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
 import { getReportById, submitReport } from "@/lib/services/reports";
 
@@ -15,6 +16,7 @@ export async function POST(_request: Request, { params }: Context) {
     assertCanMutateReport(session, report);
 
     const submitted = await submitReport(report.id, session.user.id);
+    revalidateReportRoutes();
 
     return json({ report: submitted });
   } catch (error) {

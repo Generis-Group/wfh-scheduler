@@ -1,4 +1,5 @@
 import { requireSession } from "@/lib/access";
+import { revalidateReportRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
 import { syncGoogleTasks } from "@/lib/services/sync";
 import { syncSchema } from "@/lib/validation";
@@ -8,6 +9,7 @@ export async function POST(request: Request) {
     const session = await requireSession();
     const input = syncSchema.parse(await request.json());
     const result = await syncGoogleTasks(session.user.id, input.date, session.user.timezone);
+    revalidateReportRoutes();
 
     return json(result);
   } catch (error) {

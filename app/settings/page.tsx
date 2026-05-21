@@ -9,6 +9,7 @@ import { listJiraResources } from "@/lib/integrations/jira";
 import { getOAuthProviderConfig } from "@/lib/oauth-config";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serializers";
+import { getCompanySettings } from "@/lib/services/company-settings";
 import { getLastReviewDigestRun, getReviewDigestEmailStatus } from "@/lib/services/email-digest";
 
 function errorMessage(error: unknown) {
@@ -54,7 +55,7 @@ export default async function SettingsPage() {
       where: { userId: session.user.id },
       select: { provider: true }
     }),
-    isReviewer ? prisma.appSetting.findUnique({ where: { key: "company" } }) : Promise.resolve(null),
+    isReviewer ? getCompanySettings() : Promise.resolve({ jiraProjectKeys: [] }),
     isReviewer ? getLastReviewDigestRun() : Promise.resolve(null)
   ]);
 
@@ -85,11 +86,6 @@ export default async function SettingsPage() {
         })
     : [];
 
-  const rawCompanySettings = companySetting?.value as { jiraProjectKeys?: unknown } | undefined;
-  const companySettings = {
-    jiraProjectKeys: Array.isArray(rawCompanySettings?.jiraProjectKeys) ? (rawCompanySettings.jiraProjectKeys as string[]) : []
-  };
-
   return (
     <ReferenceAppShell
       active="settings"
@@ -108,7 +104,7 @@ export default async function SettingsPage() {
         jiraResources={serialize(jiraResources)}
         taskLists={serialize(taskLists)}
         providerErrors={providerErrors}
-        companySettings={companySettings}
+        companySettings={companySetting}
         canManageCompanySettings={session.user.role === "ADMIN"}
         viewerKind={isReviewer ? "admin" : "employee"}
         emailStatus={isReviewer ? getReviewDigestEmailStatus() : undefined}

@@ -1,4 +1,5 @@
 import { assertCanAccessUserData, requireSession } from "@/lib/access";
+import { revalidateReportRoutes } from "@/lib/cache-invalidation";
 import { ensureDailyReport, getDailyReport, getReviewDashboardData, updateReport } from "@/lib/services/reports";
 import { handleRouteError, HttpError, json } from "@/lib/http";
 import { createReportSchema, reportQuerySchema } from "@/lib/validation";
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
     const input = createReportSchema.parse(await request.json());
     const report = await ensureDailyReport(session.user.id, input.date);
     const updated = await updateReport(report.id, session.user.id, input);
+    revalidateReportRoutes();
 
     return json({ report: updated }, { status: 201 });
   } catch (error) {

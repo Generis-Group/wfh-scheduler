@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { markServerDataStale } from "@/lib/client-cache-invalidation";
 
 export function ChangePasswordForm() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -38,6 +39,7 @@ export function ChangePasswordForm() {
       return;
     }
 
+    markServerDataStale();
     window.location.href = "/";
   }
 

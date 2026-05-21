@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+  unstable_cache: (callback: unknown) => callback
+}));
+
 vi.mock("@/lib/access", () => ({
   requireSession: vi.fn(async () => ({
     user: {

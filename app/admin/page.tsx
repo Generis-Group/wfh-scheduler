@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serializers";
 import { adminUserSelect } from "@/lib/services/admin";
+import { getCompanySettings } from "@/lib/services/company-settings";
 import { listDepartments } from "@/lib/services/departments";
 
 export default async function AdminPage() {
@@ -27,22 +28,14 @@ export default async function AdminPage() {
     redirect("/");
   }
 
-  const [users, departments, setting] = await Promise.all([
+  const [users, departments, initialSettings] = await Promise.all([
     prisma.user.findMany({
       orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
       select: adminUserSelect
     }),
     listDepartments(),
-    prisma.appSetting.findUnique({ where: { key: "company" } })
+    getCompanySettings()
   ]);
-  const rawSettings = setting?.value as
-    | {
-        jiraProjectKeys?: unknown;
-      }
-    | undefined;
-  const initialSettings = {
-    jiraProjectKeys: Array.isArray(rawSettings?.jiraProjectKeys) ? (rawSettings.jiraProjectKeys as string[]) : []
-  };
 
   return (
     <ReferenceAppShell

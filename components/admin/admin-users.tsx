@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { markServerDataStale } from "@/lib/client-cache-invalidation";
 
 type User = {
   id: string;
@@ -77,6 +78,7 @@ export function AdminUsers({
     }
 
     setUsers((current) => [...current, data.user]);
+    markServerDataStale();
     setName("");
     setEmail("");
     setRole("EMPLOYEE");
@@ -108,6 +110,7 @@ export function AdminUsers({
     }
 
     setUsers((current) => current.map((item) => (item.id === user.id ? data.user : item)));
+    markServerDataStale();
     return true;
   }
 
@@ -132,6 +135,7 @@ export function AdminUsers({
     }
 
     setDepartments((current) => [...current, data.department].sort((left, right) => left.name.localeCompare(right.name)));
+    markServerDataStale();
     setNewDepartmentName("");
     setMessage("Department created.");
   }
@@ -194,6 +198,7 @@ export function AdminUsers({
 
     if (response.ok) {
       setTemporaryCredentials({ email: user.email ?? "", password: data.temporaryPassword });
+      markServerDataStale();
       setMessage("Temporary password created.");
     }
   }
@@ -215,6 +220,7 @@ export function AdminUsers({
     });
 
     if (response.ok) {
+      markServerDataStale();
       setMessage("Company settings saved.");
     }
   }

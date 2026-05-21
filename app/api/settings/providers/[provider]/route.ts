@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { requireSession } from "@/lib/access";
+import { revalidateSettingsRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 
@@ -23,6 +24,7 @@ export async function DELETE(_request: Request, { params }: Context) {
         provider
       }
     });
+    revalidateSettingsRoutes();
 
     return json({ disconnected: provider });
   } catch (error) {

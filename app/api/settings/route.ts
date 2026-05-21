@@ -1,4 +1,5 @@
 import { requireSession } from "@/lib/access";
+import { revalidateSettingsRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { userIntegrationSettingsSchema } from "@/lib/validation";
@@ -32,6 +33,7 @@ export async function PATCH(request: Request) {
         jiraCloudId: input.jiraCloudId ?? null
       }
     });
+    revalidateSettingsRoutes();
 
     return json({ settings });
   } catch (error) {
