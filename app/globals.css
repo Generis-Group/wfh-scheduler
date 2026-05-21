@@ -171,6 +171,10 @@
     @apply rounded-[7px] bg-[#f7f9fc] dark:bg-[#0b1523];
   }
 
+  .reference-content-scroll {
+    scrollbar-gutter: stable;
+  }
+
   html[data-sidebar-collapsed="true"] .reference-app-shell {
     grid-template-columns: 64px minmax(0, 1fr);
   }
@@ -281,8 +285,13 @@
   }
 
   .summary-blocker-highlight {
-    background-image: repeating-linear-gradient(135deg, #fff1f2 0, #fff1f2 6px, #fee2e2 6px, #fee2e2 10px);
+    background-image: repeating-linear-gradient(
+      135deg,
+      #fff1f2 0,
+      #fff1f2 6px,
+      #fee2e2 6px,
+      #fee2e2 10px
+    );
     @apply rounded-[4px] px-0.5 text-[#7f1d1d] ring-1 ring-[#fecaca] dark:text-red-100 dark:ring-red-300/20;
   }
-
 }

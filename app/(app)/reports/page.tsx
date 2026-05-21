@@ -29,12 +29,7 @@ export default async function ReportsPage() {
   return (
     <ReportHistory
       reports={serialize(reports)}
-      userName={session.user.name ?? session.user.email}
-      userEmail={session.user.email}
-      userRole="Employee"
-      userStatus={session.user.status}
       timezone={session.user.timezone}
-      mustChangePassword={session.user.mustChangePassword}
     />
   );
 }

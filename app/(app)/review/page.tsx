@@ -7,7 +7,7 @@ import { serialize } from "@/lib/serializers";
 import { getReviewDashboardData } from "@/lib/services/reports";
 
 export default async function ReviewPage({
-  searchParams
+  searchParams,
 }: {
   searchParams?: {
     date?: string;
@@ -40,12 +40,6 @@ export default async function ReviewPage({
       rows={serialize(rows)}
       metrics={serialize(metrics)}
       date={date}
-      userName={session.user.name ?? session.user.email}
-      userEmail={session.user.email}
-      userRole={session.user.role === "ADMIN" ? "Admin" : "Reviewer"}
-      userStatus={session.user.status}
-      timezone={session.user.timezone}
-      mustChangePassword={session.user.mustChangePassword}
       reviewerId={session.user.id}
     />
   );

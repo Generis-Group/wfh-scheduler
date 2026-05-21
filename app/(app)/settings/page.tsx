@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import type { tasks_v1 } from "googleapis";
 
-import { ReferenceAppShell } from "@/components/reports/reference-shell";
 import { SettingsPanel } from "@/components/settings/settings-panel";
 import { auth } from "@/lib/auth";
 import { getGoogleServices } from "@/lib/integrations/google";
@@ -10,10 +9,15 @@ import { getOAuthProviderConfig } from "@/lib/oauth-config";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serializers";
 import { getCompanySettings } from "@/lib/services/company-settings";
-import { getLastReviewDigestRun, getReviewDigestEmailStatus } from "@/lib/services/email-digest";
+import {
+  getLastReviewDigestRun,
+  getReviewDigestEmailStatus,
+} from "@/lib/services/email-digest";
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Unable to load provider settings.";
+  return error instanceof Error
+    ? error.message
+    : "Unable to load provider settings.";
 }
 
 async function listAllGoogleTaskLists(tasks: tasks_v1.Tasks) {
@@ -44,24 +48,27 @@ export default async function SettingsPage() {
     redirect("/change-password");
   }
 
-  const isReviewer = session.user.role === "REVIEWER" || session.user.role === "ADMIN";
+  const isReviewer =
+    session.user.role === "REVIEWER" || session.user.role === "ADMIN";
   const [settings, accounts, companySetting, lastEmailRun] = await Promise.all([
     prisma.userIntegrationSettings.upsert({
       where: { userId: session.user.id },
       update: {},
-      create: { userId: session.user.id, googleTaskListIds: [] }
+      create: { userId: session.user.id, googleTaskListIds: [] },
     }),
     prisma.account.findMany({
       where: { userId: session.user.id },
-      select: { provider: true }
+      select: { provider: true },
     }),
-    isReviewer ? getCompanySettings() : Promise.resolve({ jiraProjectKeys: [] }),
-    isReviewer ? getLastReviewDigestRun() : Promise.resolve(null)
+    isReviewer
+      ? getCompanySettings()
+      : Promise.resolve({ jiraProjectKeys: [] }),
+    isReviewer ? getLastReviewDigestRun() : Promise.resolve(null),
   ]);
 
   const connected = {
     google: accounts.some((account) => account.provider === "google"),
-    atlassian: accounts.some((account) => account.provider === "atlassian")
+    atlassian: accounts.some((account) => account.provider === "atlassian"),
   };
   const oauthConfig = getOAuthProviderConfig();
   const providerErrors: { google?: string; atlassian?: string } = {};
@@ -78,7 +85,10 @@ export default async function SettingsPage() {
         .then((items) =>
           items
             .filter((item) => item.id)
-            .map((item) => ({ id: item.id!, title: item.title ?? "Untitled task list" }))
+            .map((item) => ({
+              id: item.id!,
+              title: item.title ?? "Untitled task list",
+            })),
         )
         .catch((error) => {
           providerErrors.google = errorMessage(error);
@@ -87,29 +97,18 @@ export default async function SettingsPage() {
     : [];
 
   return (
-    <ReferenceAppShell
-      active="settings"
-      variant={isReviewer ? "admin" : "employee"}
-      userName={session.user.name ?? session.user.email}
-      userEmail={session.user.email}
-      userRole={session.user.role === "ADMIN" ? "Admin" : isReviewer ? "Reviewer" : "Employee"}
-      userStatus={session.user.status}
-      timezone={session.user.timezone}
-      mustChangePassword={session.user.mustChangePassword}
-    >
-      <SettingsPanel
-        connected={connected}
-        oauthConfig={oauthConfig}
-        initialSettings={serialize(settings)}
-        jiraResources={serialize(jiraResources)}
-        taskLists={serialize(taskLists)}
-        providerErrors={providerErrors}
-        companySettings={companySetting}
-        canManageCompanySettings={session.user.role === "ADMIN"}
-        viewerKind={isReviewer ? "admin" : "employee"}
-        emailStatus={isReviewer ? getReviewDigestEmailStatus() : undefined}
-        lastEmailRun={serialize(lastEmailRun)}
-      />
-    </ReferenceAppShell>
+    <SettingsPanel
+      connected={connected}
+      oauthConfig={oauthConfig}
+      initialSettings={serialize(settings)}
+      jiraResources={serialize(jiraResources)}
+      taskLists={serialize(taskLists)}
+      providerErrors={providerErrors}
+      companySettings={companySetting}
+      canManageCompanySettings={session.user.role === "ADMIN"}
+      viewerKind={isReviewer ? "admin" : "employee"}
+      emailStatus={isReviewer ? getReviewDigestEmailStatus() : undefined}
+      lastEmailRun={serialize(lastEmailRun)}
+    />
   );
 }

@@ -9,7 +9,7 @@ import { serialize } from "@/lib/serializers";
 import { getDailyReportEditorData } from "@/lib/services/reports";
 
 export default async function HomePage({
-  searchParams
+  searchParams,
 }: {
   searchParams?: {
     date?: string;
@@ -38,8 +38,8 @@ export default async function HomePage({
     getDailyReportEditorData(session.user.id, date),
     prisma.account.findMany({
       where: { userId: session.user.id },
-      select: { provider: true }
-    })
+      select: { provider: true },
+    }),
   ]);
 
   const initialReport = report
@@ -55,22 +55,16 @@ export default async function HomePage({
         updatedAt: null,
         activities: serialize(activities),
         comments: [],
-        revisions: []
+        revisions: [],
       };
 
   return (
     <DailyReportApp
       initialReport={initialReport}
       date={date}
-      userName={session.user.name ?? session.user.email}
-      userEmail={session.user.email}
-      userRole="Employee"
-      userStatus={session.user.status}
-      timezone={session.user.timezone}
-      mustChangePassword={session.user.mustChangePassword}
       integrationStatus={{
         google: accounts.some((account) => account.provider === "google"),
-        atlassian: accounts.some((account) => account.provider === "atlassian")
+        atlassian: accounts.some((account) => account.provider === "atlassian"),
       }}
       oauthConfig={getOAuthProviderConfig()}
     />

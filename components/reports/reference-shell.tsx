@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ElementType, MouseEvent, ReactNode } from "react";
 import {
   BarChart3,
@@ -25,7 +25,6 @@ import {
   loadingKindFromHref,
 } from "@/components/reports/page-loading-skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   getFreshServerDataVersion,
   getServerDataVersion,
@@ -59,46 +58,39 @@ const adminNav: NavItem[] = [
 
 export function ReferenceAppShell({
   children,
-  active,
   variant,
-  userName,
+  displayName,
   userEmail,
   userRole,
   userStatus,
   timezone,
   mustChangePassword,
-  currentReportDate,
-  loading = false,
 }: {
   children: ReactNode;
-  active: string;
   variant: "employee" | "admin";
-  userName?: string | null;
+  displayName: string;
   userEmail?: string | null;
-  userRole?: string | null;
-  userStatus?: string | null;
-  timezone?: string | null;
-  mustChangePassword?: boolean;
-  currentReportDate?: string | null;
-  loading?: boolean;
+  userRole: string;
+  userStatus: string;
+  timezone: string;
+  mustChangePassword: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const nav = variant === "admin" ? adminNav : employeeNav;
-  const displayName =
-    userName || (variant === "admin" ? "Admin User" : "Employee User");
-  const displayEmail = userEmail ?? (userName?.includes("@") ? userName : null);
+  const active = activeNavKey(pathname);
+  const displayEmail =
+    userEmail ?? (displayName.includes("@") ? displayName : null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
-  const [lastReportDate, setLastReportDate] = useState<string | null>(
-    currentReportDate ?? null,
-  );
+  const [lastReportDate, setLastReportDate] = useState<string | null>(null);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [optimisticActive, setOptimisticActive] = useState(active);
   const [serverDataVersion, setServerDataVersion] = useState(0);
   const [freshServerDataVersion, setFreshServerDataVersion] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const contentScrollRef = useRef<HTMLDivElement | null>(null);
   const settingsHref = "/settings";
   const currentHref = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
   const logoHref = variant === "admin" ? "/review" : "/";
@@ -119,21 +111,25 @@ export function ReferenceAppShell({
       return;
     }
 
-    if (currentReportDate) {
-      window.localStorage.setItem("generis.lastReportDate", currentReportDate);
-      setLastReportDate(currentReportDate);
-      return;
+    const routeReportDate = pathname === "/" ? searchParams?.get("date") : null;
+    const storedDate = window.localStorage.getItem("generis.lastReportDate");
+    const nextReportDate = resolveLastReportDate(
+      pathname,
+      routeReportDate,
+      storedDate,
+    );
+
+    if (routeReportDate) {
+      window.localStorage.setItem("generis.lastReportDate", routeReportDate);
     }
 
-    const storedDate = window.localStorage.getItem("generis.lastReportDate");
-    if (storedDate) {
-      setLastReportDate(storedDate);
-    }
-  }, [currentReportDate, variant]);
+    setLastReportDate(nextReportDate);
+  }, [pathname, searchParams, variant]);
 
   useEffect(() => {
     setPendingHref(null);
     setOptimisticActive(active);
+    resetContentScroll(contentScrollRef.current);
   }, [active, pathname, searchParams]);
 
   useEffect(() => {
@@ -208,6 +204,7 @@ export function ReferenceAppShell({
         }
 
         setPendingHref(href);
+        resetContentScroll(contentScrollRef.current);
         if (activeKey) {
           setOptimisticActive(activeKey);
         }
@@ -239,7 +236,7 @@ export function ReferenceAppShell({
   return (
     <div
       className={cn(
-        "reference-app-shell min-h-screen bg-[#f4f7fb] text-[#0f172a] dark:bg-background dark:text-foreground lg:grid lg:transition-[grid-template-columns] lg:duration-200",
+        "reference-app-shell min-h-screen bg-[#f4f7fb] text-[#0f172a] dark:bg-background dark:text-foreground lg:grid lg:h-screen lg:overflow-hidden lg:transition-[grid-template-columns] lg:duration-200",
         sidebarCollapsed
           ? "lg:grid-cols-[64px_minmax(0,1fr)]"
           : "lg:grid-cols-[176px_minmax(0,1fr)]",
@@ -341,8 +338,8 @@ export function ReferenceAppShell({
           })}
         </nav>
       </aside>
-      <div className="min-w-0">
-        <header className="sticky top-0 z-20 bg-white/92 shadow-[0_1px_0_rgba(15,23,42,0.05)] backdrop-blur-xl dark:bg-[#0b1422]/94 dark:shadow-[0_1px_0_rgba(255,255,255,0.05)]">
+      <div className="flex min-w-0 flex-col lg:h-screen lg:min-h-0">
+        <header className="sticky top-0 z-20 shrink-0 bg-white/92 shadow-[0_1px_0_rgba(15,23,42,0.05)] backdrop-blur-xl dark:bg-[#0b1422]/94 dark:shadow-[0_1px_0_rgba(255,255,255,0.05)]">
           <div className="flex h-12 w-full items-center justify-between gap-3 px-[clamp(14px,1.7vw,26px)] lg:justify-end">
             <div className="flex h-full min-w-0 items-center gap-[clamp(16px,2.2vw,34px)] lg:hidden">
               <Link
@@ -397,22 +394,13 @@ export function ReferenceAppShell({
                 }}
                 aria-expanded={profileOpen}
                 aria-haspopup="menu"
-                disabled={loading}
               >
-                {loading ? (
-                  <Skeleton className="h-8 w-8 rounded-full" />
-                ) : (
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1d4ed8] text-xs font-semibold text-white shadow-[0_8px_18px_rgba(29,78,216,0.22)] dark:bg-[#1d4ed8]">
-                    {initials(displayName)}
-                  </div>
-                )}
-                {loading ? (
-                  <Skeleton className="hidden h-4 w-28 rounded-[4px] sm:block" />
-                ) : (
-                  <div className="hidden max-w-[200px] truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0] sm:block">
-                    {displayName}
-                  </div>
-                )}
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1d4ed8] text-xs font-semibold text-white shadow-[0_8px_18px_rgba(29,78,216,0.22)] dark:bg-[#1d4ed8]">
+                  {initials(displayName)}
+                </div>
+                <div className="hidden max-w-[200px] truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0] sm:block">
+                  {displayName}
+                </div>
                 <ChevronDown
                   className={cn(
                     "h-4 w-4 text-[#64748b] transition-transform dark:text-[#94a3b8]",
@@ -520,13 +508,18 @@ export function ReferenceAppShell({
             })}
           </nav>
         </header>
-        {pendingHref ? (
-          <PageLoadingSkeleton
-            kind={loadingKindFromHref(pendingHref, variant)}
-          />
-        ) : (
-          children
-        )}
+        <div
+          ref={contentScrollRef}
+          className="reference-content-scroll min-w-0 flex-1 lg:min-h-0 lg:overflow-y-auto"
+        >
+          {pendingHref ? (
+            <PageLoadingSkeleton
+              kind={loadingKindFromHref(pendingHref, variant)}
+            />
+          ) : (
+            children
+          )}
+        </div>
       </div>
     </div>
   );
@@ -551,6 +544,52 @@ function getNavHref(item: NavItem, lastReportDate?: string | null) {
   }
 
   return item.href;
+}
+
+function resetContentScroll(element: HTMLDivElement | null) {
+  element?.scrollTo({ left: 0, top: 0 });
+}
+
+export function activeNavKey(pathname: string | null) {
+  const path = pathname || "/";
+
+  if (path === "/" || path === "") {
+    return "report";
+  }
+
+  if (path.startsWith("/reports") || path.startsWith("/history")) {
+    return "reports";
+  }
+
+  if (path.startsWith("/review") || path.startsWith("/coo")) {
+    return "review";
+  }
+
+  if (path.startsWith("/admin")) {
+    return "employees";
+  }
+
+  if (path.startsWith("/settings")) {
+    return "settings";
+  }
+
+  if (path.startsWith("/account")) {
+    return "account";
+  }
+
+  return "report";
+}
+
+export function resolveLastReportDate(
+  pathname: string | null,
+  routeReportDate?: string | null,
+  storedReportDate?: string | null,
+) {
+  if ((pathname || "/") === "/" && routeReportDate) {
+    return routeReportDate;
+  }
+
+  return storedReportDate ?? null;
 }
 
 export function ReferencePanel({

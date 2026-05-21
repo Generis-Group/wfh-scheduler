@@ -1,38 +1,54 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { mockRouterPush, mockSignIn } = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
-  mockSignIn: vi.fn()
+  mockSignIn: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: mockRouterPush,
-    prefetch: vi.fn()
+    prefetch: vi.fn(),
   }),
   usePathname: () => "/",
-  useSearchParams: () => new URLSearchParams()
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("next-auth/react", () => ({
   signIn: mockSignIn,
-  signOut: vi.fn()
+  signOut: vi.fn(),
 }));
 
 vi.mock("next/image", async () => {
   const ReactModule = await vi.importActual<typeof import("react")>("react");
 
   return {
-    default: ({ src, alt, priority: _priority, ...props }: { src: string | { src: string }; alt: string; priority?: boolean }) =>
+    default: ({
+      src,
+      alt,
+      priority: _priority,
+      ...props
+    }: {
+      src: string | { src: string };
+      alt: string;
+      priority?: boolean;
+    }) =>
       ReactModule.createElement("img", {
         ...props,
         src: typeof src === "string" ? src : src.src,
-        alt
-      })
+        alt,
+      }),
   };
 });
 
@@ -40,7 +56,8 @@ vi.mock("@/components/theme-toggle", async () => {
   const ReactModule = await vi.importActual<typeof import("react")>("react");
 
   return {
-    ThemeToggle: () => ReactModule.createElement("button", { type: "button" }, "Theme")
+    ThemeToggle: () =>
+      ReactModule.createElement("button", { type: "button" }, "Theme"),
   };
 });
 
@@ -54,16 +71,19 @@ vi.mock("@/components/reports/summary-editor", async () => {
         initialSummary,
         initialBlockers,
         resetKey,
-        onChange
+        onChange,
       }: {
         initialSummary: string;
         initialBlockers: string;
         resetKey: string;
         onChange: (snapshot: Snapshot) => void;
       },
-      ref
+      ref,
     ) {
-      const [snapshot, setSnapshot] = ReactModule.useState<Snapshot>({ summary: initialSummary, blockers: initialBlockers });
+      const [snapshot, setSnapshot] = ReactModule.useState<Snapshot>({
+        summary: initialSummary,
+        blockers: initialBlockers,
+      });
       const snapshotRef = ReactModule.useRef(snapshot);
       const onChangeRef = ReactModule.useRef(onChange);
 
@@ -84,7 +104,7 @@ vi.mock("@/components/reports/summary-editor", async () => {
           snapshotRef.current = next;
           setSnapshot(next);
           onChangeRef.current(next);
-        }
+        },
       }));
 
       return ReactModule.createElement("textarea", {
@@ -95,9 +115,9 @@ vi.mock("@/components/reports/summary-editor", async () => {
           snapshotRef.current = next;
           setSnapshot(next);
           onChangeRef.current(next);
-        }
+        },
       });
-    })
+    }),
   };
 });
 
@@ -115,19 +135,19 @@ const emptyReport: DailyReportProps["initialReport"] = {
   submittedAt: null,
   updatedAt: null,
   activities: [],
-  revisions: []
+  revisions: [],
 };
 
 const savedDraft: DailyReportProps["initialReport"] = {
   ...emptyReport,
   id: "report-1",
-  updatedAt: "2026-05-20T14:00:00.000Z"
+  updatedAt: "2026-05-20T14:00:00.000Z",
 };
 
 const submittedReport: DailyReportProps["initialReport"] = {
   ...savedDraft,
   status: "SUBMITTED" as const,
-  submittedAt: "2026-05-20T14:10:00.000Z"
+  submittedAt: "2026-05-20T14:10:00.000Z",
 };
 
 const importedTask: DailyReportProps["initialReport"]["activities"][number] = {
@@ -140,22 +160,19 @@ const importedTask: DailyReportProps["initialReport"]["activities"][number] = {
   startedAt: "2026-05-20T14:00:00.000Z",
   durationMinutes: null,
   selected: true,
-  employeeNote: null
+  employeeNote: null,
 };
 
-function renderDailyReportApp(initialReport: DailyReportProps["initialReport"] = emptyReport) {
+function renderDailyReportApp(
+  initialReport: DailyReportProps["initialReport"] = emptyReport,
+) {
   return render(
     <DailyReportApp
       initialReport={initialReport}
       date="2026-05-20"
-      userName="Employee"
-      userEmail="employee@generisgp.com"
-      userRole="Employee"
-      userStatus="ACTIVE"
-      timezone="America/Toronto"
       integrationStatus={{ google: true, atlassian: false }}
       oauthConfig={{ google: true, atlassian: false }}
-    />
+    />,
   );
 }
 
@@ -192,7 +209,10 @@ describe("DailyReportApp auto-draft", () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === "/api/reports") {
-        return Response.json({ report: { ...savedDraft, summary: "Finished the rollout note" } }, { status: 201 });
+        return Response.json(
+          { report: { ...savedDraft, summary: "Finished the rollout note" } },
+          { status: 201 },
+        );
       }
 
       return Response.json({ error: "Unexpected request." }, { status: 500 });
@@ -203,15 +223,17 @@ describe("DailyReportApp auto-draft", () => {
 
     expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), { target: { value: "Finished the rollout note" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
+      target: { value: "Finished the rollout note" },
+    });
     await advanceAutoSave();
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/reports",
       expect.objectContaining({
         method: "POST",
-        body: expect.stringContaining("Finished the rollout note")
-      })
+        body: expect.stringContaining("Finished the rollout note"),
+      }),
     );
     expect(screen.getByText("Saved")).toBeTruthy();
   });
@@ -222,11 +244,19 @@ describe("DailyReportApp auto-draft", () => {
       const url = String(input);
 
       if (url.includes("/api/sync/google-tasks")) {
-        return Response.json({ importedCount: 1, skippedCount: 0, staleCount: 0, activities: [importedTask] });
+        return Response.json({
+          importedCount: 1,
+          skippedCount: 0,
+          staleCount: 0,
+          activities: [importedTask],
+        });
       }
 
       if (url === "/api/reports") {
-        return Response.json({ report: { ...savedDraft, activities: [importedTask] } }, { status: 201 });
+        return Response.json(
+          { report: { ...savedDraft, activities: [importedTask] } },
+          { status: 201 },
+        );
       }
 
       return Response.json({ error: "Unexpected request." }, { status: 500 });
@@ -246,15 +276,25 @@ describe("DailyReportApp auto-draft", () => {
       "/api/reports",
       expect.objectContaining({
         method: "POST",
-        body: expect.stringContaining("task-1")
-      })
+        body: expect.stringContaining("task-1"),
+      }),
     );
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/activity"))).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/api/activity"),
+      ),
+    ).toBe(false);
   });
 
   it("coalesces rapid edits into one debounced save", async () => {
     vi.useFakeTimers();
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({ report: { ...savedDraft, summary: "Second edit" } }, { status: 201 }));
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json(
+          { report: { ...savedDraft, summary: "Second edit" } },
+          { status: 201 },
+        ),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     renderDailyReportApp();
@@ -268,7 +308,9 @@ describe("DailyReportApp auto-draft", () => {
     await advanceAutoSave();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ body: expect.stringContaining("Second edit") }));
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ body: expect.stringContaining("Second edit") }),
+    );
   });
 
   it("queues a follow-up save when edits happen during an in-flight save", async () => {
@@ -286,7 +328,9 @@ describe("DailyReportApp auto-draft", () => {
         return secondSave.promise;
       }
 
-      return Promise.resolve(Response.json({ error: "Unexpected request." }, { status: 500 }));
+      return Promise.resolve(
+        Response.json({ error: "Unexpected request." }, { status: 500 }),
+      );
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -297,24 +341,41 @@ describe("DailyReportApp auto-draft", () => {
     await advanceAutoSave();
     fireEvent.change(summaryBox, { target: { value: "Second edit" } });
 
-    firstSave.resolve(Response.json({ report: { ...savedDraft, summary: "First edit" } }, { status: 201 }));
+    firstSave.resolve(
+      Response.json(
+        { report: { ...savedDraft, summary: "First edit" } },
+        { status: 201 },
+      ),
+    );
     await flushReact();
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/reports/report-1", expect.objectContaining({ method: "PUT" }));
-    secondSave.resolve(Response.json({ report: { ...savedDraft, summary: "Second edit" } }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/reports/report-1",
+      expect.objectContaining({ method: "PUT" }),
+    );
+    secondSave.resolve(
+      Response.json({ report: { ...savedDraft, summary: "Second edit" } }),
+    );
     await flushReact();
 
-    expect((screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement).value).toBe("Second edit");
+    expect(
+      (screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement)
+        .value,
+    ).toBe("Second edit");
   });
 
   it("blocks date navigation when the autosave flush fails", async () => {
     vi.useFakeTimers();
-    const fetchMock = vi.fn(async () => Response.json({ error: "Nope" }, { status: 500 }));
+    const fetchMock = vi.fn(async () =>
+      Response.json({ error: "Nope" }, { status: 500 }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     renderDailyReportApp();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), { target: { value: "Needs saving" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
+      target: { value: "Needs saving" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Next day" }));
 
     await flushReact();
@@ -343,8 +404,14 @@ describe("DailyReportApp auto-draft", () => {
     fireEvent.click(screen.getByRole("button", { name: "Submit update" }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith("/api/reports", expect.objectContaining({ method: "POST" }));
-      expect(fetchMock).toHaveBeenCalledWith("/api/reports/report-1/submit", expect.objectContaining({ method: "POST" }));
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports/report-1/submit",
+        expect.objectContaining({ method: "POST" }),
+      );
     });
     expect(await screen.findByText("Submitted")).toBeTruthy();
   });
@@ -353,7 +420,9 @@ describe("DailyReportApp auto-draft", () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input) === "/api/reports/report-1") {
-        return Response.json({ report: { ...submittedReport, summary: "Submitted edit" } });
+        return Response.json({
+          report: { ...submittedReport, summary: "Submitted edit" },
+        });
       }
 
       return Response.json({ error: "Unexpected request." }, { status: 500 });
@@ -363,26 +432,39 @@ describe("DailyReportApp auto-draft", () => {
     renderDailyReportApp(submittedReport);
 
     expect(screen.queryByRole("button", { name: "Submit update" })).toBeNull();
-    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), { target: { value: "Submitted edit" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
+      target: { value: "Submitted edit" },
+    });
     await advanceAutoSave();
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/reports/report-1", expect.objectContaining({ method: "PUT" }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/reports/report-1",
+      expect.objectContaining({ method: "PUT" }),
+    );
   });
 
   it("deletes a draft without immediately recreating it", async () => {
     vi.useFakeTimers();
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "/api/reports/report-1" && init?.method === "DELETE") {
-        return Response.json({ ok: true });
-      }
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (
+          String(input) === "/api/reports/report-1" &&
+          init?.method === "DELETE"
+        ) {
+          return Response.json({ ok: true });
+        }
 
-      if (String(input) === "/api/reports") {
-        return Response.json({ report: { ...savedDraft, summary: "Fresh draft" } }, { status: 201 });
-      }
+        if (String(input) === "/api/reports") {
+          return Response.json(
+            { report: { ...savedDraft, summary: "Fresh draft" } },
+            { status: 201 },
+          );
+        }
 
-      return Response.json({ error: "Unexpected request." }, { status: 500 });
-    });
+        return Response.json({ error: "Unexpected request." }, { status: 500 });
+      },
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     renderDailyReportApp(savedDraft);
@@ -391,11 +473,20 @@ describe("DailyReportApp auto-draft", () => {
 
     await flushReact();
     expect(screen.getByText("Draft deleted.")).toBeTruthy();
-    expect(fetchMock.mock.calls.filter(([input]) => String(input) === "/api/reports")).toHaveLength(0);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => String(input) === "/api/reports",
+      ),
+    ).toHaveLength(0);
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), { target: { value: "Fresh draft" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
+      target: { value: "Fresh draft" },
+    });
     await advanceAutoSave();
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/reports", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/reports",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });

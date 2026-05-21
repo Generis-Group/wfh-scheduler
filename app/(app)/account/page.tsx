@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 
 import { AccountSettings } from "@/components/account/account-settings";
-import { ReferenceAppShell } from "@/components/reports/reference-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serializers";
@@ -31,34 +30,21 @@ export default async function AccountPage() {
       status: true,
       timezone: true,
       mustChangePassword: true,
-      passwordHash: true
-    }
+      passwordHash: true,
+    },
   });
 
   if (!user) {
     redirect("/login");
   }
 
-  const isReviewer = user.role === "REVIEWER" || user.role === "ADMIN";
-
   return (
-    <ReferenceAppShell
-      active="account"
-      variant={isReviewer ? "admin" : "employee"}
-      userName={user.name ?? user.email}
-      userEmail={user.email}
-      userRole={user.role === "ADMIN" ? "Admin" : isReviewer ? "Reviewer" : "Employee"}
-      userStatus={user.status}
-      timezone={user.timezone}
-      mustChangePassword={user.mustChangePassword}
-    >
-      <AccountSettings
-        user={serialize({
-          ...user,
-          passwordHash: undefined,
-          hasPassword: Boolean(user.passwordHash)
-        })}
-      />
-    </ReferenceAppShell>
+    <AccountSettings
+      user={serialize({
+        ...user,
+        passwordHash: undefined,
+        hasPassword: Boolean(user.passwordHash),
+      })}
+    />
   );
 }

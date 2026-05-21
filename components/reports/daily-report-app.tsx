@@ -21,19 +21,33 @@ import {
   Search,
   Send,
   Trash2,
-  X
+  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { EmptyReferenceState, ReferenceAppShell, ReferenceBadge } from "@/components/reports/reference-shell";
-import { SummaryEditor, type SummaryEditorHandle, type SummarySnapshot } from "@/components/reports/summary-editor";
+import {
+  EmptyReferenceState,
+  ReferenceBadge,
+} from "@/components/reports/reference-shell";
+import {
+  SummaryEditor,
+  type SummaryEditorHandle,
+  type SummarySnapshot,
+} from "@/components/reports/summary-editor";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
-import { markServerDataStale, refreshStaleServerData } from "@/lib/client-cache-invalidation";
+import {
+  markServerDataStale,
+  refreshStaleServerData,
+} from "@/lib/client-cache-invalidation";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
-import { extractBlockerLines, stripLegacyBlockerPrefixes, uniqueLines } from "@/lib/summary-format";
+import {
+  extractBlockerLines,
+  stripLegacyBlockerPrefixes,
+  uniqueLines,
+} from "@/lib/summary-format";
 import { cn } from "@/lib/utils";
 
 type ActivitySource = "JIRA" | "GOOGLE_CALENDAR" | "GOOGLE_TASKS" | "MANUAL";
@@ -54,7 +68,13 @@ type Activity = {
 type Report = {
   id: string;
   reportDate: string | Date;
-  workLocation: "OFFICE" | "WFH" | "HYBRID" | "PTO" | "OUT_OF_OFFICE" | "UNKNOWN";
+  workLocation:
+    | "OFFICE"
+    | "WFH"
+    | "HYBRID"
+    | "PTO"
+    | "OUT_OF_OFFICE"
+    | "UNKNOWN";
   summary: string;
   blockers: string;
   status: "DRAFT" | "SUBMITTED";
@@ -75,20 +95,20 @@ const sourceLabels: Record<ActivitySource, string> = {
   JIRA: "Jira",
   GOOGLE_CALENDAR: "Google Calendar",
   GOOGLE_TASKS: "Google Tasks",
-  MANUAL: "Manual"
+  MANUAL: "Manual",
 };
 
 const sourceStyles: Record<ActivitySource, string> = {
   JIRA: "bg-[#2563eb]",
   GOOGLE_CALENDAR: "bg-[#facc15]",
   GOOGLE_TASKS: "bg-white border border-[#2563eb] dark:bg-[#0b1523]",
-  MANUAL: "bg-white border border-[#2563eb] dark:bg-[#0b1523]"
+  MANUAL: "bg-white border border-[#2563eb] dark:bg-[#0b1523]",
 };
 
 const syncProviderLabels = {
   jira: "Jira",
   "google-calendar": "Calendar",
-  "google-tasks": "Tasks"
+  "google-tasks": "Tasks",
 } as const;
 
 const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
@@ -97,7 +117,7 @@ const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
   { value: "WFH", label: "WFH" },
   { value: "HYBRID", label: "Hybrid" },
   { value: "PTO", label: "PTO" },
-  { value: "OUT_OF_OFFICE", label: "Out of office" }
+  { value: "OUT_OF_OFFICE", label: "Out of office" },
 ];
 
 const activityPageSize = 5;
@@ -108,14 +128,18 @@ type SyncProviderKey = keyof typeof syncProviderLabels;
 const syncProviderSources: Record<SyncProviderKey, ActivitySource> = {
   jira: "JIRA",
   "google-calendar": "GOOGLE_CALENDAR",
-  "google-tasks": "GOOGLE_TASKS"
+  "google-tasks": "GOOGLE_TASKS",
 };
 
 type ReportPayload = {
   summary: string;
   blockers: string;
   workLocation: WorkLocation;
-  activityUpdates: Array<{ id: string; selected: boolean; employeeNote: string | null }>;
+  activityUpdates: Array<{
+    id: string;
+    selected: boolean;
+    employeeNote: string | null;
+  }>;
   deletedActivityIds: string[];
   manualActivities: Array<{
     title: string;
@@ -152,18 +176,29 @@ function activityStartedSortValue(activity: Activity) {
 
 function sortActivitiesForDisplay(items: Activity[]) {
   return [...items].sort((first, second) => {
-    const startedDelta = activityStartedSortValue(first) - activityStartedSortValue(second);
+    const startedDelta =
+      activityStartedSortValue(first) - activityStartedSortValue(second);
 
     if (startedDelta !== 0) {
       return startedDelta;
     }
 
-    return first.title.localeCompare(second.title) || first.id.localeCompare(second.id);
+    return (
+      first.title.localeCompare(second.title) ||
+      first.id.localeCompare(second.id)
+    );
   });
 }
 
-function mergeSyncedActivities(current: Activity[], source: ActivitySource, synced: Activity[]) {
-  return sortActivitiesForDisplay([...current.filter((activity) => activity.source !== source), ...synced]);
+function mergeSyncedActivities(
+  current: Activity[],
+  source: ActivitySource,
+  synced: Activity[],
+) {
+  return sortActivitiesForDisplay([
+    ...current.filter((activity) => activity.source !== source),
+    ...synced,
+  ]);
 }
 
 function dateInputValue(value: string | Date) {
@@ -176,9 +211,11 @@ function formatReportDate(value: string | Date) {
     month: "short",
     day: "numeric",
     year: "numeric",
-    weekday: "short"
+    weekday: "short",
   }).formatToParts(date);
-  const lookup = Object.fromEntries(formatted.map((part) => [part.type, part.value]));
+  const lookup = Object.fromEntries(
+    formatted.map((part) => [part.type, part.value]),
+  );
 
   return `${lookup.month} ${lookup.day}, ${lookup.year} (${lookup.weekday})`;
 }
@@ -203,10 +240,16 @@ async function responseErrorMessage(response: Response, fallback: string) {
   return body && typeof body.error === "string" ? body.error : fallback;
 }
 
-function statusTone(status?: string | null): "green" | "orange" | "blue" | "neutral" {
+function statusTone(
+  status?: string | null,
+): "green" | "orange" | "blue" | "neutral" {
   const normalized = status?.toLowerCase() ?? "";
 
-  if (normalized.includes("done") || normalized.includes("complete") || normalized.includes("submitted")) {
+  if (
+    normalized.includes("done") ||
+    normalized.includes("complete") ||
+    normalized.includes("submitted")
+  ) {
     return "green";
   }
 
@@ -214,7 +257,11 @@ function statusTone(status?: string | null): "green" | "orange" | "blue" | "neut
     return "blue";
   }
 
-  if (normalized.includes("late") || normalized.includes("todo") || normalized.includes("draft")) {
+  if (
+    normalized.includes("late") ||
+    normalized.includes("todo") ||
+    normalized.includes("draft")
+  ) {
     return "orange";
   }
 
@@ -242,7 +289,11 @@ function editorSummaryForReport(report: Report) {
 }
 
 function blockersForReport(report: Report) {
-  return uniqueLines([report.blockers, extractBlockerLines(report.summary)].filter(Boolean).join("\n"));
+  return uniqueLines(
+    [report.blockers, extractBlockerLines(report.summary)]
+      .filter(Boolean)
+      .join("\n"),
+  );
 }
 
 function isNewManualActivity(activity: Activity) {
@@ -254,7 +305,7 @@ function buildReportPayload(
   blockers: string,
   workLocation: WorkLocation,
   activities: Activity[],
-  deletedActivityIds: string[]
+  deletedActivityIds: string[],
 ): ReportPayload {
   return {
     summary,
@@ -265,7 +316,7 @@ function buildReportPayload(
       .map((activity) => ({
         id: activity.id,
         selected: activity.selected,
-        employeeNote: activity.employeeNote ?? null
+        employeeNote: activity.employeeNote ?? null,
       })),
     deletedActivityIds,
     manualActivities: activities
@@ -274,8 +325,8 @@ function buildReportPayload(
         title: activity.title,
         employeeNote: activity.employeeNote ?? null,
         status: activity.status,
-        durationMinutes: activity.durationMinutes ?? null
-      }))
+        durationMinutes: activity.durationMinutes ?? null,
+      })),
   };
 }
 
@@ -286,34 +337,22 @@ function draftPayloadSignature(reportDate: string, payload: ReportPayload) {
 function hasMeaningfulDraftPayload(payload: ReportPayload) {
   return Boolean(
     payload.summary.trim() ||
-      payload.blockers.trim() ||
-      payload.workLocation !== "UNKNOWN" ||
-      payload.activityUpdates.length > 0 ||
-      payload.deletedActivityIds.length > 0 ||
-      payload.manualActivities.length > 0
+    payload.blockers.trim() ||
+    payload.workLocation !== "UNKNOWN" ||
+    payload.activityUpdates.length > 0 ||
+    payload.deletedActivityIds.length > 0 ||
+    payload.manualActivities.length > 0,
   );
 }
 
 export function DailyReportApp({
   initialReport,
   date,
-  userName,
-  userEmail,
-  userRole,
-  userStatus,
-  timezone,
-  mustChangePassword,
   integrationStatus = { google: false, atlassian: false },
-  oauthConfig = { google: true, atlassian: true }
+  oauthConfig = { google: true, atlassian: true },
 }: {
   initialReport: Report;
   date: string;
-  userName?: string | null;
-  userEmail?: string | null;
-  userRole?: string | null;
-  userStatus?: string | null;
-  timezone?: string | null;
-  mustChangePassword?: boolean;
   integrationStatus?: IntegrationStatus;
   oauthConfig?: OAuthProviderConfig;
 }) {
@@ -321,19 +360,32 @@ export function DailyReportApp({
   const reportDate = dateInputValue(date);
   const initialSummary = editorSummaryForReport(initialReport);
   const initialBlockers = blockersForReport(initialReport);
-  const initialPayload = buildReportPayload(initialSummary, initialBlockers, initialReport.workLocation, initialReport.activities, []);
+  const initialPayload = buildReportPayload(
+    initialSummary,
+    initialBlockers,
+    initialReport.workLocation,
+    initialReport.activities,
+    [],
+  );
   const [report, setReport] = useState(initialReport);
   const [summary, setSummary] = useState(() => initialSummary);
   const [blockers, setBlockers] = useState(() => initialBlockers);
-  const [workLocation, setWorkLocation] = useState<WorkLocation>(initialReport.workLocation);
+  const [workLocation, setWorkLocation] = useState<WorkLocation>(
+    initialReport.workLocation,
+  );
   const [activities, setActivities] = useState(initialReport.activities);
   const [deletedActivityIds, setDeletedActivityIds] = useState<string[]>([]);
-  const [openActivityMenu, setOpenActivityMenu] = useState<{ id: string; top: number; left: number } | null>(null);
+  const [openActivityMenu, setOpenActivityMenu] = useState<{
+    id: string;
+    top: number;
+    left: number;
+  } | null>(null);
   const [importMenuOpen, setImportMenuOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>("saved");
   const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
-  const [importingProvider, setImportingProvider] = useState<SyncProviderKey | null>(null);
+  const [importingProvider, setImportingProvider] =
+    useState<SyncProviderKey | null>(null);
   const [activityPage, setActivityPage] = useState(1);
   const [activitySearch, setActivitySearch] = useState("");
   const summaryEditorRef = useRef<SummaryEditorHandle>(null);
@@ -342,13 +394,23 @@ export function DailyReportApp({
   const saveGenerationRef = useRef(0);
   const reportRef = useRef(initialReport);
   const latestDraftRef = useRef<AutoDraftSnapshot | null>(null);
-  const flushAutoDraftSaveRef = useRef<() => Promise<Report | null>>(async () => null);
-  const lastSavedSignatureRef = useRef(draftPayloadSignature(reportDate, initialPayload));
+  const flushAutoDraftSaveRef = useRef<() => Promise<Report | null>>(
+    async () => null,
+  );
+  const lastSavedSignatureRef = useRef(
+    draftPayloadSignature(reportDate, initialPayload),
+  );
 
   useEffect(() => {
     const nextSummary = editorSummaryForReport(initialReport);
     const nextBlockers = blockersForReport(initialReport);
-    const nextPayload = buildReportPayload(nextSummary, nextBlockers, initialReport.workLocation, initialReport.activities, []);
+    const nextPayload = buildReportPayload(
+      nextSummary,
+      nextBlockers,
+      initialReport.workLocation,
+      initialReport.activities,
+      [],
+    );
 
     if (autoSaveTimerRef.current) {
       window.clearTimeout(autoSaveTimerRef.current);
@@ -358,13 +420,16 @@ export function DailyReportApp({
     saveGenerationRef.current += 1;
     saveInFlightRef.current = null;
     reportRef.current = initialReport;
-    lastSavedSignatureRef.current = draftPayloadSignature(reportDate, nextPayload);
+    lastSavedSignatureRef.current = draftPayloadSignature(
+      reportDate,
+      nextPayload,
+    );
     latestDraftRef.current = {
       reportId: initialReport.id,
       reportDate,
       payload: nextPayload,
       signature: lastSavedSignatureRef.current,
-      hasMeaningfulContent: hasMeaningfulDraftPayload(nextPayload)
+      hasMeaningfulContent: hasMeaningfulDraftPayload(nextPayload),
     };
 
     setReport(initialReport);
@@ -382,7 +447,9 @@ export function DailyReportApp({
   }, [initialReport, date, reportDate]);
 
   function setActivity(id: string, patch: Partial<Activity>) {
-    setActivities((items) => items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+    setActivities((items) =>
+      items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    );
   }
 
   function handleSummaryChange(snapshot: SummarySnapshot) {
@@ -399,12 +466,17 @@ export function DailyReportApp({
 
     setActivities((items) => items.filter((item) => item.id !== activity.id));
     if (!isNewManualActivity(activity)) {
-      setDeletedActivityIds((current) => [...new Set([...current, activity.id])]);
+      setDeletedActivityIds((current) => [
+        ...new Set([...current, activity.id]),
+      ]);
     }
     setOpenActivityMenu(null);
   }
 
-  function toggleActivityMenu(activityId: string, event: MouseEvent<HTMLButtonElement>) {
+  function toggleActivityMenu(
+    activityId: string,
+    event: MouseEvent<HTMLButtonElement>,
+  ) {
     if (openActivityMenu?.id === activityId) {
       setOpenActivityMenu(null);
       return;
@@ -414,8 +486,14 @@ export function DailyReportApp({
     const menuWidth = 240;
     const menuHeight = 204;
     const gap = 8;
-    const top = Math.min(window.innerHeight - menuHeight - 12, Math.max(12, rect.bottom + gap));
-    const left = Math.min(window.innerWidth - menuWidth - 12, Math.max(12, rect.right - menuWidth));
+    const top = Math.min(
+      window.innerHeight - menuHeight - 12,
+      Math.max(12, rect.bottom + gap),
+    );
+    const left = Math.min(
+      window.innerWidth - menuWidth - 12,
+      Math.max(12, rect.right - menuWidth),
+    );
 
     setOpenActivityMenu({ id: activityId, top, left });
   }
@@ -460,24 +538,37 @@ export function DailyReportApp({
       return false;
     }
 
-    return Boolean(snapshot.reportId || reportRef.current.id || snapshot.hasMeaningfulContent);
+    return Boolean(
+      snapshot.reportId ||
+      reportRef.current.id ||
+      snapshot.hasMeaningfulContent,
+    );
   }
 
   function captureCurrentDraftSnapshot() {
     const editorSnapshot = summaryEditorRef.current?.getSnapshot();
     const currentSummary = editorSnapshot?.summary ?? summary;
     const currentBlockers = editorSnapshot?.blockers ?? blockers;
-    const payload = buildReportPayload(currentSummary, currentBlockers, workLocation, activities, deletedActivityIds);
+    const payload = buildReportPayload(
+      currentSummary,
+      currentBlockers,
+      workLocation,
+      activities,
+      deletedActivityIds,
+    );
     const signature = draftPayloadSignature(reportDate, payload);
     const snapshot: AutoDraftSnapshot = {
       reportId: reportRef.current.id,
       reportDate,
       payload,
       signature,
-      hasMeaningfulContent: hasMeaningfulDraftPayload(payload)
+      hasMeaningfulContent: hasMeaningfulDraftPayload(payload),
     };
 
-    if (editorSnapshot && (currentSummary !== summary || currentBlockers !== blockers)) {
+    if (
+      editorSnapshot &&
+      (currentSummary !== summary || currentBlockers !== blockers)
+    ) {
       setSummary(currentSummary);
       setBlockers(currentBlockers);
     }
@@ -486,7 +577,11 @@ export function DailyReportApp({
     return snapshot;
   }
 
-  function applySavedReport(nextReport: Report, replaceLocalState: boolean, savedSignature: string) {
+  function applySavedReport(
+    nextReport: Report,
+    replaceLocalState: boolean,
+    savedSignature: string,
+  ) {
     if (!replaceLocalState) {
       const current = reportRef.current;
       const nextCurrent = {
@@ -496,7 +591,7 @@ export function DailyReportApp({
         status: nextReport.status,
         submittedAt: nextReport.submittedAt,
         updatedAt: nextReport.updatedAt,
-        revisions: nextReport.revisions ?? current.revisions
+        revisions: nextReport.revisions ?? current.revisions,
       };
 
       reportRef.current = nextCurrent;
@@ -506,7 +601,7 @@ export function DailyReportApp({
       if (latestDraftRef.current) {
         latestDraftRef.current = {
           ...latestDraftRef.current,
-          reportId: nextReport.id
+          reportId: nextReport.id,
         };
       }
 
@@ -515,7 +610,13 @@ export function DailyReportApp({
 
     const nextSummary = editorSummaryForReport(nextReport);
     const nextBlockers = blockersForReport(nextReport);
-    const nextPayload = buildReportPayload(nextSummary, nextBlockers, nextReport.workLocation, nextReport.activities, []);
+    const nextPayload = buildReportPayload(
+      nextSummary,
+      nextBlockers,
+      nextReport.workLocation,
+      nextReport.activities,
+      [],
+    );
     const nextReportDate = dateInputValue(nextReport.reportDate);
     const nextSignature = draftPayloadSignature(nextReportDate, nextPayload);
 
@@ -526,7 +627,7 @@ export function DailyReportApp({
       reportDate: nextReportDate,
       payload: nextPayload,
       signature: nextSignature,
-      hasMeaningfulContent: hasMeaningfulDraftPayload(nextPayload)
+      hasMeaningfulContent: hasMeaningfulDraftPayload(nextPayload),
     };
 
     setReport(nextReport);
@@ -535,10 +636,16 @@ export function DailyReportApp({
     setActivities(nextReport.activities);
     setDeletedActivityIds([]);
     setWorkLocation(nextReport.workLocation);
-    summaryEditorRef.current?.setSnapshot({ summary: nextSummary, blockers: nextBlockers });
+    summaryEditorRef.current?.setSnapshot({
+      summary: nextSummary,
+      blockers: nextBlockers,
+    });
   }
 
-  function startAutoDraftSave(snapshot: AutoDraftSnapshot, forceCreate = false) {
+  function startAutoDraftSave(
+    snapshot: AutoDraftSnapshot,
+    forceCreate = false,
+  ) {
     if (!forceCreate && !shouldAutoSaveSnapshot(snapshot)) {
       return Promise.resolve(reportRef.current.id ? reportRef.current : null);
     }
@@ -548,14 +655,23 @@ export function DailyReportApp({
     const savedSignature = snapshot.signature;
     const request = (async (): Promise<Report | null> => {
       try {
-        const response = await fetch(reportId ? `/api/reports/${reportId}` : "/api/reports", {
-          method: reportId ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(reportId ? snapshot.payload : { ...snapshot.payload, date: snapshot.reportDate })
-        });
+        const response = await fetch(
+          reportId ? `/api/reports/${reportId}` : "/api/reports",
+          {
+            method: reportId ? "PUT" : "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              reportId
+                ? snapshot.payload
+                : { ...snapshot.payload, date: snapshot.reportDate },
+            ),
+          },
+        );
 
         if (!response.ok) {
-          throw new Error(await responseErrorMessage(response, "Unable to save report."));
+          throw new Error(
+            await responseErrorMessage(response, "Unable to save report."),
+          );
         }
 
         const data = await response.json();
@@ -594,7 +710,9 @@ export function DailyReportApp({
     captureCurrentDraftSnapshot();
 
     let forceCreate = options.forceCreate ?? false;
-    let savedReport: Report | null = reportRef.current.id ? reportRef.current : null;
+    let savedReport: Report | null = reportRef.current.id
+      ? reportRef.current
+      : null;
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       if (saveInFlightRef.current) {
@@ -650,16 +768,33 @@ export function DailyReportApp({
       return;
     }
 
-    const submitResponse = await fetch(`/api/reports/${saved.id}/submit`, { method: "POST" });
+    const submitResponse = await fetch(`/api/reports/${saved.id}/submit`, {
+      method: "POST",
+    });
 
     if (!submitResponse.ok) {
-      setMessage((await submitResponse.json()).error ?? "Unable to submit report.");
+      setMessage(
+        (await submitResponse.json()).error ?? "Unable to submit report.",
+      );
       setBusyAction(null);
       return;
     }
 
     const nextReport = (await submitResponse.json()).report as Report;
-    applySavedReport(nextReport, true, draftPayloadSignature(reportDate, buildReportPayload(summary, blockers, workLocation, activities, deletedActivityIds)));
+    applySavedReport(
+      nextReport,
+      true,
+      draftPayloadSignature(
+        reportDate,
+        buildReportPayload(
+          summary,
+          blockers,
+          workLocation,
+          activities,
+          deletedActivityIds,
+        ),
+      ),
+    );
     markServerDataStale();
     setAutoSaveStatus("saved");
     setMessage("Submitted for review.");
@@ -685,7 +820,9 @@ export function DailyReportApp({
     saveGenerationRef.current += 1;
     saveInFlightRef.current = null;
 
-    const response = await fetch(`/api/reports/${report.id}`, { method: "DELETE" });
+    const response = await fetch(`/api/reports/${report.id}`, {
+      method: "DELETE",
+    });
 
     if (!response.ok) {
       setMessage((await response.json()).error ?? "Unable to delete draft.");
@@ -702,18 +839,21 @@ export function DailyReportApp({
       status: "DRAFT",
       activities: [],
       submittedAt: null,
-      updatedAt: null
+      updatedAt: null,
     };
     const clearedPayload = buildReportPayload("", "", "UNKNOWN", [], []);
 
     reportRef.current = clearedReport;
-    lastSavedSignatureRef.current = draftPayloadSignature(reportDate, clearedPayload);
+    lastSavedSignatureRef.current = draftPayloadSignature(
+      reportDate,
+      clearedPayload,
+    );
     latestDraftRef.current = {
       reportId: "",
       reportDate,
       payload: clearedPayload,
       signature: lastSavedSignatureRef.current,
-      hasMeaningfulContent: false
+      hasMeaningfulContent: false,
     };
 
     setReport(clearedReport);
@@ -742,26 +882,44 @@ export function DailyReportApp({
       const response = await fetch(`/api/sync/${provider}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date })
+        body: JSON.stringify({ date }),
       });
 
       if (!response.ok) {
-        setMessage(await responseErrorMessage(response, `${providerLabel} import failed.`));
+        setMessage(
+          await responseErrorMessage(
+            response,
+            `${providerLabel} import failed.`,
+          ),
+        );
         return;
       }
 
-      const result = (await response.json()) as { importedCount: number; skippedCount: number; staleCount?: number; activities?: Activity[] };
-      setActivities((current) => mergeSyncedActivities(current, syncProviderSources[provider], result.activities ?? []));
+      const result = (await response.json()) as {
+        importedCount: number;
+        skippedCount: number;
+        staleCount?: number;
+        activities?: Activity[];
+      };
+      setActivities((current) =>
+        mergeSyncedActivities(
+          current,
+          syncProviderSources[provider],
+          result.activities ?? [],
+        ),
+      );
       setActivityPage(1);
       markServerDataStale();
 
       setMessage(
         result.importedCount > 0
           ? `${providerLabel} import complete: ${result.importedCount} work item${result.importedCount === 1 ? "" : "s"} found${result.staleCount ? `, ${result.staleCount} stale item${result.staleCount === 1 ? "" : "s"} hidden` : ""}.`
-          : `No ${providerLabel.toLowerCase()} work items found for this date.`
+          : `No ${providerLabel.toLowerCase()} work items found for this date.`,
       );
     } catch {
-      setMessage(`${providerLabel} import failed. Check your connection and try again.`);
+      setMessage(
+        `${providerLabel} import failed. Check your connection and try again.`,
+      );
     } finally {
       setImportingProvider(null);
     }
@@ -772,12 +930,16 @@ export function DailyReportApp({
       provider,
       { callbackUrl: "/" },
       provider === "google"
-        ? { access_type: "offline", prompt: "consent select_account", scope: GOOGLE_OAUTH_SCOPE }
+        ? {
+            access_type: "offline",
+            prompt: "consent select_account",
+            scope: GOOGLE_OAUTH_SCOPE,
+          }
         : {
             audience: "api.atlassian.com",
             prompt: "consent",
-            scope: ATLASSIAN_OAUTH_SCOPE
-          }
+            scope: ATLASSIAN_OAUTH_SCOPE,
+          },
     );
   }
 
@@ -803,17 +965,30 @@ export function DailyReportApp({
   const isSubmitting = busyAction === "submit";
   const isDeleting = busyAction === "delete";
   const isImporting = importingProvider !== null;
-  const importStatusLabel = importingProvider ? `Importing ${syncProviderLabels[importingProvider].toLowerCase()}...` : "Import";
+  const importStatusLabel = importingProvider
+    ? `Importing ${syncProviderLabels[importingProvider].toLowerCase()}...`
+    : "Import";
   const isBusy = busyAction !== null || isImporting;
-  const selectedCount = activities.filter((activity) => activity.selected).length;
-  const currentPayload = buildReportPayload(summary, blockers, workLocation, activities, deletedActivityIds);
-  const currentDraftSignature = draftPayloadSignature(reportDate, currentPayload);
+  const selectedCount = activities.filter(
+    (activity) => activity.selected,
+  ).length;
+  const currentPayload = buildReportPayload(
+    summary,
+    blockers,
+    workLocation,
+    activities,
+    deletedActivityIds,
+  );
+  const currentDraftSignature = draftPayloadSignature(
+    reportDate,
+    currentPayload,
+  );
   const currentDraftSnapshot: AutoDraftSnapshot = {
     reportId: report.id,
     reportDate,
     payload: currentPayload,
     signature: currentDraftSignature,
-    hasMeaningfulContent: hasMeaningfulDraftPayload(currentPayload)
+    hasMeaningfulContent: hasMeaningfulDraftPayload(currentPayload),
   };
   reportRef.current = report;
   latestDraftRef.current = currentDraftSnapshot;
@@ -826,23 +1001,40 @@ export function DailyReportApp({
           activity.description,
           activity.status,
           sourceLabels[activity.source],
-          formatDuration(activity.durationMinutes)
+          formatDuration(activity.durationMinutes),
         ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase()
-          .includes(normalizedActivitySearch)
+          .includes(normalizedActivitySearch),
       )
     : activities;
-  const filteredSelectedCount = filteredActivities.filter((activity) => activity.selected).length;
-  const activityPageCount = Math.max(1, Math.ceil(filteredActivities.length / activityPageSize));
+  const filteredSelectedCount = filteredActivities.filter(
+    (activity) => activity.selected,
+  ).length;
+  const activityPageCount = Math.max(
+    1,
+    Math.ceil(filteredActivities.length / activityPageSize),
+  );
   const currentActivityPage = Math.min(activityPage, activityPageCount);
-  const activityPageStart = filteredActivities.length === 0 ? 0 : (currentActivityPage - 1) * activityPageSize + 1;
-  const activityPageEnd = Math.min(currentActivityPage * activityPageSize, filteredActivities.length);
-  const pagedActivities = filteredActivities.slice((currentActivityPage - 1) * activityPageSize, currentActivityPage * activityPageSize);
+  const activityPageStart =
+    filteredActivities.length === 0
+      ? 0
+      : (currentActivityPage - 1) * activityPageSize + 1;
+  const activityPageEnd = Math.min(
+    currentActivityPage * activityPageSize,
+    filteredActivities.length,
+  );
+  const pagedActivities = filteredActivities.slice(
+    (currentActivityPage - 1) * activityPageSize,
+    currentActivityPage * activityPageSize,
+  );
 
   useEffect(() => {
-    const pageCount = Math.max(1, Math.ceil(filteredActivities.length / activityPageSize));
+    const pageCount = Math.max(
+      1,
+      Math.ceil(filteredActivities.length / activityPageSize),
+    );
 
     setActivityPage((current) => Math.min(current, pageCount));
   }, [filteredActivities.length]);
@@ -899,26 +1091,22 @@ export function DailyReportApp({
     void goToReportDate(nextDate.toISOString().slice(0, 10));
   }
 
-  const menuActivity = openActivityMenu ? activities.find((activity) => activity.id === openActivityMenu.id) : null;
+  const menuActivity = openActivityMenu
+    ? activities.find((activity) => activity.id === openActivityMenu.id)
+    : null;
 
   return (
-    <ReferenceAppShell
-      active="report"
-      variant="employee"
-      userName={userName}
-      userEmail={userEmail}
-      userRole={userRole}
-      userStatus={userStatus}
-      timezone={timezone}
-      mustChangePassword={mustChangePassword}
-      currentReportDate={reportDate}
-    >
+    <>
       <main className="reference-page !px-3 !pb-3 !pt-2 sm:!px-4">
         <section className="overflow-visible rounded-[10px] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.07)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
           <div className="flex flex-col gap-3 px-4 pb-3 pt-4 min-[900px]:flex-row min-[900px]:items-center min-[900px]:justify-between min-[1200px]:px-5">
             <div>
-              <h1 className="text-2xl font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">Daily Update</h1>
-              <p className="mt-0.5 text-xs text-[#667085] dark:text-muted-foreground">Share what you worked on today.</p>
+              <h1 className="text-2xl font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">
+                Daily Update
+              </h1>
+              <p className="mt-0.5 text-xs text-[#667085] dark:text-muted-foreground">
+                Share what you worked on today.
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {report.id && report.status === "DRAFT" ? (
@@ -928,7 +1116,11 @@ export function DailyReportApp({
                   disabled={isBusy}
                   onClick={deleteDraft}
                 >
-                  {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                  {isDeleting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
                   {isDeleting ? "Deleting..." : "Delete draft"}
                 </Button>
               ) : null}
@@ -943,7 +1135,11 @@ export function DailyReportApp({
                   disabled={isBusy}
                   onClick={submitReport}
                 >
-                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                  {isSubmitting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
                   {isSubmitting ? "Submitting..." : "Submit update"}
                 </Button>
               )}
@@ -984,10 +1180,14 @@ export function DailyReportApp({
             </div>
 
             <label className="flex min-h-10 w-full items-center gap-3 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]">
-              <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">Location</span>
+              <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
+                Location
+              </span>
               <Select
                 value={workLocation}
-                onChange={(event) => setWorkLocation(event.target.value as WorkLocation)}
+                onChange={(event) =>
+                  setWorkLocation(event.target.value as WorkLocation)
+                }
                 className="h-8 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm font-semibold text-[#111827] shadow-none focus-visible:ring-0 dark:bg-transparent dark:text-foreground"
                 aria-label="Work location"
               >
@@ -999,8 +1199,18 @@ export function DailyReportApp({
               </Select>
             </label>
 
-            <div className="flex min-h-10 w-full items-center gap-4 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]" aria-live="polite">
-              <span className={cn("inline-flex items-center gap-2 rounded-full px-2.5 py-1 font-medium", autoSaveStatus === "error" ? "bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300")}>
+            <div
+              className="flex min-h-10 w-full items-center gap-4 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
+              aria-live="polite"
+            >
+              <span
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-full px-2.5 py-1 font-medium",
+                  autoSaveStatus === "error"
+                    ? "bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-300"
+                    : "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300",
+                )}
+              >
                 <CheckCircle2 className="h-4 w-4" />
                 {autoSaveStatus === "error" ? "Save failed" : "Saved"}
               </span>
@@ -1012,8 +1222,15 @@ export function DailyReportApp({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">Work items</h2>
-                    <ReferenceBadge tone="neutral" className="px-2.5 py-1 text-xs">{selectedCount} selected</ReferenceBadge>
+                    <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
+                      Work items
+                    </h2>
+                    <ReferenceBadge
+                      tone="neutral"
+                      className="px-2.5 py-1 text-xs"
+                    >
+                      {selectedCount} selected
+                    </ReferenceBadge>
                   </div>
                 </div>
                 <div className="relative">
@@ -1023,9 +1240,15 @@ export function DailyReportApp({
                     disabled={isBusy}
                     onClick={() => setImportMenuOpen((open) => !open)}
                   >
-                    {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                    {isImporting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
                     {importStatusLabel}
-                    {!isImporting ? <ChevronDown className="ml-2 h-4 w-4" /> : null}
+                    {!isImporting ? (
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    ) : null}
                   </Button>
                   {importMenuOpen ? (
                     <div className="absolute right-0 top-12 z-30 w-64 rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
@@ -1034,7 +1257,9 @@ export function DailyReportApp({
                         disabled={!canSyncJira && !oauthConfig.atlassian}
                         onClick={() => {
                           setImportMenuOpen(false);
-                          canSyncJira ? sync("jira") : connectProvider("atlassian");
+                          canSyncJira
+                            ? sync("jira")
+                            : connectProvider("atlassian");
                         }}
                       >
                         {canSyncJira ? "Import Jira" : "Connect Jira"}
@@ -1044,7 +1269,9 @@ export function DailyReportApp({
                         disabled={!canSyncGoogle && !oauthConfig.google}
                         onClick={() => {
                           setImportMenuOpen(false);
-                          canSyncGoogle ? sync("google-calendar") : connectProvider("google");
+                          canSyncGoogle
+                            ? sync("google-calendar")
+                            : connectProvider("google");
                         }}
                       >
                         {canSyncGoogle ? "Import Calendar" : "Connect Google"}
@@ -1054,10 +1281,14 @@ export function DailyReportApp({
                         disabled={!canSyncGoogle && !oauthConfig.google}
                         onClick={() => {
                           setImportMenuOpen(false);
-                          canSyncGoogle ? sync("google-tasks") : connectProvider("google");
+                          canSyncGoogle
+                            ? sync("google-tasks")
+                            : connectProvider("google");
                         }}
                       >
-                        {canSyncGoogle ? "Import Tasks" : "Connect Google Tasks"}
+                        {canSyncGoogle
+                          ? "Import Tasks"
+                          : "Connect Google Tasks"}
                       </button>
                       <Link
                         className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#2563eb] hover:bg-[#eff6ff] dark:text-[#93c5fd] dark:hover:bg-white/5"
@@ -1087,9 +1318,14 @@ export function DailyReportApp({
 
               <div className="mt-3 h-[390px] space-y-2 overflow-y-auto pr-1">
                 {activities.length === 0 ? (
-                  <EmptyReferenceState>No activities yet. Import work from Jira, Calendar, or Tasks.</EmptyReferenceState>
+                  <EmptyReferenceState>
+                    No activities yet. Import work from Jira, Calendar, or
+                    Tasks.
+                  </EmptyReferenceState>
                 ) : pagedActivities.length === 0 ? (
-                  <EmptyReferenceState>No work items match your search.</EmptyReferenceState>
+                  <EmptyReferenceState>
+                    No work items match your search.
+                  </EmptyReferenceState>
                 ) : (
                   pagedActivities.map((activity) => (
                     <article
@@ -1100,14 +1336,30 @@ export function DailyReportApp({
                         type="checkbox"
                         className="h-5 w-5 rounded border-[#cbd5e1] accent-[#4f46e5]"
                         checked={activity.selected}
-                        onChange={(event) => setActivity(activity.id, { selected: event.target.checked })}
+                        onChange={(event) =>
+                          setActivity(activity.id, {
+                            selected: event.target.checked,
+                          })
+                        }
                         aria-label={`Include ${activity.title}`}
                       />
-                      <div className={cn("flex h-8 w-8 items-center justify-center rounded-[7px]", sourceStyles[activity.source])}>{sourceIcon(activity.source)}</div>
+                      <div
+                        className={cn(
+                          "flex h-8 w-8 items-center justify-center rounded-[7px]",
+                          sourceStyles[activity.source],
+                        )}
+                      >
+                        {sourceIcon(activity.source)}
+                      </div>
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-[#111827] dark:text-foreground">
                           {activity.sourceUrl && activity.sourceUrl !== "#" ? (
-                            <a href={activity.sourceUrl} target="_blank" rel="noreferrer" className="hover:text-[#2563eb]">
+                            <a
+                              href={activity.sourceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="hover:text-[#2563eb]"
+                            >
                               {activity.title || "Untitled activity"}
                             </a>
                           ) : (
@@ -1115,23 +1367,34 @@ export function DailyReportApp({
                           )}
                         </div>
                         <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-[#667085] dark:text-muted-foreground">
-                          <span className="shrink-0">{sourceLabels[activity.source]}</span>
+                          <span className="shrink-0">
+                            {sourceLabels[activity.source]}
+                          </span>
                           {activity.description ? (
                             <>
                               <span className="text-[#98a2b3]">•</span>
-                              <span className="truncate">{activity.description}</span>
+                              <span className="truncate">
+                                {activity.description}
+                              </span>
                             </>
                           ) : null}
                         </div>
                       </div>
-                      <ReferenceBadge tone={statusTone(activity.status)} className="justify-self-start px-2.5 py-1 text-xs">
+                      <ReferenceBadge
+                        tone={statusTone(activity.status)}
+                        className="justify-self-start px-2.5 py-1 text-xs"
+                      >
                         {activity.status || "Not set"}
                       </ReferenceBadge>
-                      <div className="text-sm font-medium text-[#111827] dark:text-foreground">{formatDuration(activity.durationMinutes)}</div>
+                      <div className="text-sm font-medium text-[#111827] dark:text-foreground">
+                        {formatDuration(activity.durationMinutes)}
+                      </div>
                       <button
                         className="reference-menu-button"
                         aria-label={`More actions for ${activity.title}`}
-                        onClick={(event) => toggleActivityMenu(activity.id, event)}
+                        onClick={(event) =>
+                          toggleActivityMenu(activity.id, event)
+                        }
                       >
                         <MoreHorizontal className="h-4 w-4" />
                       </button>
@@ -1159,8 +1422,13 @@ export function DailyReportApp({
                       size="sm"
                       className="h-8 w-8 rounded-[7px] bg-white p-0 dark:bg-[#0f1b2a]"
                       aria-label="Previous work items page"
-                      disabled={currentActivityPage === 1 || filteredActivities.length === 0}
-                      onClick={() => setActivityPage((page) => Math.max(1, page - 1))}
+                      disabled={
+                        currentActivityPage === 1 ||
+                        filteredActivities.length === 0
+                      }
+                      onClick={() =>
+                        setActivityPage((page) => Math.max(1, page - 1))
+                      }
                     >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -1173,8 +1441,15 @@ export function DailyReportApp({
                       size="sm"
                       className="h-8 w-8 rounded-[7px] bg-white p-0 dark:bg-[#0f1b2a]"
                       aria-label="Next work items page"
-                      disabled={currentActivityPage === activityPageCount || filteredActivities.length === 0}
-                      onClick={() => setActivityPage((page) => Math.min(activityPageCount, page + 1))}
+                      disabled={
+                        currentActivityPage === activityPageCount ||
+                        filteredActivities.length === 0
+                      }
+                      onClick={() =>
+                        setActivityPage((page) =>
+                          Math.min(activityPageCount, page + 1),
+                        )
+                      }
                     >
                       <ChevronRight className="h-4 w-4" />
                     </Button>
@@ -1185,7 +1460,9 @@ export function DailyReportApp({
 
             <aside className="min-h-[560px] rounded-[8px] bg-white p-3 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
               <div>
-                <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">Summary</h2>
+                <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
+                  Summary
+                </h2>
               </div>
               <SummaryEditor
                 ref={summaryEditorRef}
@@ -1221,7 +1498,9 @@ export function DailyReportApp({
             <button
               className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
               onClick={() => {
-                setActivity(menuActivity.id, { selected: !menuActivity.selected });
+                setActivity(menuActivity.id, {
+                  selected: !menuActivity.selected,
+                });
                 setOpenActivityMenu(null);
               }}
             >
@@ -1250,7 +1529,9 @@ export function DailyReportApp({
               onClick={() => removeActivity(menuActivity)}
             >
               <Trash2 className="h-4 w-4" />
-              {menuActivity.source === "MANUAL" ? "Delete item" : "Remove from report"}
+              {menuActivity.source === "MANUAL"
+                ? "Delete item"
+                : "Remove from report"}
             </button>
           </div>
         </>
@@ -1272,6 +1553,6 @@ export function DailyReportApp({
           </button>
         </div>
       ) : null}
-    </ReferenceAppShell>
+    </>
   );
 }

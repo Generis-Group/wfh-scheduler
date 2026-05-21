@@ -18,11 +18,11 @@ import {
   Mail,
   MessageSquare,
   Search,
-  TriangleAlert
+  TriangleAlert,
 } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 
-import { EmptyReferenceState, ReferenceAppShell } from "@/components/reports/reference-shell";
+import { EmptyReferenceState } from "@/components/reports/reference-shell";
 import { SummaryRenderer } from "@/components/reports/summary-renderer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,7 +74,11 @@ type DashboardReport = {
   activities: DashboardActivity[];
   comments: DashboardComment[];
   readReceipts?: Array<{ reviewerId: string; readAt: string | Date }>;
-  revisions: Array<{ id: string; createdAt: string | Date; editedBy: { name?: string | null; email?: string | null } }>;
+  revisions: Array<{
+    id: string;
+    createdAt: string | Date;
+    editedBy: { name?: string | null; email?: string | null };
+  }>;
 };
 
 type Row = {
@@ -113,9 +117,11 @@ function formatReportDate(value?: string | Date) {
     month: "short",
     day: "numeric",
     year: "numeric",
-    weekday: "short"
+    weekday: "short",
   }).formatToParts(date);
-  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const lookup = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
 
   return `${lookup.month} ${lookup.day}, ${lookup.year} (${lookup.weekday})`;
 }
@@ -130,7 +136,7 @@ function formatShortDate(value?: string | Date) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
-    year: "numeric"
+    year: "numeric",
   }).format(date);
 }
 
@@ -146,21 +152,25 @@ function formatTimestamp(value?: string | Date | null) {
     day: "numeric",
     year: "numeric",
     hour: "numeric",
-    minute: "2-digit"
+    minute: "2-digit",
   }).format(date);
 }
 
 function isLate(report: DashboardReport | null, date: string) {
   const submittedAt = toDate(report?.submittedAt);
-  return Boolean(submittedAt && submittedAt > reportDayEnd(report?.reportDate ?? date));
+  return Boolean(
+    submittedAt && submittedAt > reportDayEnd(report?.reportDate ?? date),
+  );
 }
 
 function editedAfterDate(report: DashboardReport | null, date: string) {
   return Boolean(
     report?.revisions.some((revision) => {
       const editedAt = toDate(revision.createdAt);
-      return Boolean(editedAt && editedAt > reportDayEnd(report.reportDate ?? date));
-    })
+      return Boolean(
+        editedAt && editedAt > reportDayEnd(report.reportDate ?? date),
+      );
+    }),
   );
 }
 
@@ -180,7 +190,11 @@ function includedActivities(report: DashboardReport | null) {
 }
 
 function visibleReviewComments(report: DashboardReport | null) {
-  return report?.comments.filter((comment) => comment.body.trim().toLowerCase() !== "reviewed") ?? [];
+  return (
+    report?.comments.filter(
+      (comment) => comment.body.trim().toLowerCase() !== "reviewed",
+    ) ?? []
+  );
 }
 
 function reportStatus(row: Row, date: string) {
@@ -224,7 +238,10 @@ function sourceLabel(source: string) {
 }
 
 function userDepartmentLabel(user: DashboardUser) {
-  const departments = user.departments?.map((membership) => membership.department?.name).filter(Boolean) ?? [];
+  const departments =
+    user.departments
+      ?.map((membership) => membership.department?.name)
+      .filter(Boolean) ?? [];
   return departments.length ? departments.join(", ") : "No department";
 }
 
@@ -235,22 +252,35 @@ function formatDuration(minutes?: number | null) {
 
   const hours = Math.floor(minutes / 60);
   const remaining = minutes % 60;
-  return hours ? (remaining ? `${hours}h ${remaining}m` : `${hours}h`) : `${remaining}m`;
+  return hours
+    ? remaining
+      ? `${hours}h ${remaining}m`
+      : `${hours}h`
+    : `${remaining}m`;
 }
 
-function reportReadReceipt(report: DashboardReport | null, reviewerId?: string | null) {
+function reportReadReceipt(
+  report: DashboardReport | null,
+  reviewerId?: string | null,
+) {
   if (!report || !reviewerId) {
     return null;
   }
 
-  return report.readReceipts?.find((receipt) => receipt.reviewerId === reviewerId) ?? null;
+  return (
+    report.readReceipts?.find((receipt) => receipt.reviewerId === reviewerId) ??
+    null
+  );
 }
 
 function reportChangedAt(report: DashboardReport | null) {
   return toDate(report?.updatedAt) ?? toDate(report?.submittedAt);
 }
 
-function isUnreadForReviewer(report: DashboardReport | null, reviewerId?: string | null) {
+function isUnreadForReviewer(
+  report: DashboardReport | null,
+  reviewerId?: string | null,
+) {
   if (!report) {
     return false;
   }
@@ -310,19 +340,35 @@ function dashboardFlags(row: Row, date: string) {
   const flags: Array<{ key: string; icon: ReactNode; label: string }> = [];
 
   if (hasBlockers(row.report)) {
-    flags.push({ key: "blockers", icon: <TriangleAlert className="h-4 w-4" />, label: "Blockers" });
+    flags.push({
+      key: "blockers",
+      icon: <TriangleAlert className="h-4 w-4" />,
+      label: "Blockers",
+    });
   }
 
   if (row.report.activities.length > 0) {
-    flags.push({ key: "activities", icon: <FileText className="h-4 w-4" />, label: "Activity" });
+    flags.push({
+      key: "activities",
+      icon: <FileText className="h-4 w-4" />,
+      label: "Activity",
+    });
   }
 
   if (editedAfterDate(row.report, date)) {
-    flags.push({ key: "edited", icon: <Edit3 className="h-4 w-4" />, label: "Late edit" });
+    flags.push({
+      key: "edited",
+      icon: <Edit3 className="h-4 w-4" />,
+      label: "Late edit",
+    });
   }
 
   if (isLate(row.report, date)) {
-    flags.push({ key: "late", icon: <Clock3 className="h-4 w-4" />, label: "Late" });
+    flags.push({
+      key: "late",
+      icon: <Clock3 className="h-4 w-4" />,
+      label: "Late",
+    });
   }
 
   return flags;
@@ -332,27 +378,17 @@ export function ReviewerDashboard({
   rows,
   metrics: _metrics,
   date,
-  userName,
-  userEmail,
-  userRole,
-  userStatus,
-  timezone,
-  mustChangePassword,
-  reviewerId
+  reviewerId,
 }: {
   rows: Row[];
   metrics: Metrics;
   date: string;
-  userName?: string | null;
-  userEmail?: string | null;
-  userRole?: string | null;
-  userStatus?: string | null;
-  timezone?: string | null;
-  mustChangePassword?: boolean;
   reviewerId?: string | null;
 }) {
   const [items, setItems] = useState(rows);
-  const [activeReportUserId, setActiveReportUserId] = useState<string | null>(null);
+  const [activeReportUserId, setActiveReportUserId] = useState<string | null>(
+    null,
+  );
   const [notice, setNotice] = useState<string | null>(null);
   const [isSendingDigest, setIsSendingDigest] = useState(false);
   const [search, setSearch] = useState("");
@@ -366,14 +402,16 @@ export function ReviewerDashboard({
     const query = search.trim().toLowerCase();
 
     return items.filter((row) => {
-      const employee = `${row.user.name ?? ""} ${row.user.email ?? ""}`.toLowerCase();
+      const employee =
+        `${row.user.name ?? ""} ${row.user.email ?? ""}`.toLowerCase();
       const matchesSearch = !query || employee.includes(query);
       const matchesGroup =
         (groupFilter === "EMPLOYEES" && row.user.role === "EMPLOYEE") ||
         (groupFilter === "SUBMITTED" && row.report?.status === "SUBMITTED") ||
         (groupFilter === "MISSING" && !row.report) ||
         (groupFilter === "BLOCKERS" && hasBlockers(row.report));
-      const matchesLocation = locationFilter === "ALL" || row.report?.workLocation === locationFilter;
+      const matchesLocation =
+        locationFilter === "ALL" || row.report?.workLocation === locationFilter;
 
       return matchesSearch && matchesGroup && matchesLocation;
     });
@@ -381,16 +419,33 @@ export function ReviewerDashboard({
 
   const pageCount = Math.max(1, Math.ceil(filteredItems.length / pageSize));
   const currentPage = Math.min(page, pageCount);
-  const pageItems = filteredItems.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const visibleReportIds = pageItems.flatMap((row) => (row.report ? [row.report.id] : []));
-  const selectedRows = items.filter((row) => row.report && selectedReportIds.includes(row.report.id));
-  const allVisibleReportsSelected = visibleReportIds.length > 0 && visibleReportIds.every((id) => selectedReportIds.includes(id));
-  const activeRow = activeReportUserId ? items.find((row) => row.user.id === activeReportUserId) ?? null : null;
+  const pageItems = filteredItems.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  );
+  const visibleReportIds = pageItems.flatMap((row) =>
+    row.report ? [row.report.id] : [],
+  );
+  const selectedRows = items.filter(
+    (row) => row.report && selectedReportIds.includes(row.report.id),
+  );
+  const allVisibleReportsSelected =
+    visibleReportIds.length > 0 &&
+    visibleReportIds.every((id) => selectedReportIds.includes(id));
+  const activeRow = activeReportUserId
+    ? (items.find((row) => row.user.id === activeReportUserId) ?? null)
+    : null;
   const total = filteredItems.length;
-  const submitted = filteredItems.filter((row) => row.report?.status === "SUBMITTED").length;
+  const submitted = filteredItems.filter(
+    (row) => row.report?.status === "SUBMITTED",
+  ).length;
   const missing = filteredItems.filter((row) => !row.report).length;
-  const blockers = filteredItems.filter((row) => hasBlockers(row.report)).length;
-  const lateEdits = filteredItems.filter((row) => editedAfterDate(row.report, date) || isLate(row.report, date)).length;
+  const blockers = filteredItems.filter((row) =>
+    hasBlockers(row.report),
+  ).length;
+  const lateEdits = filteredItems.filter(
+    (row) => editedAfterDate(row.report, date) || isLate(row.report, date),
+  ).length;
   const coverage = total ? Math.round((submitted / total) * 100) : 0;
 
   function goToDate(nextDate: string) {
@@ -412,24 +467,42 @@ export function ReviewerDashboard({
       submittedAt: formatTimestamp(row.report?.submittedAt),
       lastEdited: formatTimestamp(row.report?.updatedAt),
       blockers: hasBlockers(row.report) ? "Yes" : "No",
-      activities: includedActivities(row.report).length
+      activities: includedActivities(row.report).length,
     }));
-    const headers = ["employee", "email", "department", "date", "status", "workLocation", "submittedAt", "lastEdited", "blockers", "activities"];
+    const headers = [
+      "employee",
+      "email",
+      "department",
+      "date",
+      "status",
+      "workLocation",
+      "submittedAt",
+      "lastEdited",
+      "blockers",
+      "activities",
+    ];
     const csv = [
       headers.join(","),
       ...exportRows.map((row) =>
         headers
-          .map((header) => `"${String(row[header as keyof typeof row]).replace(/"/g, '""')}"`)
-          .join(",")
-      )
+          .map(
+            (header) =>
+              `"${String(row[header as keyof typeof row]).replace(/"/g, '""')}"`,
+          )
+          .join(","),
+      ),
     ].join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const url = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    );
     const link = document.createElement("a");
     link.href = url;
     link.download = `generis-review-${date}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-    setNotice(`Exported ${filteredItems.length} row${filteredItems.length === 1 ? "" : "s"}.`);
+    setNotice(
+      `Exported ${filteredItems.length} row${filteredItems.length === 1 ? "" : "s"}.`,
+    );
   }
 
   function toggleReportSelection(reportId: string, checked: boolean) {
@@ -479,9 +552,9 @@ export function ReviewerDashboard({
         filters: {
           groupFilter,
           locationFilter,
-          search
-        }
-      })
+          search,
+        },
+      }),
     });
     const body = await response.json().catch(() => ({}));
 
@@ -493,7 +566,11 @@ export function ReviewerDashboard({
 
     const recipients = body.emailRun?.recipientEmails?.length ?? 0;
     markServerDataStale();
-    setNotice(body.skipped ? "Digest was skipped because it was already sent or had no recipients." : `Email digest sent to ${recipients} reviewer/admin recipient${recipients === 1 ? "" : "s"}.`);
+    setNotice(
+      body.skipped
+        ? "Digest was skipped because it was already sent or had no recipients."
+        : `Email digest sent to ${recipients} reviewer/admin recipient${recipients === 1 ? "" : "s"}.`,
+    );
     setIsSendingDigest(false);
   }
 
@@ -505,22 +582,34 @@ export function ReviewerDashboard({
     const reportId = row.report.id;
     const activeReviewerId = reviewerId ?? "current-reviewer";
     setNotice(null);
-    setItems((current) => setLocalReadReceipt(current, reportId, activeReviewerId, read));
+    setItems((current) =>
+      setLocalReadReceipt(current, reportId, activeReviewerId, read),
+    );
 
     const response = await fetch(`/api/reports/${reportId}/read`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ read })
+      body: JSON.stringify({ read }),
     });
 
     if (!response.ok) {
-      setItems((current) => setLocalReadReceipt(current, reportId, activeReviewerId, !read));
-      setNotice(read ? "Unable to mark report as read." : "Unable to mark report unread.");
+      setItems((current) =>
+        setLocalReadReceipt(current, reportId, activeReviewerId, !read),
+      );
+      setNotice(
+        read
+          ? "Unable to mark report as read."
+          : "Unable to mark report unread.",
+      );
       return;
     }
 
     const { report } = await response.json();
-    setItems((current) => current.map((item) => (item.report?.id === report.id ? { ...item, report } : item)));
+    setItems((current) =>
+      current.map((item) =>
+        item.report?.id === report.id ? { ...item, report } : item,
+      ),
+    );
     markServerDataStale();
   }
 
@@ -538,7 +627,7 @@ export function ReviewerDashboard({
     const response = await fetch(`/api/reports/${row.report.id}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: trimmedBody })
+      body: JSON.stringify({ body: trimmedBody }),
     });
     const result = await response.json().catch(() => ({}));
 
@@ -547,23 +636,20 @@ export function ReviewerDashboard({
       return false;
     }
 
-    setItems((current) => current.map((item) => (item.report?.id === result.report.id ? { ...item, report: result.report } : item)));
+    setItems((current) =>
+      current.map((item) =>
+        item.report?.id === result.report.id
+          ? { ...item, report: result.report }
+          : item,
+      ),
+    );
     markServerDataStale();
     setNotice("Comment added.");
     return true;
   }
 
   return (
-    <ReferenceAppShell
-      active="review"
-      variant="admin"
-      userName={userName}
-      userEmail={userEmail}
-      userRole={userRole ?? "Reviewer"}
-      userStatus={userStatus}
-      timezone={timezone}
-      mustChangePassword={mustChangePassword}
-    >
+    <>
       {activeRow ? (
         <ReportReviewPage
           row={activeRow}
@@ -574,14 +660,20 @@ export function ReviewerDashboard({
           onAddComment={(body) => addComment(activeRow, body)}
           onPrint={() => {
             window.print();
-            setNotice("Use the browser print dialog to save this report as PDF.");
+            setNotice(
+              "Use the browser print dialog to save this report as PDF.",
+            );
           }}
         />
       ) : (
         <main className="reference-page">
           <div className="mb-3">
-            <h1 className="text-[24px] font-semibold leading-tight tracking-normal text-[#101828] dark:text-foreground">Review Dashboard</h1>
-            <p className="mt-0.5 text-sm text-[#667085] dark:text-muted-foreground">Track report coverage, blockers, and submissions across the team.</p>
+            <h1 className="text-[24px] font-semibold leading-tight tracking-normal text-[#101828] dark:text-foreground">
+              Review Dashboard
+            </h1>
+            <p className="mt-0.5 text-sm text-[#667085] dark:text-muted-foreground">
+              Track report coverage, blockers, and submissions across the team.
+            </p>
           </div>
 
           <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
@@ -589,7 +681,9 @@ export function ReviewerDashboard({
               <Field label="Report Date">
                 <label className="relative flex h-10 min-w-0 items-center rounded-[8px] border border-[#d8dee8] bg-white px-3 text-xs font-medium text-[#344054] dark:border-[#263a55] dark:bg-[#0b1523] dark:text-foreground">
                   <CalendarDays className="mr-2 h-3.5 w-3.5 shrink-0 text-[#667085]" />
-                  <span className="pointer-events-none min-w-0 flex-1 truncate whitespace-nowrap">{formatReportDate(date)}</span>
+                  <span className="pointer-events-none min-w-0 flex-1 truncate whitespace-nowrap">
+                    {formatReportDate(date)}
+                  </span>
                   <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 text-[#667085]" />
                   <Input
                     type="date"
@@ -652,11 +746,19 @@ export function ReviewerDashboard({
               </Field>
 
               <div className="flex items-end justify-start gap-2 lg:col-span-4 xl:col-span-1 xl:justify-end">
-                <Button variant="outline" className="h-10 rounded-[8px] bg-white px-3 text-xs dark:bg-[#0b1523]" onClick={sendEmailDigest} disabled={isSendingDigest}>
+                <Button
+                  variant="outline"
+                  className="h-10 rounded-[8px] bg-white px-3 text-xs dark:bg-[#0b1523]"
+                  onClick={sendEmailDigest}
+                  disabled={isSendingDigest}
+                >
                   <Mail className="mr-1.5 h-3.5 w-3.5" />
                   {isSendingDigest ? "Sending..." : "Email digest"}
                 </Button>
-                <Button className="h-10 rounded-[8px] bg-[#2563eb] px-3 text-xs text-white hover:bg-[#1d4ed8]" onClick={downloadCsv}>
+                <Button
+                  className="h-10 rounded-[8px] bg-[#2563eb] px-3 text-xs text-white hover:bg-[#1d4ed8]"
+                  onClick={downloadCsv}
+                >
                   <Download className="mr-1.5 h-3.5 w-3.5" />
                   Export
                 </Button>
@@ -671,24 +773,51 @@ export function ReviewerDashboard({
           ) : null}
 
           <section className="mb-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <DashboardStat icon={<CheckCircle2 />} label="Submitted" value={submitted} tone="green" />
-            <DashboardStat icon={<CircleHelp />} label="Missing" value={missing} tone="orange" />
-            <DashboardStat icon={<TriangleAlert />} label="With blockers" value={blockers} tone="red" />
-            <DashboardStat icon={<Edit3 />} label="Late edits" value={lateEdits} tone="purple" />
+            <DashboardStat
+              icon={<CheckCircle2 />}
+              label="Submitted"
+              value={submitted}
+              tone="green"
+            />
+            <DashboardStat
+              icon={<CircleHelp />}
+              label="Missing"
+              value={missing}
+              tone="orange"
+            />
+            <DashboardStat
+              icon={<TriangleAlert />}
+              label="With blockers"
+              value={blockers}
+              tone="red"
+            />
+            <DashboardStat
+              icon={<Edit3 />}
+              label="Late edits"
+              value={lateEdits}
+              tone="purple"
+            />
           </section>
 
           <section className="mb-3 rounded-[8px] bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
               <div>
-                <h2 className="text-base font-semibold text-[#101828] dark:text-foreground">Submission Coverage</h2>
+                <h2 className="text-base font-semibold text-[#101828] dark:text-foreground">
+                  Submission Coverage
+                </h2>
                 <div className="mt-2 flex items-end gap-3">
-                  <span className="text-[32px] font-semibold leading-none text-[#2563eb]">{coverage}%</span>
+                  <span className="text-[32px] font-semibold leading-none text-[#2563eb]">
+                    {coverage}%
+                  </span>
                   <span className="pb-1 text-sm font-medium text-[#475467] dark:text-muted-foreground">
                     {submitted} of {total} expected reports submitted
                   </span>
                 </div>
                 <div className="mt-4 h-2 rounded-full bg-[#e9edf5] dark:bg-[#263a55]">
-                  <div className="h-2 rounded-full bg-[#2563eb]" style={{ width: `${coverage}%` }} />
+                  <div
+                    className="h-2 rounded-full bg-[#2563eb]"
+                    style={{ width: `${coverage}%` }}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 divide-x divide-[#e2e8f0] dark:divide-[#263a55]">
@@ -700,11 +829,20 @@ export function ReviewerDashboard({
 
           <section className="overflow-hidden rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
             <div className="flex flex-wrap items-center justify-between gap-3 p-3">
-              <h2 className="text-lg font-semibold text-[#101828] dark:text-foreground">Employee Reports</h2>
+              <h2 className="text-lg font-semibold text-[#101828] dark:text-foreground">
+                Employee Reports
+              </h2>
               {selectedRows.length > 0 ? (
                 <div className="flex items-center gap-2 rounded-[9px] bg-[#f4f8ff] px-2 py-1.5 ring-1 ring-[#dbe7f5] dark:bg-blue-400/10 dark:ring-blue-300/15">
-                  <span className="px-1 text-xs font-semibold text-[#475467] dark:text-muted-foreground">{selectedRows.length} selected</span>
-                  <Button variant="outline" size="sm" className="h-8 rounded-[7px] bg-white px-3 text-xs dark:bg-[#0b1523]" onClick={markSelectedUnread}>
+                  <span className="px-1 text-xs font-semibold text-[#475467] dark:text-muted-foreground">
+                    {selectedRows.length} selected
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-[7px] bg-white px-3 text-xs dark:bg-[#0b1523]"
+                    onClick={markSelectedUnread}
+                  >
                     Mark as unread
                   </Button>
                 </div>
@@ -719,7 +857,9 @@ export function ReviewerDashboard({
                         type="checkbox"
                         checked={allVisibleReportsSelected}
                         disabled={visibleReportIds.length === 0}
-                        onChange={(event) => toggleVisibleSelection(event.target.checked)}
+                        onChange={(event) =>
+                          toggleVisibleSelection(event.target.checked)
+                        }
                         aria-label="Select visible reports"
                       />
                     </th>
@@ -736,43 +876,71 @@ export function ReviewerDashboard({
                   {pageItems.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-8">
-                        <EmptyReferenceState>No employee reports match these filters.</EmptyReferenceState>
+                        <EmptyReferenceState>
+                          No employee reports match these filters.
+                        </EmptyReferenceState>
                       </td>
                     </tr>
                   ) : (
                     pageItems.map((row) => {
                       const status = reportStatus(row, date);
                       const flags = dashboardFlags(row, date);
-                      const unread = isUnreadForReviewer(row.report, reviewerId);
+                      const unread = isUnreadForReviewer(
+                        row.report,
+                        reviewerId,
+                      );
 
                       return (
                         <tr
                           key={row.user.id}
                           className={cn(
                             "border-b border-[#e5eaf2] text-[#344054] transition-colors last:border-b-0 hover:bg-[#f8fbff] dark:border-[#263a55] dark:text-muted-foreground dark:hover:bg-white/[0.04]",
-                            unread && "bg-[#f4f8ff] dark:bg-blue-400/10"
+                            unread && "bg-[#f4f8ff] dark:bg-blue-400/10",
                           )}
                         >
                           <td className="px-2 py-2.5">
                             {row.report ? (
                               <input
                                 type="checkbox"
-                                checked={selectedReportIds.includes(row.report.id)}
-                                onChange={(event) => toggleReportSelection(row.report!.id, event.target.checked)}
+                                checked={selectedReportIds.includes(
+                                  row.report.id,
+                                )}
+                                onChange={(event) =>
+                                  toggleReportSelection(
+                                    row.report!.id,
+                                    event.target.checked,
+                                  )
+                                }
                                 aria-label={`Select ${row.user.name ?? row.user.email ?? "report"}`}
                               />
                             ) : null}
                           </td>
                           <td className="px-2 py-2.5">
                             <div className="flex items-center gap-3">
-                              <span className={cn("h-2 w-2 rounded-full", unread ? "bg-[#2563eb]" : "bg-transparent")} />
+                              <span
+                                className={cn(
+                                  "h-2 w-2 rounded-full",
+                                  unread ? "bg-[#2563eb]" : "bg-transparent",
+                                )}
+                              />
                               <Avatar name={row.user.name ?? row.user.email} />
-                              <span className="truncate text-xs font-semibold text-[#101828] dark:text-foreground">{row.user.name ?? row.user.email ?? "Employee"}</span>
+                              <span className="truncate text-xs font-semibold text-[#101828] dark:text-foreground">
+                                {row.user.name ?? row.user.email ?? "Employee"}
+                              </span>
                             </div>
                           </td>
-                          <td className="px-2 py-2.5 text-xs text-[#475467] dark:text-muted-foreground">{userDepartmentLabel(row.user)}</td>
+                          <td className="px-2 py-2.5 text-xs text-[#475467] dark:text-muted-foreground">
+                            {userDepartmentLabel(row.user)}
+                          </td>
                           <td className="px-2 py-2.5">
-                            <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold", statusClass(status))}>{status}</span>
+                            <span
+                              className={cn(
+                                "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                                statusClass(status),
+                              )}
+                            >
+                              {status}
+                            </span>
                           </td>
                           <td className="px-2 py-2.5">
                             <div className="flex min-w-[120px] flex-wrap items-center gap-1.5">
@@ -785,10 +953,14 @@ export function ReviewerDashboard({
                                     title={flag.label}
                                     className={cn(
                                       "inline-flex h-6 w-6 items-center justify-center rounded-full border bg-white [&_svg]:h-3.5 [&_svg]:w-3.5 dark:bg-[#0b1523]",
-                                      flag.key === "blockers" && "border-red-200 text-[#ef4444] dark:border-red-300/25",
-                                      flag.key === "activities" && "border-blue-200 text-[#2563eb] dark:border-blue-300/25",
-                                      flag.key === "edited" && "border-purple-200 text-[#8b5cf6] dark:border-purple-300/25",
-                                      flag.key === "late" && "border-red-200 text-[#ef4444] dark:border-red-300/25"
+                                      flag.key === "blockers" &&
+                                        "border-red-200 text-[#ef4444] dark:border-red-300/25",
+                                      flag.key === "activities" &&
+                                        "border-blue-200 text-[#2563eb] dark:border-blue-300/25",
+                                      flag.key === "edited" &&
+                                        "border-purple-200 text-[#8b5cf6] dark:border-purple-300/25",
+                                      flag.key === "late" &&
+                                        "border-red-200 text-[#ef4444] dark:border-red-300/25",
                                     )}
                                   >
                                     {flag.icon}
@@ -797,15 +969,30 @@ export function ReviewerDashboard({
                               )}
                             </div>
                           </td>
-                          <td className="px-2 py-2.5 text-xs">{row.report ? titleCase(row.report.workLocation) : "-"}</td>
-                          <td className="px-2 py-2.5 text-xs">{formatTimestamp(row.report?.submittedAt)}</td>
+                          <td className="px-2 py-2.5 text-xs">
+                            {row.report
+                              ? titleCase(row.report.workLocation)
+                              : "-"}
+                          </td>
+                          <td className="px-2 py-2.5 text-xs">
+                            {formatTimestamp(row.report?.submittedAt)}
+                          </td>
                           <td className="px-2 py-2.5 text-center">
                             {row.report ? (
-                              <Button variant="outline" className="h-8 rounded-[7px] px-3 text-xs text-[#2563eb]" onClick={() => openReport(row)}>
+                              <Button
+                                variant="outline"
+                                className="h-8 rounded-[7px] px-3 text-xs text-[#2563eb]"
+                                onClick={() => openReport(row)}
+                              >
                                 Review
                               </Button>
                             ) : (
-                              <Button variant="outline" className="h-8 rounded-[7px] px-3 text-xs text-[#64748b]" disabled title="Reminder emails are coming soon">
+                              <Button
+                                variant="outline"
+                                className="h-8 rounded-[7px] px-3 text-xs text-[#64748b]"
+                                disabled
+                                title="Reminder emails are coming soon"
+                              >
                                 Remind (coming soon)
                               </Button>
                             )}
@@ -835,20 +1022,44 @@ export function ReviewerDashboard({
               </div>
               <div className="flex items-center gap-8">
                 <span>
-                  {filteredItems.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filteredItems.length)} of {filteredItems.length}
+                  {filteredItems.length === 0
+                    ? 0
+                    : (currentPage - 1) * pageSize + 1}
+                  -{Math.min(currentPage * pageSize, filteredItems.length)} of{" "}
+                  {filteredItems.length}
                 </span>
                 <div className="flex items-center gap-4">
-                  <button aria-label="First page" onClick={() => setPage(1)} disabled={currentPage === 1}>
+                  <button
+                    aria-label="First page"
+                    onClick={() => setPage(1)}
+                    disabled={currentPage === 1}
+                  >
                     <ChevronsLeft className="h-4 w-4" />
                   </button>
-                  <button aria-label="Previous page" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1}>
+                  <button
+                    aria-label="Previous page"
+                    onClick={() => setPage((value) => Math.max(1, value - 1))}
+                    disabled={currentPage === 1}
+                  >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
-                  <span className="flex h-9 w-9 items-center justify-center rounded-[7px] border border-[#93c5fd] text-[#2563eb]">{currentPage}</span>
-                  <button aria-label="Next page" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage === pageCount}>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-[7px] border border-[#93c5fd] text-[#2563eb]">
+                    {currentPage}
+                  </span>
+                  <button
+                    aria-label="Next page"
+                    onClick={() =>
+                      setPage((value) => Math.min(pageCount, value + 1))
+                    }
+                    disabled={currentPage === pageCount}
+                  >
                     <ChevronRight className="h-4 w-4" />
                   </button>
-                  <button aria-label="Last page" onClick={() => setPage(pageCount)} disabled={currentPage === pageCount}>
+                  <button
+                    aria-label="Last page"
+                    onClick={() => setPage(pageCount)}
+                    disabled={currentPage === pageCount}
+                  >
                     <ChevronsRight className="h-4 w-4" />
                   </button>
                 </div>
@@ -857,11 +1068,16 @@ export function ReviewerDashboard({
           </section>
         </main>
       )}
-    </ReferenceAppShell>
+    </>
   );
 }
 
-function setLocalReadReceipt(rows: Row[], reportId: string, reviewerId: string, read: boolean) {
+function setLocalReadReceipt(
+  rows: Row[],
+  reportId: string,
+  reviewerId: string,
+  read: boolean,
+) {
   return rows.map((row) => {
     if (!row.report || row.report.id !== reportId) {
       return row;
@@ -875,14 +1091,18 @@ function setLocalReadReceipt(rows: Row[], reportId: string, reviewerId: string, 
         ...row.report,
         readReceipts: read
           ? [
-              ...existingReceipts.filter((receipt) => receipt.reviewerId !== reviewerId),
+              ...existingReceipts.filter(
+                (receipt) => receipt.reviewerId !== reviewerId,
+              ),
               {
                 reviewerId,
-                readAt: new Date().toISOString()
-              }
+                readAt: new Date().toISOString(),
+              },
             ]
-          : existingReceipts.filter((receipt) => receipt.reviewerId !== reviewerId)
-      }
+          : existingReceipts.filter(
+              (receipt) => receipt.reviewerId !== reviewerId,
+            ),
+      },
     };
   });
 }
@@ -890,7 +1110,9 @@ function setLocalReadReceipt(rows: Row[], reportId: string, reviewerId: string, 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <div className="mb-2 text-xs font-semibold text-[#64748b] dark:text-muted-foreground">{label}</div>
+      <div className="mb-2 text-xs font-semibold text-[#64748b] dark:text-muted-foreground">
+        {label}
+      </div>
       {children}
     </div>
   );
@@ -900,7 +1122,7 @@ function DashboardStat({
   icon,
   label,
   value,
-  tone
+  tone,
 }: {
   icon: ReactNode;
   label: string;
@@ -908,20 +1130,32 @@ function DashboardStat({
   tone: "green" | "orange" | "red" | "purple";
 }) {
   const toneClass = {
-    green: "bg-[#e8f9ef] text-[#16a34a] dark:bg-emerald-400/15 dark:text-emerald-200",
-    orange: "bg-[#fff4df] text-[#f59e0b] dark:bg-amber-400/15 dark:text-amber-200",
+    green:
+      "bg-[#e8f9ef] text-[#16a34a] dark:bg-emerald-400/15 dark:text-emerald-200",
+    orange:
+      "bg-[#fff4df] text-[#f59e0b] dark:bg-amber-400/15 dark:text-amber-200",
     red: "bg-[#fdecee] text-[#ef4444] dark:bg-red-400/15 dark:text-red-200",
-    purple: "bg-[#f2eafe] text-[#9b5de5] dark:bg-purple-400/15 dark:text-purple-200"
+    purple:
+      "bg-[#f2eafe] text-[#9b5de5] dark:bg-purple-400/15 dark:text-purple-200",
   }[tone];
 
   return (
     <div className="flex min-h-[82px] items-center gap-3 rounded-[8px] bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-      <div className={cn("flex h-11 w-11 items-center justify-center rounded-full", toneClass)}>
+      <div
+        className={cn(
+          "flex h-11 w-11 items-center justify-center rounded-full",
+          toneClass,
+        )}
+      >
         <span className="[&>svg]:h-6 [&>svg]:w-6">{icon}</span>
       </div>
       <div>
-        <div className="text-sm font-semibold text-[#475467] dark:text-muted-foreground">{label}</div>
-        <div className="mt-1 text-[24px] font-semibold leading-none text-[#101828] dark:text-foreground">{value}</div>
+        <div className="text-sm font-semibold text-[#475467] dark:text-muted-foreground">
+          {label}
+        </div>
+        <div className="mt-1 text-[24px] font-semibold leading-none text-[#101828] dark:text-foreground">
+          {value}
+        </div>
       </div>
     </div>
   );
@@ -930,8 +1164,12 @@ function DashboardStat({
 function CoverageMetric({ label, value }: { label: string; value: number }) {
   return (
     <div className="px-5">
-      <div className="text-sm font-semibold text-[#667085] dark:text-muted-foreground">{label}</div>
-      <div className="mt-1 text-[24px] font-medium leading-none text-[#344054] dark:text-foreground">{value}</div>
+      <div className="text-sm font-semibold text-[#667085] dark:text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-1 text-[24px] font-medium leading-none text-[#344054] dark:text-foreground">
+        {value}
+      </div>
     </div>
   );
 }
@@ -951,7 +1189,7 @@ function ReportReviewPage({
   notice,
   onBack,
   onAddComment,
-  onPrint
+  onPrint,
 }: {
   row: Row;
   date: string;
@@ -970,9 +1208,15 @@ function ReportReviewPage({
   const [commentBody, setCommentBody] = useState("");
   const [commentPage, setCommentPage] = useState(1);
   const [isAddingComment, setIsAddingComment] = useState(false);
-  const commentPageCount = Math.max(1, Math.ceil(comments.length / commentPageSize));
+  const commentPageCount = Math.max(
+    1,
+    Math.ceil(comments.length / commentPageSize),
+  );
   const currentCommentPage = Math.min(commentPage, commentPageCount);
-  const pagedComments = comments.slice((currentCommentPage - 1) * commentPageSize, currentCommentPage * commentPageSize);
+  const pagedComments = comments.slice(
+    (currentCommentPage - 1) * commentPageSize,
+    currentCommentPage * commentPageSize,
+  );
 
   async function handleCommentSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -992,7 +1236,10 @@ function ReportReviewPage({
 
   return (
     <main className="reference-page">
-      <button className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]" onClick={onBack}>
+      <button
+        className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+        onClick={onBack}
+      >
         <ArrowLeft className="h-4 w-4" />
         Back to review dashboard
       </button>
@@ -1000,20 +1247,35 @@ function ReportReviewPage({
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-[30px] font-semibold leading-tight tracking-normal text-[#101828] dark:text-foreground">
-            {row.user.name ?? row.user.email ?? "Employee"} - {formatShortDate(report?.reportDate ?? date)} Report
+            {row.user.name ?? row.user.email ?? "Employee"} -{" "}
+            {formatShortDate(report?.reportDate ?? date)} Report
           </h1>
           <div className="mt-4 flex flex-wrap items-center gap-5 text-sm text-[#101828] dark:text-foreground">
-          <span className="inline-flex items-center gap-3">
-              <span className={cn("h-3.5 w-3.5 rounded-full", unread ? "bg-[#2563eb]" : "bg-[#cbd5e1] dark:bg-[#475569]")} />
+            <span className="inline-flex items-center gap-3">
+              <span
+                className={cn(
+                  "h-3.5 w-3.5 rounded-full",
+                  unread ? "bg-[#2563eb]" : "bg-[#cbd5e1] dark:bg-[#475569]",
+                )}
+              />
               {reportSubtitle(row, reviewerId)}
             </span>
-            <span className={cn("inline-flex rounded-full px-4 py-1.5 text-sm font-semibold", statusClass(report ? reportStatus(row, date) : "Missing"))}>
+            <span
+              className={cn(
+                "inline-flex rounded-full px-4 py-1.5 text-sm font-semibold",
+                statusClass(report ? reportStatus(row, date) : "Missing"),
+              )}
+            >
               {report ? reportStatus(row, date) : "Missing"}
             </span>
           </div>
         </div>
         <div className="flex gap-3">
-          <Button className="h-12 rounded-[8px] bg-[#2563eb] px-6 text-white hover:bg-[#1d4ed8]" onClick={onPrint} disabled={!report}>
+          <Button
+            className="h-12 rounded-[8px] bg-[#2563eb] px-6 text-white hover:bg-[#1d4ed8]"
+            onClick={onPrint}
+            disabled={!report}
+          >
             <Download className="mr-2 h-4 w-4" />
             Download PDF
           </Button>
@@ -1027,22 +1289,42 @@ function ReportReviewPage({
       ) : null}
 
       <section className="mb-4 grid gap-0 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55] md:grid-cols-4 md:divide-x md:divide-[#d8dee8] md:dark:divide-[#263a55]">
-        <ReportMetric label="Submitted" value={formatTimestamp(report?.submittedAt)} />
-        <ReportMetric label="Last edited" value={formatTimestamp(report?.updatedAt)} />
-        <ReportMetric label="Department" value={userDepartmentLabel(row.user)} />
-        <ReportMetric label="Location" value={report ? titleCase(report.workLocation) : "-"} />
+        <ReportMetric
+          label="Submitted"
+          value={formatTimestamp(report?.submittedAt)}
+        />
+        <ReportMetric
+          label="Last edited"
+          value={formatTimestamp(report?.updatedAt)}
+        />
+        <ReportMetric
+          label="Department"
+          value={userDepartmentLabel(row.user)}
+        />
+        <ReportMetric
+          label="Location"
+          value={report ? titleCase(report.workLocation) : "-"}
+        />
       </section>
 
       <section className="mb-4 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-        <h2 className="mb-3 text-xl font-semibold text-[#101828] dark:text-foreground">Summary</h2>
+        <h2 className="mb-3 text-xl font-semibold text-[#101828] dark:text-foreground">
+          Summary
+        </h2>
         <div className="max-h-[190px] overflow-y-auto rounded-[8px] border border-[#d8dee8] bg-white px-4 py-4 text-sm leading-6 text-[#101828] dark:border-[#263a55] dark:bg-[#0b1523] dark:text-foreground">
-          <SummaryRenderer value={report?.summary} blockers={report?.blockers} emptyText="No summary recorded." />
+          <SummaryRenderer
+            value={report?.summary}
+            blockers={report?.blockers}
+            emptyText="No summary recorded."
+          />
         </div>
       </section>
 
       <div className="mb-4 grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <section className="rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-          <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">Included activities ({activities.length})</h2>
+          <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">
+            Included activities ({activities.length})
+          </h2>
           <div className="mt-2 max-h-[250px] overflow-y-auto">
             <table className="w-full text-sm">
               <thead>
@@ -1056,20 +1338,31 @@ function ReportReviewPage({
                 {activities.length === 0 ? (
                   <tr>
                     <td colSpan={3} className="py-6">
-                      <EmptyReferenceState>No activities included.</EmptyReferenceState>
+                      <EmptyReferenceState>
+                        No activities included.
+                      </EmptyReferenceState>
                     </td>
                   </tr>
                 ) : (
                   activities.map((activity) => (
-                    <tr key={activity.id} className="border-b border-[#e5eaf2] last:border-b-0 dark:border-[#263a55]">
+                    <tr
+                      key={activity.id}
+                      className="border-b border-[#e5eaf2] last:border-b-0 dark:border-[#263a55]"
+                    >
                       <td className="py-2 pr-4">
                         <div className="flex min-w-0 items-center gap-3">
                           {sourceIcon(activity.source)}
-                          <span className="truncate font-medium text-[#101828] dark:text-foreground">{activity.title || "Untitled activity"}</span>
+                          <span className="truncate font-medium text-[#101828] dark:text-foreground">
+                            {activity.title || "Untitled activity"}
+                          </span>
                         </div>
                       </td>
-                      <td className="py-2 pr-4 text-[#344054] dark:text-muted-foreground">{sourceLabel(activity.source)}</td>
-                      <td className="py-2 text-[#101828] dark:text-foreground">{formatDuration(activity.durationMinutes)}</td>
+                      <td className="py-2 pr-4 text-[#344054] dark:text-muted-foreground">
+                        {sourceLabel(activity.source)}
+                      </td>
+                      <td className="py-2 text-[#101828] dark:text-foreground">
+                        {formatDuration(activity.durationMinutes)}
+                      </td>
                     </tr>
                   ))
                 )}
@@ -1079,18 +1372,27 @@ function ReportReviewPage({
         </section>
 
         <section className="rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-          <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">Blockers ({blockers.length})</h2>
+          <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">
+            Blockers ({blockers.length})
+          </h2>
           <div className="mt-4 max-h-[250px] overflow-y-auto">
             {blockers.length === 0 ? (
               <EmptyReferenceState>No blockers recorded.</EmptyReferenceState>
             ) : (
               <div className="divide-y divide-[#e5eaf2] dark:divide-[#263a55]">
                 {blockers.map((blocker, index) => (
-                  <div key={`${blocker}-${index}`} className="flex gap-4 py-4 first:pt-0">
+                  <div
+                    key={`${blocker}-${index}`}
+                    className="flex gap-4 py-4 first:pt-0"
+                  >
                     <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-[#ef4444]" />
                     <div>
-                      <div className="font-medium text-[#101828] dark:text-foreground">{blocker}</div>
-                      <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">Reported by the employee in their daily summary.</div>
+                      <div className="font-medium text-[#101828] dark:text-foreground">
+                        {blocker}
+                      </div>
+                      <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
+                        Reported by the employee in their daily summary.
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1102,17 +1404,27 @@ function ReportReviewPage({
 
       <section className="mb-4 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">Review comments</h2>
-          <span className="text-sm font-medium text-[#667085] dark:text-muted-foreground">{comments.length} comment{comments.length === 1 ? "" : "s"}</span>
+          <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">
+            Review comments
+          </h2>
+          <span className="text-sm font-medium text-[#667085] dark:text-muted-foreground">
+            {comments.length} comment{comments.length === 1 ? "" : "s"}
+          </span>
         </div>
 
         <div className="mt-4 space-y-3">
           {comments.length ? (
             pagedComments.map((comment) => (
-              <div key={comment.id} className="rounded-[10px] bg-[#f6f9fd] px-4 py-3 ring-1 ring-[#e5eaf2] dark:bg-[#0b1523] dark:ring-[#263a55]">
-                <p className="whitespace-pre-wrap text-sm leading-6 text-[#101828] dark:text-foreground">{comment.body}</p>
+              <div
+                key={comment.id}
+                className="rounded-[10px] bg-[#f6f9fd] px-4 py-3 ring-1 ring-[#e5eaf2] dark:bg-[#0b1523] dark:ring-[#263a55]"
+              >
+                <p className="whitespace-pre-wrap text-sm leading-6 text-[#101828] dark:text-foreground">
+                  {comment.body}
+                </p>
                 <p className="mt-2 text-xs font-medium text-[#667085] dark:text-muted-foreground">
-                  {formatTimestamp(comment.createdAt)} by {comment.author.name ?? comment.author.email ?? "Review team"}
+                  {formatTimestamp(comment.createdAt)} by{" "}
+                  {comment.author.name ?? comment.author.email ?? "Review team"}
                 </p>
               </div>
             ))
@@ -1127,10 +1439,28 @@ function ReportReviewPage({
               Page {currentCommentPage} of {commentPageCount}
             </span>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setCommentPage(Math.max(1, currentCommentPage - 1))} disabled={currentCommentPage === 1}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCommentPage(Math.max(1, currentCommentPage - 1))
+                }
+                disabled={currentCommentPage === 1}
+              >
                 Previous
               </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => setCommentPage(Math.min(commentPageCount, currentCommentPage + 1))} disabled={currentCommentPage === commentPageCount}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCommentPage(
+                    Math.min(commentPageCount, currentCommentPage + 1),
+                  )
+                }
+                disabled={currentCommentPage === commentPageCount}
+              >
                 Next
               </Button>
             </div>
@@ -1146,7 +1476,10 @@ function ReportReviewPage({
             className="min-h-24"
           />
           <div className="mt-3 flex justify-end">
-            <Button type="submit" disabled={!report || !commentBody.trim() || isAddingComment}>
+            <Button
+              type="submit"
+              disabled={!report || !commentBody.trim() || isAddingComment}
+            >
               {isAddingComment ? "Adding..." : "Add comment"}
             </Button>
           </div>
@@ -1154,23 +1487,33 @@ function ReportReviewPage({
       </section>
 
       <section className="rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-        <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">Revision history</h2>
+        <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">
+          Revision history
+        </h2>
         {report?.revisions.length ? (
           <div className="mt-3 divide-y divide-[#e5eaf2] dark:divide-[#263a55]">
             {report.revisions.map((revision) => (
-              <div key={revision.id} className="flex items-center justify-between gap-4 py-3 text-sm">
+              <div
+                key={revision.id}
+                className="flex items-center justify-between gap-4 py-3 text-sm"
+              >
                 <div className="flex items-center gap-3">
                   <Edit3 className="h-4 w-4 text-[#8b5cf6]" />
-                  <span className="font-medium text-[#101828] dark:text-foreground">Edited after report date</span>
+                  <span className="font-medium text-[#101828] dark:text-foreground">
+                    Edited after report date
+                  </span>
                 </div>
                 <span className="text-[#667085] dark:text-muted-foreground">
-                  {formatTimestamp(revision.createdAt)} by {revision.editedBy.name ?? revision.editedBy.email ?? "User"}
+                  {formatTimestamp(revision.createdAt)} by{" "}
+                  {revision.editedBy.name ?? revision.editedBy.email ?? "User"}
                 </span>
               </div>
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-[#475467] dark:text-muted-foreground">No revisions recorded yet.</p>
+          <p className="mt-2 text-sm text-[#475467] dark:text-muted-foreground">
+            No revisions recorded yet.
+          </p>
         )}
       </section>
     </main>
@@ -1180,8 +1523,12 @@ function ReportReviewPage({
 function ReportMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="px-2 py-3 md:px-6 md:first:pl-0">
-      <div className="text-sm font-semibold text-[#475467] dark:text-muted-foreground">{label}</div>
-      <div className="mt-3 text-base font-medium text-[#101828] dark:text-foreground">{value}</div>
+      <div className="text-sm font-semibold text-[#475467] dark:text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-3 text-base font-medium text-[#101828] dark:text-foreground">
+        {value}
+      </div>
     </div>
   );
 }
