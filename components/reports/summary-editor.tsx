@@ -1,6 +1,13 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 import { Extension } from "@tiptap/core";
 import Highlight from "@tiptap/extension-highlight";
@@ -8,10 +15,22 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor, JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { Ban, Bold, Heading2, Italic, List, ListOrdered, Quote } from "lucide-react";
+import {
+  Ban,
+  Bold,
+  Heading2,
+  Italic,
+  List,
+  ListOrdered,
+  Quote,
+} from "lucide-react";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { markdownToSummaryHtml, lineItems, uniqueLines } from "@/lib/summary-format";
+import {
+  markdownToSummaryHtml,
+  lineItems,
+  uniqueLines,
+} from "@/lib/summary-format";
 import { cn } from "@/lib/utils";
 
 export type SummarySnapshot = {
@@ -42,7 +61,14 @@ type SummaryToolbarState = {
   canToggleBlocker: boolean;
 };
 
-export type SummaryEditorCommand = "heading" | "bold" | "italic" | "bulletList" | "orderedList" | "blockquote" | "blocker";
+export type SummaryEditorCommand =
+  | "heading"
+  | "bold"
+  | "italic"
+  | "bulletList"
+  | "orderedList"
+  | "blockquote"
+  | "blocker";
 export type SummaryEditorStructuralCommand = "enter" | "indent" | "outdent";
 
 type InlineMarks = {
@@ -59,7 +85,7 @@ const inactiveToolbarState: SummaryToolbarState = {
   numbered: false,
   quote: false,
   blocker: false,
-  canToggleBlocker: false
+  canToggleBlocker: false,
 };
 
 function formattedInlineMarkdown(content: string, marker: "**" | "_") {
@@ -105,7 +131,9 @@ function inlineContentToMarkdown(node: JSONContent) {
 }
 
 function listItemTextToMarkdown(node: JSONContent) {
-  const textBlocks = (node.content ?? []).filter((child) => child.type !== "bulletList" && child.type !== "orderedList");
+  const textBlocks = (node.content ?? []).filter(
+    (child) => child.type !== "bulletList" && child.type !== "orderedList",
+  );
   return textBlocks
     .map((child) => {
       if (child.type === "heading" || child.type === "paragraph") {
@@ -131,10 +159,14 @@ function listNodeToMarkdown(node: JSONContent, depth: number) {
       return;
     }
 
-    lines.push(`${indent}${ordered ? `${index + 1}.` : "-"} ${listItemTextToMarkdown(item)}`);
+    lines.push(
+      `${indent}${ordered ? `${index + 1}.` : "-"} ${listItemTextToMarkdown(item)}`,
+    );
 
     (item.content ?? [])
-      .filter((child) => child.type === "bulletList" || child.type === "orderedList")
+      .filter(
+        (child) => child.type === "bulletList" || child.type === "orderedList",
+      )
       .forEach((nested) => {
         lines.push(...listNodeToMarkdown(nested, depth + 1));
       });
@@ -145,7 +177,9 @@ function listNodeToMarkdown(node: JSONContent, depth: number) {
 
 function blockNodeToMarkdown(node: JSONContent, depth = 0): string[] {
   if (node.type === "doc") {
-    return (node.content ?? []).flatMap((child) => blockNodeToMarkdown(child, depth));
+    return (node.content ?? []).flatMap((child) =>
+      blockNodeToMarkdown(child, depth),
+    );
   }
 
   if (node.type === "heading") {
@@ -158,7 +192,9 @@ function blockNodeToMarkdown(node: JSONContent, depth = 0): string[] {
   }
 
   if (node.type === "blockquote") {
-    const lines = (node.content ?? []).flatMap((child) => blockNodeToMarkdown(child, depth));
+    const lines = (node.content ?? []).flatMap((child) =>
+      blockNodeToMarkdown(child, depth),
+    );
     return lines.map((line) => (line ? `> ${line}` : ""));
   }
 
@@ -166,7 +202,9 @@ function blockNodeToMarkdown(node: JSONContent, depth = 0): string[] {
     return listNodeToMarkdown(node, depth);
   }
 
-  return (node.content ?? []).flatMap((child) => blockNodeToMarkdown(child, depth));
+  return (node.content ?? []).flatMap((child) =>
+    blockNodeToMarkdown(child, depth),
+  );
 }
 
 function editorToMarkdown(editor: Editor) {
@@ -179,17 +217,21 @@ function editorToMarkdown(editor: Editor) {
 
 function blockerMarksFromEditor(editor: Editor) {
   return uniqueLines(
-    Array.from(editor.view.dom.querySelectorAll<HTMLElement>("mark.summary-blocker-highlight"))
+    Array.from(
+      editor.view.dom.querySelectorAll<HTMLElement>(
+        "mark.summary-blocker-highlight",
+      ),
+    )
       .map((mark) => mark.textContent?.trim() ?? "")
       .filter(Boolean)
-      .join("\n")
+      .join("\n"),
   );
 }
 
 export function readEditorSnapshot(editor: Editor): SummarySnapshot {
   return {
     summary: editorToMarkdown(editor),
-    blockers: blockerMarksFromEditor(editor)
+    blockers: blockerMarksFromEditor(editor),
   };
 }
 
@@ -200,7 +242,12 @@ function summaryHtml(snapshot: SummarySnapshot) {
 export function getSummaryToolbarState(editor: Editor): SummaryToolbarState {
   const hasSelection = !editor.state.selection.empty;
   const selectedText = hasSelection
-    ? editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, "\n", " ")
+    ? editor.state.doc.textBetween(
+        editor.state.selection.from,
+        editor.state.selection.to,
+        "\n",
+        " ",
+      )
     : "";
   const inlineMarks = activeInlineMarks(editor);
 
@@ -212,7 +259,7 @@ export function getSummaryToolbarState(editor: Editor): SummaryToolbarState {
     numbered: editor.isActive("orderedList"),
     quote: editor.isActive("blockquote"),
     blocker: inlineMarks.blocker,
-    canToggleBlocker: Boolean(selectedText.trim()) || inlineMarks.blocker
+    canToggleBlocker: Boolean(selectedText.trim()) || inlineMarks.blocker,
   };
 }
 
@@ -221,7 +268,14 @@ function selectionIsWhitespaceOnly(editor: Editor) {
     return false;
   }
 
-  return !editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, "\n", " ").trim();
+  return !editor.state.doc
+    .textBetween(
+      editor.state.selection.from,
+      editor.state.selection.to,
+      "\n",
+      " ",
+    )
+    .trim();
 }
 
 function markIsActiveAtCursor(editor: Editor, markType: string) {
@@ -235,14 +289,17 @@ function markIsActiveAtCursor(editor: Editor, markType: string) {
 
   const nodeBefore = editor.state.selection.$from.nodeBefore;
 
-  return Boolean(nodeBefore?.isText && nodeBefore.marks.some((mark) => mark.type.name === markType));
+  return Boolean(
+    nodeBefore?.isText &&
+    nodeBefore.marks.some((mark) => mark.type.name === markType),
+  );
 }
 
 function activeInlineMarks(editor: Editor): InlineMarks {
   return {
     bold: markIsActiveAtCursor(editor, "bold"),
     italic: markIsActiveAtCursor(editor, "italic"),
-    blocker: markIsActiveAtCursor(editor, "highlight")
+    blocker: markIsActiveAtCursor(editor, "highlight"),
   };
 }
 
@@ -274,7 +331,10 @@ function preserveInlineMarks(editor: Editor, command: () => boolean) {
   return true;
 }
 
-function toggleInlineMark(editor: Editor, markType: "bold" | "italic" | "highlight") {
+function toggleInlineMark(
+  editor: Editor,
+  markType: "bold" | "italic" | "highlight",
+) {
   const markIsActive = markIsActiveAtCursor(editor, markType);
 
   if (markIsActive) {
@@ -284,7 +344,10 @@ function toggleInlineMark(editor: Editor, markType: "bold" | "italic" | "highlig
   return editor.chain().focus().setMark(markType).run();
 }
 
-export function runSummaryEditorStructuralCommand(editor: Editor, command: SummaryEditorStructuralCommand) {
+export function runSummaryEditorStructuralCommand(
+  editor: Editor,
+  command: SummaryEditorStructuralCommand,
+) {
   switch (command) {
     case "enter":
       return preserveInlineMarks(editor, () =>
@@ -293,28 +356,43 @@ export function runSummaryEditorStructuralCommand(editor: Editor, command: Summa
           () => commands.newlineInCode(),
           () => commands.createParagraphNear(),
           () => commands.liftEmptyBlock(),
-          () => commands.splitBlock({ keepMarks: true })
-        ])
+          () => commands.splitBlock({ keepMarks: true }),
+        ]),
       );
     case "indent":
-      return preserveInlineMarks(editor, () => editor.chain().focus().sinkListItem("listItem").run());
+      return preserveInlineMarks(editor, () =>
+        editor.chain().focus().sinkListItem("listItem").run(),
+      );
     case "outdent":
-      return preserveInlineMarks(editor, () => editor.chain().focus().liftListItem("listItem").run());
+      return preserveInlineMarks(editor, () =>
+        editor.chain().focus().liftListItem("listItem").run(),
+      );
     default:
       return false;
   }
 }
 
-export function runSummaryEditorCommand(editor: Editor, command: SummaryEditorCommand) {
+export function runSummaryEditorCommand(
+  editor: Editor,
+  command: SummaryEditorCommand,
+) {
   switch (command) {
     case "heading":
-      return preserveInlineMarks(editor, () => editor.chain().focus().toggleHeading({ level: 2 }).run());
+      return preserveInlineMarks(editor, () =>
+        editor.chain().focus().toggleHeading({ level: 2 }).run(),
+      );
     case "bulletList":
-      return preserveInlineMarks(editor, () => editor.chain().focus().toggleBulletList().run());
+      return preserveInlineMarks(editor, () =>
+        editor.chain().focus().toggleBulletList().run(),
+      );
     case "orderedList":
-      return preserveInlineMarks(editor, () => editor.chain().focus().toggleOrderedList().run());
+      return preserveInlineMarks(editor, () =>
+        editor.chain().focus().toggleOrderedList().run(),
+      );
     case "blockquote":
-      return preserveInlineMarks(editor, () => editor.chain().focus().toggleBlockquote().run());
+      return preserveInlineMarks(editor, () =>
+        editor.chain().focus().toggleBlockquote().run(),
+      );
     case "bold":
       return toggleInlineMark(editor, "bold");
     case "italic":
@@ -326,7 +404,10 @@ export function runSummaryEditorCommand(editor: Editor, command: SummaryEditorCo
   }
 }
 
-function runSummaryEditorInputCommand(editor: Editor, command: SummaryEditorCommand) {
+function runSummaryEditorInputCommand(
+  editor: Editor,
+  command: SummaryEditorCommand,
+) {
   if (selectionIsWhitespaceOnly(editor)) {
     return true;
   }
@@ -344,7 +425,8 @@ const SummaryStructuralShortcuts = Extension.create({
       "Mod-i": ({ editor }) => runSummaryEditorInputCommand(editor, "italic"),
       Enter: ({ editor }) => runSummaryEditorStructuralCommand(editor, "enter"),
       Tab: ({ editor }) => {
-        const handledByList = editor.isActive("bulletList") || editor.isActive("orderedList");
+        const handledByList =
+          editor.isActive("bulletList") || editor.isActive("orderedList");
 
         if (!handledByList) {
           return false;
@@ -354,7 +436,8 @@ const SummaryStructuralShortcuts = Extension.create({
         return true;
       },
       "Shift-Tab": ({ editor }) => {
-        const handledByList = editor.isActive("bulletList") || editor.isActive("orderedList");
+        const handledByList =
+          editor.isActive("bulletList") || editor.isActive("orderedList");
 
         if (!handledByList) {
           return false;
@@ -362,9 +445,9 @@ const SummaryStructuralShortcuts = Extension.create({
 
         runSummaryEditorStructuralCommand(editor, "outdent");
         return true;
-      }
+      },
     };
-  }
+  },
 });
 
 export const summaryEditorExtensions = [
@@ -378,24 +461,25 @@ export const summaryEditorExtensions = [
     horizontalRule: false,
     link: false,
     strike: false,
-    underline: false
+    underline: false,
   }),
   Highlight.configure({
     HTMLAttributes: {
-      class: "summary-blocker-highlight"
-    }
+      class: "summary-blocker-highlight",
+    },
   }),
   Placeholder.configure({
-    placeholder: "What did you work on today?"
-  })
+    placeholder: "What did you work on today?",
+  }),
 ];
 
 function buttonTone(active: boolean, extraClassName = "") {
   return cn(
     "reference-menu-button",
     "disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[#64748b] dark:disabled:hover:bg-transparent dark:disabled:hover:text-muted-foreground",
-    active && "bg-[#eef2ff] text-[#4338ca] ring-1 ring-[#c7d2fe] dark:bg-blue-400/15 dark:text-blue-100 dark:ring-blue-300/20",
-    extraClassName
+    active &&
+      "bg-[#eef2ff] text-[#4338ca] ring-1 ring-[#c7d2fe] dark:bg-blue-400/15 dark:text-blue-100 dark:ring-blue-300/20",
+    extraClassName,
   );
 }
 
@@ -406,7 +490,7 @@ function SummaryToolbarButton({
   title,
   children,
   className,
-  onClick
+  onClick,
 }: {
   active: boolean;
   disabled?: boolean;
@@ -440,7 +524,7 @@ function SummaryEditorSkeleton() {
       aria-label="Loading summary editor"
       role="status"
     >
-      <div className="h-[430px] rounded-[8px] bg-white px-4 py-4 ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+      <div className="h-[480px] rounded-[7px] bg-white px-3.5 py-3.5 ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
         <Skeleton className="h-4 w-11/12 rounded-[4px]" />
         <Skeleton className="mt-3 h-4 w-4/5 rounded-[4px]" />
         <Skeleton className="mt-3 h-4 w-9/12 rounded-[4px]" />
@@ -452,13 +536,20 @@ function SummaryEditorSkeleton() {
   );
 }
 
-export const SummaryEditor = forwardRef<SummaryEditorHandle, SummaryEditorProps>(function SummaryEditor(
+export const SummaryEditor = forwardRef<
+  SummaryEditorHandle,
+  SummaryEditorProps
+>(function SummaryEditor(
   { initialSummary, initialBlockers, resetKey, onChange },
-  ref
+  ref,
 ) {
   const onChangeRef = useRef(onChange);
-  const fallbackSnapshotRef = useRef<SummarySnapshot>({ summary: initialSummary, blockers: initialBlockers });
-  const [toolbarState, setToolbarState] = useState<SummaryToolbarState>(inactiveToolbarState);
+  const fallbackSnapshotRef = useRef<SummarySnapshot>({
+    summary: initialSummary,
+    blockers: initialBlockers,
+  });
+  const [toolbarState, setToolbarState] =
+    useState<SummaryToolbarState>(inactiveToolbarState);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -471,17 +562,22 @@ export const SummaryEditor = forwardRef<SummaryEditorHandle, SummaryEditorProps>
   }
 
   const updateToolbarState = useCallback((editor: Editor | null) => {
-    setToolbarState(editor ? getSummaryToolbarState(editor) : inactiveToolbarState);
+    setToolbarState(
+      editor ? getSummaryToolbarState(editor) : inactiveToolbarState,
+    );
   }, []);
 
   const editor = useEditor({
     extensions: summaryEditorExtensions,
-    content: summaryHtml({ summary: initialSummary, blockers: initialBlockers }),
+    content: summaryHtml({
+      summary: initialSummary,
+      blockers: initialBlockers,
+    }),
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: "summary-tiptap-prosemirror"
-      }
+        class: "summary-tiptap-prosemirror",
+      },
     },
     onUpdate: ({ editor }) => {
       publishSnapshot(editor);
@@ -490,29 +586,38 @@ export const SummaryEditor = forwardRef<SummaryEditorHandle, SummaryEditorProps>
     onTransaction: ({ editor }) => updateToolbarState(editor),
     onSelectionUpdate: ({ editor }) => updateToolbarState(editor),
     onFocus: ({ editor }) => updateToolbarState(editor),
-    onBlur: ({ editor }) => updateToolbarState(editor)
+    onBlur: ({ editor }) => updateToolbarState(editor),
   });
 
-  const setEditorSnapshot = useCallback((nextEditor: Editor, snapshot: SummarySnapshot) => {
-    nextEditor.commands.setContent(summaryHtml(snapshot), { emitUpdate: false });
-    const nextSnapshot = readEditorSnapshot(nextEditor);
-    fallbackSnapshotRef.current = nextSnapshot;
-    onChangeRef.current(nextSnapshot);
-    updateToolbarState(nextEditor);
-  }, [updateToolbarState]);
+  const setEditorSnapshot = useCallback(
+    (nextEditor: Editor, snapshot: SummarySnapshot) => {
+      nextEditor.commands.setContent(summaryHtml(snapshot), {
+        emitUpdate: false,
+      });
+      const nextSnapshot = readEditorSnapshot(nextEditor);
+      fallbackSnapshotRef.current = nextSnapshot;
+      onChangeRef.current(nextSnapshot);
+      updateToolbarState(nextEditor);
+    },
+    [updateToolbarState],
+  );
 
   useEffect(() => {
     if (!editor) {
       return;
     }
 
-    setEditorSnapshot(editor, { summary: initialSummary, blockers: initialBlockers });
+    setEditorSnapshot(editor, {
+      summary: initialSummary,
+      blockers: initialBlockers,
+    });
   }, [editor, initialSummary, initialBlockers, resetKey, setEditorSnapshot]);
 
   useImperativeHandle(
     ref,
     () => ({
-      getSnapshot: () => (editor ? readEditorSnapshot(editor) : fallbackSnapshotRef.current),
+      getSnapshot: () =>
+        editor ? readEditorSnapshot(editor) : fallbackSnapshotRef.current,
       setSnapshot: (snapshot) => {
         if (!editor) {
           fallbackSnapshotRef.current = snapshot;
@@ -521,17 +626,23 @@ export const SummaryEditor = forwardRef<SummaryEditorHandle, SummaryEditorProps>
         }
 
         setEditorSnapshot(editor, snapshot);
-      }
+      },
     }),
-    [editor, setEditorSnapshot]
+    [editor, setEditorSnapshot],
   );
 
-  function runCommand(command: SummaryEditorCommand, options: { ignoreWhitespaceSelection?: boolean } = {}) {
+  function runCommand(
+    command: SummaryEditorCommand,
+    options: { ignoreWhitespaceSelection?: boolean } = {},
+  ) {
     if (!editor) {
       return;
     }
 
-    if (options.ignoreWhitespaceSelection !== false && selectionIsWhitespaceOnly(editor)) {
+    if (
+      options.ignoreWhitespaceSelection !== false &&
+      selectionIsWhitespaceOnly(editor)
+    ) {
       updateToolbarState(editor);
       return;
     }
