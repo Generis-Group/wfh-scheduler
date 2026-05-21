@@ -476,13 +476,13 @@ export function ReportHistory({
           onDownload={downloadPdf}
         />
       ) : (
-        <main className="reference-page !pb-5 !pt-4">
-          <div className="mb-5">
-            <h1 className="text-[30px] font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">Reports</h1>
-            <p className="mt-2 text-base text-[#667085] dark:text-muted-foreground">Review saved drafts and submitted reports.</p>
+        <main className="reference-page">
+          <div className="mb-3">
+            <h1 className="text-[24px] font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">Reports</h1>
+            <p className="mt-0.5 text-sm text-[#667085] dark:text-muted-foreground">Review saved drafts and submitted reports.</p>
           </div>
 
-          <section className="mb-5 rounded-[14px] bg-white p-4 shadow-[0_12px_34px_rgba(15,23,42,0.07)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
+          <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
             <div className="grid gap-3 min-[980px]:grid-cols-[minmax(260px,1fr)_190px_320px_150px]">
               <label className="relative min-w-0">
                 <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#667085]" />
@@ -547,8 +547,8 @@ export function ReportHistory({
             {message ? <div className="mt-3 text-sm text-[#475569] dark:text-muted-foreground">{message}</div> : null}
           </section>
 
-          <section className="overflow-hidden rounded-[14px] bg-white shadow-[0_12px_34px_rgba(15,23,42,0.07)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
-            <div className="grid grid-cols-[180px_220px_minmax(0,1fr)_210px] border-b border-[#e8ecf3] px-5 py-4 text-sm font-semibold text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">
+          <section className="overflow-hidden rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
+            <div className="grid grid-cols-[170px_190px_minmax(0,1fr)_190px] border-b border-[#e8ecf3] px-4 py-3 text-sm font-semibold text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">
               <div className="flex items-center gap-2">
                 Date
                 <ArrowUpDown className="h-3.5 w-3.5" />
@@ -566,10 +566,10 @@ export function ReportHistory({
               paginatedReports.map((report) => (
                 <article
                   key={report.id}
-                  className="grid min-h-[104px] grid-cols-[180px_220px_minmax(0,1fr)_210px] items-center border-b border-[#e8ecf3] px-5 py-4 last:border-b-0 dark:border-[#263a55]"
+                  className="grid min-h-[86px] grid-cols-[170px_190px_minmax(0,1fr)_190px] items-center border-b border-[#e8ecf3] px-4 py-3 last:border-b-0 dark:border-[#263a55]"
                 >
                   <div>
-                    <div className="text-base font-medium text-[#111827] dark:text-foreground">{formatReportDate(report.reportDate)}</div>
+                    <div className="text-sm font-medium text-[#111827] dark:text-foreground">{formatReportDate(report.reportDate)}</div>
                     <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">{formatWeekday(report.reportDate)}</div>
                   </div>
                   <div>
@@ -584,7 +584,7 @@ export function ReportHistory({
                   <div className="flex items-center justify-end gap-3">
                     <Button
                       variant="outline"
-                      className="h-10 rounded-[8px] bg-white px-5 text-sm font-medium ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
+                      className="h-9 rounded-[7px] bg-white px-4 text-sm font-medium ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
                       onClick={() => openReport(report)}
                     >
                       <ExternalLink className="mr-2 h-4 w-4" />
@@ -602,7 +602,7 @@ export function ReportHistory({
               ))
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e8ecf3] px-5 py-4 text-sm text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e8ecf3] px-4 py-3 text-sm text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">
               <span>
                 Showing {filtered.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} reports
               </span>

@@ -913,18 +913,18 @@ export function DailyReportApp({
       mustChangePassword={mustChangePassword}
       currentReportDate={reportDate}
     >
-      <main className="reference-page !pb-4 !pt-3">
-        <section className="overflow-visible rounded-[18px] bg-white shadow-[0_14px_38px_rgba(15,23,42,0.09)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
-          <div className="flex flex-col gap-4 px-6 pb-5 pt-6 min-[900px]:flex-row min-[900px]:items-start min-[900px]:justify-between min-[1200px]:px-8">
+      <main className="reference-page !px-3 !pb-3 !pt-2 sm:!px-4">
+        <section className="overflow-visible rounded-[10px] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.07)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
+          <div className="flex flex-col gap-3 px-4 pb-3 pt-4 min-[900px]:flex-row min-[900px]:items-center min-[900px]:justify-between min-[1200px]:px-5">
             <div>
-              <h1 className="text-[28px] font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">Daily Update</h1>
-              <p className="mt-1.5 text-sm text-[#667085] dark:text-muted-foreground">Share what you worked on today.</p>
+              <h1 className="text-2xl font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">Daily Update</h1>
+              <p className="mt-0.5 text-xs text-[#667085] dark:text-muted-foreground">Share what you worked on today.</p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               {report.id && report.status === "DRAFT" ? (
                 <Button
                   variant="outline"
-                  className="h-11 rounded-[8px] bg-white px-5 text-sm font-medium text-[#b42318] shadow-[0_2px_7px_rgba(15,23,42,0.06)] ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
+                  className="h-10 rounded-[7px] bg-white px-4 text-sm font-medium text-[#b42318] shadow-none ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
                   disabled={isBusy}
                   onClick={deleteDraft}
                 >
@@ -933,13 +933,13 @@ export function DailyReportApp({
                 </Button>
               ) : null}
               {report.status === "SUBMITTED" ? (
-                <span className="inline-flex h-11 items-center gap-2 rounded-[8px] bg-emerald-50 px-5 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-300/20">
+                <span className="inline-flex h-10 items-center gap-2 rounded-[7px] bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-300/20">
                   <CheckCircle2 className="h-4 w-4" />
                   Submitted
                 </span>
               ) : (
                 <Button
-                  className="h-11 rounded-[8px] bg-gradient-to-br from-[#4f6dfd] to-[#4a28df] px-6 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(79,109,253,0.34)] hover:from-[#4663ed] hover:to-[#3f21c8]"
+                  className="h-10 rounded-[7px] bg-gradient-to-br from-[#4f6dfd] to-[#4a28df] px-5 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(79,109,253,0.28)] hover:from-[#4663ed] hover:to-[#3f21c8]"
                   disabled={isBusy}
                   onClick={submitReport}
                 >
@@ -950,19 +950,19 @@ export function DailyReportApp({
             </div>
           </div>
 
-          <div className="mx-6 h-px bg-[#e5e9f1] dark:bg-[#213149] min-[1200px]:mx-8" />
+          <div className="mx-4 h-px bg-[#e5e9f1] dark:bg-[#213149] min-[1200px]:mx-5" />
 
-          <div className="grid gap-3 px-6 py-4 min-[900px]:grid-cols-[minmax(320px,430px)_minmax(190px,240px)_minmax(260px,344px)] min-[900px]:items-center min-[900px]:justify-between min-[1200px]:px-8">
+          <div className="grid gap-2 px-4 py-3 min-[900px]:grid-cols-[minmax(320px,430px)_minmax(180px,220px)_minmax(190px,240px)] min-[900px]:items-center min-[900px]:justify-between min-[1200px]:px-5">
             <div className="flex w-full items-center gap-2">
               <button
                 type="button"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] bg-white text-[#475467] shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] transition hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#101d2e] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-[#132239] dark:hover:text-foreground"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#101d2e] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-[#132239] dark:hover:text-foreground"
                 aria-label="Previous day"
                 onClick={() => shiftReportDate(-1)}
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <label className="relative flex h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[8px] bg-white px-5 text-sm font-medium text-[#111827] shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]">
+              <label className="relative flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-[7px] bg-white px-4 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]">
                 <CalendarDays className="h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
                 <span className="truncate">{formatReportDate(date)}</span>
                 <Input
@@ -975,7 +975,7 @@ export function DailyReportApp({
               </label>
               <button
                 type="button"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] bg-white text-[#475467] shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] transition hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#101d2e] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-[#132239] dark:hover:text-foreground"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#101d2e] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-[#132239] dark:hover:text-foreground"
                 aria-label="Next day"
                 onClick={() => shiftReportDate(1)}
               >
@@ -983,7 +983,7 @@ export function DailyReportApp({
               </button>
             </div>
 
-            <label className="flex min-h-11 w-full items-center gap-3 rounded-[8px] bg-white px-4 text-sm shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]">
+            <label className="flex min-h-10 w-full items-center gap-3 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]">
               <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">Location</span>
               <Select
                 value={workLocation}
@@ -999,7 +999,7 @@ export function DailyReportApp({
               </Select>
             </label>
 
-            <div className="flex min-h-11 w-full items-center gap-4 rounded-[8px] bg-white px-4 text-sm shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]" aria-live="polite">
+            <div className="flex min-h-10 w-full items-center gap-4 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]" aria-live="polite">
               <span className={cn("inline-flex items-center gap-2 rounded-full px-2.5 py-1 font-medium", autoSaveStatus === "error" ? "bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300")}>
                 <CheckCircle2 className="h-4 w-4" />
                 {autoSaveStatus === "error" ? "Save failed" : "Saved"}
@@ -1007,20 +1007,19 @@ export function DailyReportApp({
             </div>
           </div>
 
-          <div className="grid gap-4 border-t border-[#e8ecf3] px-6 py-5 dark:border-[#213149] min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)] min-[1200px]:px-8">
-            <section className="flex min-h-[660px] flex-col rounded-[12px] bg-white p-5 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
+          <div className="grid gap-3 border-t border-[#e8ecf3] px-4 py-3 dark:border-[#213149] min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1200px]:px-5 min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
+            <section className="flex min-h-[560px] flex-col rounded-[8px] bg-white p-3 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-semibold tracking-normal text-[#111827] dark:text-foreground">Work items</h2>
-                    <ReferenceBadge tone="neutral" className="px-3 py-1.5 text-xs">{selectedCount} selected</ReferenceBadge>
+                    <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">Work items</h2>
+                    <ReferenceBadge tone="neutral" className="px-2.5 py-1 text-xs">{selectedCount} selected</ReferenceBadge>
                   </div>
-                  <p className="mt-2 text-sm text-[#667085] dark:text-muted-foreground">Import and select work to include in your update.</p>
                 </div>
                 <div className="relative">
                   <Button
                     variant="outline"
-                    className="h-10 rounded-[8px] bg-white px-4 text-sm font-medium text-[#111827] shadow-[0_2px_7px_rgba(15,23,42,0.04)] ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55]"
+                    className="h-9 rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55]"
                     disabled={isBusy}
                     onClick={() => setImportMenuOpen((open) => !open)}
                   >
@@ -1072,7 +1071,7 @@ export function DailyReportApp({
                 </div>
               </div>
 
-              <label className="relative mt-4 block">
+              <label className="relative mt-3 block">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98a2b3]" />
                 <Input
                   value={activitySearch}
@@ -1081,12 +1080,12 @@ export function DailyReportApp({
                     setActivityPage(1);
                   }}
                   placeholder="Search work items"
-                  className="h-10 rounded-[8px] bg-white pl-9 text-sm shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                  className="h-9 rounded-[7px] bg-white pl-9 text-sm shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#0f1b2a] dark:ring-[#263a55]"
                   aria-label="Search work items"
                 />
               </label>
 
-              <div className="mt-4 h-[412px] space-y-2.5 overflow-y-auto pr-1">
+              <div className="mt-3 h-[390px] space-y-2 overflow-y-auto pr-1">
                 {activities.length === 0 ? (
                   <EmptyReferenceState>No activities yet. Import work from Jira, Calendar, or Tasks.</EmptyReferenceState>
                 ) : pagedActivities.length === 0 ? (
@@ -1095,7 +1094,7 @@ export function DailyReportApp({
                   pagedActivities.map((activity) => (
                     <article
                       key={activity.id}
-                      className="grid min-h-[74px] grid-cols-[28px_40px_minmax(0,1fr)_auto_68px_28px] items-center gap-3 rounded-[10px] bg-white px-4 py-3 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                      className="grid min-h-[68px] grid-cols-[24px_34px_minmax(0,1fr)_auto_58px_28px] items-center gap-2.5 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
                     >
                       <input
                         type="checkbox"
@@ -1104,9 +1103,9 @@ export function DailyReportApp({
                         onChange={(event) => setActivity(activity.id, { selected: event.target.checked })}
                         aria-label={`Include ${activity.title}`}
                       />
-                      <div className={cn("flex h-8 w-8 items-center justify-center rounded-[8px]", sourceStyles[activity.source])}>{sourceIcon(activity.source)}</div>
+                      <div className={cn("flex h-8 w-8 items-center justify-center rounded-[7px]", sourceStyles[activity.source])}>{sourceIcon(activity.source)}</div>
                       <div className="min-w-0">
-                        <div className="truncate text-base font-semibold text-[#111827] dark:text-foreground">
+                        <div className="truncate text-sm font-semibold text-[#111827] dark:text-foreground">
                           {activity.sourceUrl && activity.sourceUrl !== "#" ? (
                             <a href={activity.sourceUrl} target="_blank" rel="noreferrer" className="hover:text-[#2563eb]">
                               {activity.title || "Untitled activity"}
@@ -1128,7 +1127,7 @@ export function DailyReportApp({
                       <ReferenceBadge tone={statusTone(activity.status)} className="justify-self-start px-2.5 py-1 text-xs">
                         {activity.status || "Not set"}
                       </ReferenceBadge>
-                      <div className="text-base font-medium text-[#111827] dark:text-foreground">{formatDuration(activity.durationMinutes)}</div>
+                      <div className="text-sm font-medium text-[#111827] dark:text-foreground">{formatDuration(activity.durationMinutes)}</div>
                       <button
                         className="reference-menu-button"
                         aria-label={`More actions for ${activity.title}`}
@@ -1141,7 +1140,7 @@ export function DailyReportApp({
                 )}
               </div>
 
-              <div className="mt-auto border-t border-[#e6eaf2] pt-4 dark:border-[#263a55]">
+              <div className="mt-auto border-t border-[#e6eaf2] pt-3 dark:border-[#263a55]">
                 <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[#667085] dark:text-muted-foreground">
                   <span>
                     {selectedCount} of {activities.length} items selected
@@ -1184,10 +1183,9 @@ export function DailyReportApp({
               </div>
             </section>
 
-            <aside className="min-h-[600px] rounded-[12px] bg-white p-5 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
+            <aside className="min-h-[560px] rounded-[8px] bg-white p-3 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
               <div>
-                <h2 className="text-xl font-semibold tracking-normal text-[#111827] dark:text-foreground">Summary</h2>
-                <p className="mt-2 text-sm text-[#667085] dark:text-muted-foreground">Add a brief summary of your work.</p>
+                <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">Summary</h2>
               </div>
               <SummaryEditor
                 ref={summaryEditorRef}

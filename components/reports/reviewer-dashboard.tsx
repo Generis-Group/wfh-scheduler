@@ -579,12 +579,12 @@ export function ReviewerDashboard({
         />
       ) : (
         <main className="reference-page">
-          <div className="mb-5">
-            <h1 className="text-[28px] font-semibold leading-tight tracking-normal text-[#101828] dark:text-foreground">Review Dashboard</h1>
-            <p className="mt-2 text-sm text-[#667085] dark:text-muted-foreground">Track report coverage, blockers, and submissions across the team.</p>
+          <div className="mb-3">
+            <h1 className="text-[24px] font-semibold leading-tight tracking-normal text-[#101828] dark:text-foreground">Review Dashboard</h1>
+            <p className="mt-0.5 text-sm text-[#667085] dark:text-muted-foreground">Track report coverage, blockers, and submissions across the team.</p>
           </div>
 
-          <section className="mb-4 rounded-[12px] bg-white p-3 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+          <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
             <div className="grid gap-3 lg:grid-cols-4 xl:grid-cols-[minmax(180px,230px)_minmax(120px,160px)_minmax(140px,180px)_minmax(190px,1fr)_auto]">
               <Field label="Report Date">
                 <label className="relative flex h-10 min-w-0 items-center rounded-[8px] border border-[#d8dee8] bg-white px-3 text-xs font-medium text-[#344054] dark:border-[#263a55] dark:bg-[#0b1523] dark:text-foreground">
@@ -670,15 +670,15 @@ export function ReviewerDashboard({
             </div>
           ) : null}
 
-          <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <section className="mb-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <DashboardStat icon={<CheckCircle2 />} label="Submitted" value={submitted} tone="green" />
             <DashboardStat icon={<CircleHelp />} label="Missing" value={missing} tone="orange" />
             <DashboardStat icon={<TriangleAlert />} label="With blockers" value={blockers} tone="red" />
             <DashboardStat icon={<Edit3 />} label="Late edits" value={lateEdits} tone="purple" />
           </section>
 
-          <section className="mb-4 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <section className="mb-3 rounded-[8px] bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
               <div>
                 <h2 className="text-base font-semibold text-[#101828] dark:text-foreground">Submission Coverage</h2>
                 <div className="mt-2 flex items-end gap-3">
@@ -698,8 +698,8 @@ export function ReviewerDashboard({
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-[12px] bg-white shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-            <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <section className="overflow-hidden rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3">
               <h2 className="text-lg font-semibold text-[#101828] dark:text-foreground">Employee Reports</h2>
               {selectedRows.length > 0 ? (
                 <div className="flex items-center gap-2 rounded-[9px] bg-[#f4f8ff] px-2 py-1.5 ring-1 ring-[#dbe7f5] dark:bg-blue-400/10 dark:ring-blue-300/15">
@@ -710,7 +710,7 @@ export function ReviewerDashboard({
                 </div>
               ) : null}
             </div>
-            <div className="overflow-x-auto px-4">
+            <div className="overflow-x-auto px-3">
               <table className="w-full min-w-[980px] text-xs">
                 <thead>
                   <tr className="border-b border-[#e5eaf2] text-left text-[10px] font-semibold uppercase tracking-[0.02em] text-[#64748b] dark:border-[#263a55] dark:text-muted-foreground">
@@ -817,7 +817,7 @@ export function ReviewerDashboard({
                 </tbody>
               </table>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 text-sm text-[#475467] dark:text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm text-[#475467] dark:text-muted-foreground">
               <div className="flex items-center gap-3">
                 <span>Rows per page</span>
                 <Select
@@ -915,13 +915,13 @@ function DashboardStat({
   }[tone];
 
   return (
-    <div className="flex min-h-[104px] items-center gap-5 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-      <div className={cn("flex h-14 w-14 items-center justify-center rounded-full", toneClass)}>
-        <span className="[&>svg]:h-8 [&>svg]:w-8">{icon}</span>
+    <div className="flex min-h-[82px] items-center gap-3 rounded-[8px] bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+      <div className={cn("flex h-11 w-11 items-center justify-center rounded-full", toneClass)}>
+        <span className="[&>svg]:h-6 [&>svg]:w-6">{icon}</span>
       </div>
       <div>
         <div className="text-sm font-semibold text-[#475467] dark:text-muted-foreground">{label}</div>
-        <div className="mt-2 text-[30px] font-semibold leading-none text-[#101828] dark:text-foreground">{value}</div>
+        <div className="mt-1 text-[24px] font-semibold leading-none text-[#101828] dark:text-foreground">{value}</div>
       </div>
     </div>
   );
@@ -929,9 +929,9 @@ function DashboardStat({
 
 function CoverageMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="px-8">
+    <div className="px-5">
       <div className="text-sm font-semibold text-[#667085] dark:text-muted-foreground">{label}</div>
-      <div className="mt-2 text-[30px] font-medium leading-none text-[#344054] dark:text-foreground">{value}</div>
+      <div className="mt-1 text-[24px] font-medium leading-none text-[#344054] dark:text-foreground">{value}</div>
     </div>
   );
 }

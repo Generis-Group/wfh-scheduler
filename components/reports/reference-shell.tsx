@@ -9,6 +9,8 @@ import type { ElementType, MouseEvent, ReactNode } from "react";
 import {
   BarChart3,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleUser,
   ClipboardList,
   History,
@@ -87,11 +89,18 @@ export function ReferenceAppShell({
   const [optimisticActive, setOptimisticActive] = useState(active);
   const [serverDataVersion, setServerDataVersion] = useState(0);
   const [freshServerDataVersion, setFreshServerDataVersion] = useState(0);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const settingsHref = "/settings";
   const currentHref = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
   const logoHref = variant === "admin" ? "/review" : "/";
   const mobileLogoHref = "/";
   const hasStalePrefetchedData = serverDataVersion !== freshServerDataVersion;
+
+  useEffect(() => {
+    const storedCollapsed = window.localStorage.getItem("generis.sidebarCollapsed") === "true";
+    document.documentElement.dataset.sidebarCollapsed = storedCollapsed ? "true" : "false";
+    setSidebarCollapsed(storedCollapsed);
+  }, []);
 
   useEffect(() => {
     if (variant !== "employee") {
@@ -192,15 +201,52 @@ export function ReferenceAppShell({
     };
   }
 
+  function toggleSidebarCollapsed() {
+    setSidebarCollapsed((collapsed) => {
+      const nextCollapsed = !collapsed;
+      window.localStorage.setItem("generis.sidebarCollapsed", String(nextCollapsed));
+      document.documentElement.dataset.sidebarCollapsed = nextCollapsed ? "true" : "false";
+      return nextCollapsed;
+    });
+  }
+
   return (
-    <div className="min-h-screen bg-[#f4f7fb] text-[#0f172a] dark:bg-background dark:text-foreground lg:grid lg:grid-cols-[176px_minmax(0,1fr)]">
-        <aside className="sticky top-0 hidden h-screen min-w-0 flex-col bg-white/88 px-3 py-4 shadow-[1px_0_0_rgba(15,23,42,0.04)] backdrop-blur-xl dark:bg-[#0b1422]/96 dark:shadow-[1px_0_0_rgba(255,255,255,0.04)] lg:flex">
-          <Link href={logoHref} {...routeLinkProps(logoHref, variant === "admin" ? "review" : "report")} className="flex items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]">
-            <span className="relative flex h-7 w-[132px] items-center overflow-hidden">
-              <Image src={generisLogo} alt="Generis" className="h-auto w-full object-contain" priority />
-            </span>
-          </Link>
-          <nav className="mt-6 space-y-0.5">
+    <div
+      className={cn(
+        "reference-app-shell min-h-screen bg-[#f4f7fb] text-[#0f172a] dark:bg-background dark:text-foreground lg:grid lg:transition-[grid-template-columns] lg:duration-200",
+        sidebarCollapsed ? "lg:grid-cols-[64px_minmax(0,1fr)]" : "lg:grid-cols-[176px_minmax(0,1fr)]"
+      )}
+    >
+        <aside className={cn("reference-sidebar sticky top-0 hidden h-screen min-w-0 flex-col bg-white/88 px-3 py-4 shadow-[1px_0_0_rgba(15,23,42,0.04)] backdrop-blur-xl dark:bg-[#0b1422]/96 dark:shadow-[1px_0_0_rgba(255,255,255,0.04)] lg:flex", sidebarCollapsed && "items-center px-2.5")}>
+          <button
+            type="button"
+            className="absolute -right-3 top-1/2 z-30 flex h-14 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-[#dfe7f1] bg-[#f8fafc] text-[#64748b] shadow-[0_6px_14px_rgba(15,23,42,0.08)] transition-colors hover:border-[#cbd5e1] hover:bg-[#eef4fb] hover:text-[#2563eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:border-[#24354c] dark:bg-[#0b1422] dark:text-[#94a3b8] dark:shadow-[0_10px_20px_rgba(0,0,0,0.24)] dark:hover:bg-[#132239] dark:hover:text-[#bfdbfe]"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={toggleSidebarCollapsed}
+          >
+            {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
+          {sidebarCollapsed ? (
+            <Link
+              href={logoHref}
+              {...routeLinkProps(logoHref, variant === "admin" ? "review" : "report")}
+              className="reference-sidebar-logo-link flex h-9 w-10 items-center justify-center overflow-hidden rounded-[9px] transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
+              aria-label="Generis home"
+              title="Generis home"
+            >
+              <span className="reference-sidebar-logo-frame relative flex h-7 w-10 items-center overflow-hidden">
+                <Image src={generisLogo} alt="Generis" className="reference-sidebar-logo-image h-auto w-[132px] max-w-none object-left object-contain" priority />
+              </span>
+            </Link>
+          ) : (
+            <Link href={logoHref} {...routeLinkProps(logoHref, variant === "admin" ? "review" : "report")} className="reference-sidebar-logo-link flex items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]">
+              <span className="reference-sidebar-logo-frame relative flex h-7 w-[132px] items-center overflow-hidden">
+                <Image src={generisLogo} alt="Generis" className="reference-sidebar-logo-image h-auto w-full object-contain" priority />
+              </span>
+            </Link>
+          )}
+          <nav className={cn("reference-sidebar-nav mt-6 space-y-0.5", sidebarCollapsed && "w-full")}>
             {nav.map((item) => {
               const Icon = item.icon;
               const href = getNavHref(item, lastReportDate);
@@ -210,15 +256,18 @@ export function ReferenceAppShell({
                   key={item.key}
                   href={href}
                   {...routeLinkProps(href, item.key)}
+                  aria-label={sidebarCollapsed ? item.label : undefined}
+                  title={sidebarCollapsed ? item.label : undefined}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-[13px] font-semibold transition-colors",
+                    "reference-sidebar-nav-link flex items-center rounded-[9px] text-[13px] font-semibold transition-colors",
+                    sidebarCollapsed ? "h-10 justify-center px-0" : "gap-2.5 px-2.5 py-2",
                     optimisticActive === item.key
                       ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
                       : "text-[#52647a] hover:bg-[#eef4fb] hover:text-[#0f172a] dark:text-[#93a4b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]"
                   )}
                 >
                   <Icon className="h-4 w-4" />
-                  {item.label}
+                  {sidebarCollapsed ? null : <span className="reference-sidebar-nav-label">{item.label}</span>}
                 </Link>
               );
             })}

@@ -144,31 +144,77 @@
   }
 
   .reference-page {
-    @apply w-full px-[clamp(14px,1.7vw,26px)] pb-6 pt-5;
+    @apply w-full px-3 pb-3 pt-3 sm:px-4;
   }
 
   .reference-page-header {
-    @apply mb-4 flex flex-wrap items-end justify-between gap-3;
+    @apply mb-3 flex flex-wrap items-end justify-between gap-3;
   }
 
   .reference-title {
-    @apply text-2xl font-semibold leading-tight tracking-normal text-[#0f172a] dark:text-foreground;
+    @apply text-[24px] font-semibold leading-tight tracking-normal text-[#0f172a] dark:text-foreground;
   }
 
   .reference-subtitle {
-    @apply mt-1 max-w-3xl text-sm leading-6 text-[#64748b] dark:text-muted-foreground;
+    @apply mt-0.5 max-w-3xl text-sm leading-5 text-[#64748b] dark:text-muted-foreground;
   }
 
   .reference-toolbar {
-    @apply rounded-[10px] bg-white/[0.86] p-3 shadow-[0_10px_28px_rgba(15,23,42,0.055)] backdrop-blur dark:bg-[#0d1827]/[0.92] dark:shadow-[0_16px_38px_rgba(0,0,0,0.22)];
+    @apply rounded-[8px] bg-white/[0.9] p-2.5 shadow-[0_6px_18px_rgba(15,23,42,0.045)] backdrop-blur dark:bg-[#0d1827]/[0.92] dark:shadow-[0_10px_24px_rgba(0,0,0,0.18)];
   }
 
   .reference-card {
-    @apply rounded-[10px] bg-white/[0.92] shadow-[0_10px_30px_rgba(15,23,42,0.06)] dark:bg-[#0f1b2a]/95 dark:shadow-[0_16px_38px_rgba(0,0,0,0.22)];
+    @apply rounded-[8px] bg-white/[0.94] shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e7ecf3] dark:bg-[#0f1b2a]/95 dark:ring-[#213149] dark:shadow-[0_10px_24px_rgba(0,0,0,0.18)];
   }
 
   .reference-card-muted {
-    @apply rounded-[10px] bg-[#f7f9fc] dark:bg-[#0b1523];
+    @apply rounded-[7px] bg-[#f7f9fc] dark:bg-[#0b1523];
+  }
+
+  html[data-sidebar-collapsed="true"] .reference-app-shell {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  html[data-sidebar-collapsed="true"] .reference-sidebar {
+    align-items: center;
+    padding-left: 0.625rem;
+    padding-right: 0.625rem;
+  }
+
+  html[data-sidebar-collapsed="true"] .reference-sidebar-logo-link {
+    height: 2.25rem;
+    width: 2.5rem;
+    justify-content: center;
+    overflow: hidden;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  html[data-sidebar-collapsed="true"] .reference-sidebar-logo-frame {
+    width: 2.5rem;
+  }
+
+  html[data-sidebar-collapsed="true"] .reference-sidebar-logo-image {
+    width: 132px;
+    max-width: none;
+    object-fit: contain;
+    object-position: left center;
+  }
+
+  html[data-sidebar-collapsed="true"] .reference-sidebar-nav {
+    width: 100%;
+  }
+
+  html[data-sidebar-collapsed="true"] .reference-sidebar-nav-link {
+    height: 2.5rem;
+    justify-content: center;
+    gap: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  html[data-sidebar-collapsed="true"] .reference-sidebar-nav-label {
+    display: none;
   }
 
   .reference-label {
@@ -180,7 +226,7 @@
   }
 
   .reference-table-row {
-    @apply rounded-[8px] bg-transparent transition-colors hover:bg-[#f8fafc]/80 dark:hover:bg-white/[0.04];
+    @apply rounded-[7px] bg-transparent transition-colors hover:bg-[#f8fafc]/80 dark:hover:bg-white/[0.04];
   }
 
   .reference-divider {
@@ -202,7 +248,7 @@
 
   .summary-tiptap-editor .ProseMirror {
     tab-size: 2;
-    @apply h-[430px] overflow-y-auto whitespace-pre-wrap rounded-[8px] bg-white px-4 py-4 text-sm leading-6 text-[#111827] shadow-none ring-1 ring-[#dfe4ee] focus:outline-none focus:ring-2 focus:ring-[#2563eb] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55];
+    @apply h-[480px] overflow-y-auto whitespace-pre-wrap rounded-[7px] bg-white px-3.5 py-3.5 text-sm leading-6 text-[#111827] shadow-none ring-1 ring-[#dfe4ee] focus:outline-none focus:ring-2 focus:ring-[#2563eb] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55];
   }
 
   .summary-tiptap-editor .ProseMirror h2 {
