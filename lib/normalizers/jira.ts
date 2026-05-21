@@ -13,146 +13,123 @@ type JiraIssue = {
   };
 };
 
-type JiraWorklog = {
-  id: string;
-  started?: string;
-  timeSpentSeconds?: number;
-  comment?: unknown;
-  author?: { accountId?: string; displayName?: string };
+export type JiraIssueActivityType = "comment" | "worklog" | "changelog" | "issue";
+
+export type JiraStatusTransition = {
+  from?: string | null;
+  to?: string | null;
 };
 
-type JiraChangelog = {
-  id: string;
-  created?: string;
-  author?: { accountId?: string; displayName?: string };
-  items?: Array<{ field?: string; fromString?: string; toString?: string }>;
-};
-
-type JiraComment = {
-  id: string;
-  created?: string;
-  updated?: string;
-  body?: unknown;
-  author?: { accountId?: string; displayName?: string };
+export type JiraIssueDayEvidence = {
+  activityTypes: JiraIssueActivityType[];
+  commentCount?: number;
+  worklogCount?: number;
+  durationMinutes?: number | null;
+  changedFields?: string[];
+  statusTransitions?: JiraStatusTransition[];
+  firstActivityAt?: Date | null;
+  lastActivityAt?: Date | null;
 };
 
 function issueUrl(siteUrl: string | undefined, issueKey: string) {
   return siteUrl ? `${siteUrl.replace(/\/$/, "")}/browse/${issueKey}` : undefined;
 }
 
-function commentToText(comment: unknown) {
-  if (!comment) {
-    return null;
-  }
-
-  if (typeof comment === "string") {
-    return comment;
-  }
-
-  if (typeof comment === "object") {
-    return JSON.stringify(comment);
-  }
-
-  return String(comment);
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
-export function normalizeJiraIssue(issue: JiraIssue, siteUrl?: string): NormalizedActivity {
-  const updatedAt = issue.fields?.updated ? new Date(issue.fields.updated) : null;
+function formatDuration(minutes: number) {
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (hours > 0 && remainingMinutes > 0) {
+    return `${hours}h ${remainingMinutes}m`;
+  }
+
+  if (hours > 0) {
+    return `${hours}h`;
+  }
+
+  return `${remainingMinutes}m`;
+}
+
+function joinFieldList(fields: string[]) {
+  if (fields.length <= 1) {
+    return fields[0] ?? "";
+  }
+
+  if (fields.length === 2) {
+    return `${fields[0]} and ${fields[1]}`;
+  }
+
+  return `${fields.slice(0, -1).join(", ")}, and ${fields.at(-1)}`;
+}
+
+function evidenceDescription(evidence: JiraIssueDayEvidence) {
+  const parts: string[] = [];
+  const commentCount = evidence.commentCount ?? 0;
+  const durationMinutes = evidence.durationMinutes ?? 0;
+  const changedFields = uniqueStrings(evidence.changedFields ?? []);
+  const hasStatusChange = changedFields.some((field) => field.toLowerCase() === "status");
+  const nonStatusFields = changedFields.filter((field) => field.toLowerCase() !== "status");
+
+  if (commentCount > 0) {
+    parts.push(commentCount === 1 ? "Commented" : `Commented ${commentCount} times`);
+  }
+
+  if (durationMinutes > 0) {
+    parts.push(`Logged ${formatDuration(durationMinutes)}`);
+  }
+
+  if (hasStatusChange) {
+    parts.push("Changed status");
+  }
+
+  if (nonStatusFields.length > 0) {
+    parts.push(`Updated ${joinFieldList(nonStatusFields)}`);
+  }
+
+  if (parts.length === 0 && evidence.activityTypes.includes("issue")) {
+    parts.push("Updated issue");
+  }
+
+  return parts.join(", ") || "Updated issue";
+}
+
+export function normalizeJiraIssueDay(
+  issue: JiraIssue,
+  evidence: JiraIssueDayEvidence,
+  siteUrl?: string
+): NormalizedActivity {
+  const durationMinutes =
+    evidence.durationMinutes && evidence.durationMinutes > 0 ? evidence.durationMinutes : null;
+  const changedFields = uniqueStrings(evidence.changedFields ?? []);
 
   return {
     source: "JIRA",
     sourceId: `issue:${issue.id}`,
     sourceContainerId: issue.key,
     title: `${issue.key}: ${issue.fields?.summary ?? "Untitled Jira issue"}`,
+    description: evidenceDescription(evidence),
     status: issue.fields?.status?.name ?? null,
     sourceUrl: issueUrl(siteUrl, issue.key),
-    startedAt: updatedAt,
-    endedAt: updatedAt,
-    metadata: {
-      kind: "issue",
-      key: issue.key,
-      assignee: issue.fields?.assignee?.displayName,
-      reporter: issue.fields?.reporter?.displayName
-    }
-  };
-}
-
-export function normalizeJiraWorklog(
-  issue: JiraIssue,
-  worklog: JiraWorklog,
-  siteUrl?: string
-): NormalizedActivity {
-  const startedAt = worklog.started ? new Date(worklog.started) : null;
-  const durationMinutes = worklog.timeSpentSeconds ? Math.round(worklog.timeSpentSeconds / 60) : null;
-  const endedAt =
-    startedAt && durationMinutes ? new Date(startedAt.getTime() + durationMinutes * 60_000) : startedAt;
-
-  return {
-    source: "JIRA",
-    sourceId: `worklog:${worklog.id}`,
-    sourceContainerId: issue.key,
-    title: `${issue.key}: worklog${durationMinutes ? ` (${durationMinutes} min)` : ""}`,
-    description: commentToText(worklog.comment),
-    status: issue.fields?.status?.name ?? null,
-    sourceUrl: issueUrl(siteUrl, issue.key),
-    startedAt,
-    endedAt,
+    startedAt: evidence.firstActivityAt ?? null,
+    endedAt: evidence.lastActivityAt ?? null,
     durationMinutes,
     metadata: {
-      kind: "worklog",
+      kind: "issue-day",
       key: issue.key,
-      author: worklog.author?.displayName
-    }
-  };
-}
-
-export function normalizeJiraChangelog(
-  issue: JiraIssue,
-  changelog: JiraChangelog,
-  siteUrl?: string
-): NormalizedActivity | null {
-  const createdAt = changelog.created ? new Date(changelog.created) : null;
-  const fields = changelog.items?.map((item) => item.field).filter(Boolean).join(", ");
-
-  if (!fields) {
-    return null;
-  }
-
-  return {
-    source: "JIRA",
-    sourceId: `changelog:${issue.id}:${changelog.id}`,
-    sourceContainerId: issue.key,
-    title: `${issue.key}: changed ${fields}`,
-    status: issue.fields?.status?.name ?? null,
-    sourceUrl: issueUrl(siteUrl, issue.key),
-    startedAt: createdAt,
-    endedAt: createdAt,
-    metadata: {
-      kind: "changelog",
-      key: issue.key,
-      author: changelog.author?.displayName,
-      fields
-    }
-  };
-}
-
-export function normalizeJiraComment(issue: JiraIssue, comment: JiraComment, siteUrl?: string): NormalizedActivity {
-  const createdAt = comment.created ? new Date(comment.created) : null;
-
-  return {
-    source: "JIRA",
-    sourceId: `comment:${issue.id}:${comment.id}`,
-    sourceContainerId: issue.key,
-    title: `${issue.key}: comment added`,
-    description: commentToText(comment.body),
-    status: issue.fields?.status?.name ?? null,
-    sourceUrl: issueUrl(siteUrl, issue.key),
-    startedAt: createdAt,
-    endedAt: createdAt,
-    metadata: {
-      kind: "comment",
-      key: issue.key,
-      author: comment.author?.displayName
+      issueId: issue.id,
+      activityTypes: evidence.activityTypes,
+      commentCount: evidence.commentCount ?? 0,
+      worklogCount: evidence.worklogCount ?? 0,
+      changedFields,
+      statusTransitions: evidence.statusTransitions ?? [],
+      firstActivityAt: evidence.firstActivityAt?.toISOString() ?? null,
+      lastActivityAt: evidence.lastActivityAt?.toISOString() ?? null,
+      assignee: issue.fields?.assignee?.displayName ?? null,
+      reporter: issue.fields?.reporter?.displayName ?? null
     }
   };
 }

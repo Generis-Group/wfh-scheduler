@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { normalizeCalendarEvent } from "@/lib/normalizers/google-calendar";
 import { normalizeGoogleTask } from "@/lib/normalizers/google-tasks";
-import { normalizeJiraChangelog, normalizeJiraComment, normalizeJiraIssue, normalizeJiraWorklog } from "@/lib/normalizers/jira";
+import { normalizeJiraIssueDay } from "@/lib/normalizers/jira";
 
 describe("provider normalizers", () => {
-  it("normalizes Jira issues, worklogs, and changelogs without raw payload retention", () => {
+  it("normalizes Jira issue-day activity without raw payload retention", () => {
     const issue = {
       id: "10001",
       key: "GEN-42",
@@ -18,60 +18,39 @@ describe("provider normalizers", () => {
       }
     };
 
-    expect(normalizeJiraIssue(issue, "https://generis.atlassian.net")).toMatchObject({
+    expect(
+      normalizeJiraIssueDay(
+        issue,
+        {
+          activityTypes: ["comment", "worklog", "changelog"],
+          commentCount: 2,
+          worklogCount: 2,
+          durationMinutes: 75,
+          changedFields: ["status", "assignee"],
+          statusTransitions: [{ from: "To Do", to: "In Progress" }],
+          firstActivityAt: new Date("2026-05-13T13:00:00.000Z"),
+          lastActivityAt: new Date("2026-05-13T16:00:00.000Z")
+        },
+        "https://generis.atlassian.net"
+      )
+    ).toMatchObject({
       source: "JIRA",
       sourceId: "issue:10001",
       sourceContainerId: "GEN-42",
       title: "GEN-42: Finish daily report app",
-      sourceUrl: "https://generis.atlassian.net/browse/GEN-42"
-    });
-
-    expect(
-      normalizeJiraWorklog(
-        issue,
-        {
-          id: "500",
-          started: "2026-05-13T13:00:00.000Z",
-          timeSpentSeconds: 3600,
-          author: { displayName: "Alex", accountId: "a1" }
-        },
-        "https://generis.atlassian.net"
-      )
-    ).toMatchObject({
-      sourceId: "worklog:500",
-      durationMinutes: 60
-    });
-
-    expect(
-      normalizeJiraChangelog(
-        issue,
-        {
-          id: "700",
-          created: "2026-05-13T15:00:00.000Z",
-          author: { displayName: "Alex", accountId: "a1" },
-          items: [{ field: "status", fromString: "To Do", toString: "In Progress" }]
-        },
-        "https://generis.atlassian.net"
-      )
-    ).toMatchObject({
-      sourceId: "changelog:10001:700",
-      title: "GEN-42: changed status"
-    });
-
-    expect(
-      normalizeJiraComment(
-        issue,
-        {
-          id: "900",
-          created: "2026-05-13T16:00:00.000Z",
-          author: { displayName: "Alex", accountId: "a1" },
-          body: "I left a note"
-        },
-        "https://generis.atlassian.net"
-      )
-    ).toMatchObject({
-      sourceId: "comment:10001:900",
-      title: "GEN-42: comment added"
+      description: "Commented 2 times, Logged 1h 15m, Changed status, Updated assignee",
+      sourceUrl: "https://generis.atlassian.net/browse/GEN-42",
+      durationMinutes: 75,
+      metadata: {
+        kind: "issue-day",
+        key: "GEN-42",
+        issueId: "10001",
+        activityTypes: ["comment", "worklog", "changelog"],
+        commentCount: 2,
+        worklogCount: 2,
+        changedFields: ["status", "assignee"],
+        statusTransitions: [{ from: "To Do", to: "In Progress" }]
+      }
     });
   });
 

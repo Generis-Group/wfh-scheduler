@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { NormalizedActivity } from "@/lib/normalizers";
+
 const {
   mockAppSettingFindUnique,
   mockGetGoogleServices,
@@ -66,7 +68,7 @@ describe("sync service pagination", () => {
     });
   });
 
-  it("paginates Jira search, worklogs, and changelog requests", async () => {
+  it("paginates Jira requests and aggregates same-day evidence by issue", async () => {
     const jiraFetch = vi.fn(async (path: string, init?: RequestInit) => {
       if (path === "/rest/api/3/myself") {
         return { accountId: "jira-user-1", displayName: "Employee" };
@@ -91,7 +93,14 @@ describe("sync service pagination", () => {
           startAt: 0,
           maxResults: 1,
           total: 2,
-          worklogs: [{ id: "w1", started: "2026-05-14T13:00:00.000Z", author: { accountId: "jira-user-1" } }]
+          worklogs: [
+            {
+              id: "w1",
+              started: "2026-05-14T13:00:00.000Z",
+              timeSpentSeconds: 1800,
+              author: { accountId: "jira-user-1" }
+            }
+          ]
         };
       }
 
@@ -100,7 +109,14 @@ describe("sync service pagination", () => {
           startAt: 1,
           maxResults: 1,
           total: 2,
-          worklogs: [{ id: "w2", started: "2026-05-14T14:00:00.000Z", author: { accountId: "jira-user-1" } }]
+          worklogs: [
+            {
+              id: "w2",
+              started: "2026-05-14T14:00:00.000Z",
+              timeSpentSeconds: 2700,
+              author: { accountId: "jira-user-1" }
+            }
+          ]
         };
       }
 
@@ -161,8 +177,8 @@ describe("sync service pagination", () => {
             {
               id: "m2",
               created: "2026-05-14T18:00:00.000Z",
-              author: { accountId: "someone-else" },
-              body: "Other comment"
+              author: { accountId: "jira-user-1" },
+              body: "Second current-user comment"
             }
           ]
         };
@@ -198,23 +214,31 @@ describe("sync service pagination", () => {
     expect(jiraFetch).toHaveBeenCalledWith(expect.stringContaining("GEN-1/worklog"));
     expect(jiraFetch).toHaveBeenCalledWith(expect.stringContaining("GEN-1/changelog?startAt=1"));
     expect(jiraFetch).toHaveBeenCalledWith(expect.stringContaining("GEN-1/comment?startAt=1"));
-    expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
-      "JIRA",
-      "user-1",
-      "2026-05-14",
+    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
+    expect(activities.map((activity) => activity.sourceId)).toEqual(["issue:10001"]);
+    expect(activities).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ sourceId: "issue:10001" }),
-        expect.objectContaining({ sourceId: "issue:10002" }),
-        expect.objectContaining({ sourceId: "worklog:w1" }),
-        expect.objectContaining({ sourceId: "worklog:w2" }),
-        expect.objectContaining({ sourceId: "changelog:10001:c1" }),
-        expect.objectContaining({ sourceId: "changelog:10001:c2" }),
-        expect.objectContaining({ sourceId: "comment:10001:m1" })
+        expect.objectContaining({
+          sourceId: "issue:10001",
+          description: "Commented 2 times, Logged 1h 15m, Changed status, Updated assignee",
+          durationMinutes: 75,
+          metadata: expect.objectContaining({
+            kind: "issue-day",
+            activityTypes: ["comment", "worklog", "changelog"],
+            commentCount: 2,
+            worklogCount: 2,
+            changedFields: ["status", "assignee"],
+            statusTransitions: [{ from: "To Do", to: "Done" }]
+          })
+        })
       ])
+    );
+    expect(activities.map((activity) => activity.sourceId)).not.toEqual(
+      expect.arrayContaining(["worklog:w1", "worklog:w2", "changelog:10001:c1", "comment:10001:m1"])
     );
   });
 
-  it("imports Jira comments and worklogs from issues the user does not own", async () => {
+  it("imports Jira comments and worklogs from issues the user does not own as issue rows", async () => {
     const jiraFetch = vi.fn(async (path: string, init?: RequestInit) => {
       if (path === "/rest/api/3/myself") {
         return { accountId: "jira-user-1", displayName: "Employee" };
@@ -298,20 +322,404 @@ describe("sync service pagination", () => {
     const { syncJira } = await import("@/lib/services/sync");
     await syncJira("user-1", "2026-05-14", "America/Toronto");
 
-    const activities = mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? [];
+    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
 
     expect(activities).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ sourceId: "comment:10004:m4" }),
-        expect.objectContaining({ sourceId: "worklog:w5" })
+        expect.objectContaining({
+          sourceId: "issue:10004",
+          description: "Commented",
+          metadata: expect.objectContaining({
+            activityTypes: ["comment"],
+            commentCount: 1
+          })
+        }),
+        expect.objectContaining({
+          sourceId: "issue:10005",
+          description: "Logged 30m",
+          durationMinutes: 30,
+          metadata: expect.objectContaining({
+            activityTypes: ["worklog"],
+            worklogCount: 1
+          })
+        })
       ])
     );
-    expect(activities).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ sourceId: "issue:10004" }),
-        expect.objectContaining({ sourceId: "issue:10005" })
-      ])
+    expect(activities.map((activity) => activity.sourceId)).not.toEqual(
+      expect.arrayContaining(["comment:10004:m4", "worklog:w5"])
     );
+  });
+
+  it("imports Jira comment edits as comment evidence", async () => {
+    const jiraFetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/rest/api/3/myself") {
+        return { accountId: "jira-user-1", displayName: "Employee" };
+      }
+
+      if (path === "/rest/api/3/search/jql") {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+
+        return String(body.jql).includes("worklogDate")
+          ? { issues: [] }
+          : {
+              issues: [
+                {
+                  id: "10011",
+                  key: "GEN-11",
+                  fields: {
+                    summary: "Edited comment issue",
+                    updated: "2026-05-14T19:00:00.000Z",
+                    assignee: { accountId: "someone-else" },
+                    reporter: { accountId: "someone-else" }
+                  }
+                }
+              ]
+            };
+      }
+
+      if (path.includes("GEN-11/comment")) {
+        return {
+          startAt: 0,
+          maxResults: 100,
+          total: 1,
+          comments: [
+            {
+              id: "m11",
+              created: "2026-05-10T12:00:00.000Z",
+              updated: "2026-05-14T19:00:00.000Z",
+              author: { accountId: "jira-user-1" },
+              updateAuthor: { accountId: "jira-user-1" },
+              body: "Clarified the note today"
+            }
+          ]
+        };
+      }
+
+      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+    });
+    mockGetJiraConnection.mockResolvedValue({
+      resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
+      fetch: jiraFetch
+    });
+
+    const { syncJira } = await import("@/lib/services/sync");
+    await syncJira("user-1", "2026-05-14", "America/Toronto");
+
+    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
+
+    expect(activities).toEqual([
+      expect.objectContaining({
+        sourceId: "issue:10011",
+        description: "Commented",
+        startedAt: new Date("2026-05-14T19:00:00.000Z"),
+        endedAt: new Date("2026-05-14T19:00:00.000Z"),
+        metadata: expect.objectContaining({
+          activityTypes: ["comment"],
+          commentCount: 1
+        })
+      })
+    ]);
+  });
+
+  it("imports meaningful Jira changelog-only activity as one issue row", async () => {
+    const jiraFetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/rest/api/3/myself") {
+        return { accountId: "jira-user-1", displayName: "Employee" };
+      }
+
+      if (path === "/rest/api/3/search/jql") {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+
+        return String(body.jql).includes("worklogDate")
+          ? { issues: [] }
+          : {
+              issues: [
+                {
+                  id: "10006",
+                  key: "GEN-6",
+                  fields: {
+                    summary: "Changed by user",
+                    updated: "2026-05-14T19:00:00.000Z",
+                    assignee: { accountId: "someone-else" },
+                    reporter: { accountId: "someone-else" }
+                  }
+                }
+              ]
+            };
+      }
+
+      if (path.includes("GEN-6/changelog")) {
+        return {
+          startAt: 0,
+          maxResults: 100,
+          total: 1,
+          values: [
+            {
+              id: "c6",
+              created: "2026-05-14T19:00:00.000Z",
+              author: { accountId: "jira-user-1" },
+              items: [{ field: "status", fromString: "To Do", toString: "In Progress" }]
+            }
+          ]
+        };
+      }
+
+      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+    });
+    mockGetJiraConnection.mockResolvedValue({
+      resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
+      fetch: jiraFetch
+    });
+
+    const { syncJira } = await import("@/lib/services/sync");
+    await syncJira("user-1", "2026-05-14", "America/Toronto");
+
+    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
+
+    expect(activities).toEqual([
+      expect.objectContaining({
+        sourceId: "issue:10006",
+        description: "Changed status",
+        metadata: expect.objectContaining({
+          activityTypes: ["changelog"],
+          changedFields: ["status"],
+          statusTransitions: [{ from: "To Do", to: "In Progress" }]
+        })
+      })
+    ]);
+  });
+
+  it("imports Jira changelog display-name fields as meaningful activity", async () => {
+    const jiraFetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/rest/api/3/myself") {
+        return { accountId: "jira-user-1", displayName: "Employee" };
+      }
+
+      if (path === "/rest/api/3/search/jql") {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+
+        return String(body.jql).includes("worklogDate")
+          ? { issues: [] }
+          : {
+              issues: [
+                {
+                  id: "10010",
+                  key: "GEN-10",
+                  fields: {
+                    summary: "Release field updates",
+                    updated: "2026-05-14T19:00:00.000Z",
+                    assignee: { accountId: "someone-else" },
+                    reporter: { accountId: "someone-else" }
+                  }
+                }
+              ]
+            };
+      }
+
+      if (path.includes("GEN-10/changelog")) {
+        return {
+          startAt: 0,
+          maxResults: 100,
+          total: 1,
+          values: [
+            {
+              id: "c10",
+              created: "2026-05-14T19:00:00.000Z",
+              author: { accountId: "jira-user-1" },
+              items: [
+                { field: "Fix Version/s", fromString: null, toString: "Release 1" },
+                { field: "Component/s", fromString: null, toString: "Platform" }
+              ]
+            }
+          ]
+        };
+      }
+
+      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+    });
+    mockGetJiraConnection.mockResolvedValue({
+      resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
+      fetch: jiraFetch
+    });
+
+    const { syncJira } = await import("@/lib/services/sync");
+    await syncJira("user-1", "2026-05-14", "America/Toronto");
+
+    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
+
+    expect(activities).toEqual([
+      expect.objectContaining({
+        sourceId: "issue:10010",
+        description: "Updated Fix Version/s and Component/s",
+        metadata: expect.objectContaining({
+          activityTypes: ["changelog"],
+          changedFields: ["Fix Version/s", "Component/s"]
+        })
+      })
+    ]);
+  });
+
+  it("imports newly created Jira issues as issue rows", async () => {
+    const jiraFetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/rest/api/3/myself") {
+        return { accountId: "jira-user-1", displayName: "Employee" };
+      }
+
+      if (path === "/rest/api/3/search/jql") {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+
+        return String(body.jql).includes("worklogDate")
+          ? { issues: [] }
+          : {
+              issues: [
+                {
+                  id: "10009",
+                  key: "GEN-9",
+                  fields: {
+                    summary: "Created today",
+                    created: "2026-05-14T13:00:00.000Z",
+                    updated: "2026-05-14T13:00:00.000Z",
+                    creator: { accountId: "jira-user-1" },
+                    reporter: { accountId: "jira-user-1" }
+                  }
+                }
+              ]
+            };
+      }
+
+      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+    });
+    mockGetJiraConnection.mockResolvedValue({
+      resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
+      fetch: jiraFetch
+    });
+
+    const { syncJira } = await import("@/lib/services/sync");
+    await syncJira("user-1", "2026-05-14", "America/Toronto");
+
+    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
+
+    expect(activities).toEqual([
+      expect.objectContaining({
+        sourceId: "issue:10009",
+        description: "Updated issue",
+        metadata: expect.objectContaining({
+          activityTypes: ["issue"]
+        })
+      })
+    ]);
+  });
+
+  it("ignores noisy Jira changelog-only activity", async () => {
+    const jiraFetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/rest/api/3/myself") {
+        return { accountId: "jira-user-1", displayName: "Employee" };
+      }
+
+      if (path === "/rest/api/3/search/jql") {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+
+        return String(body.jql).includes("worklogDate")
+          ? { issues: [] }
+          : {
+              issues: [
+                {
+                  id: "10007",
+                  key: "GEN-7",
+                  fields: {
+                    summary: "Rank shuffled",
+                    updated: "2026-05-14T19:00:00.000Z",
+                    assignee: { accountId: "someone-else" },
+                    reporter: { accountId: "someone-else" }
+                  }
+                }
+              ]
+            };
+      }
+
+      if (path.includes("GEN-7/changelog")) {
+        return {
+          startAt: 0,
+          maxResults: 100,
+          total: 1,
+          values: [
+            {
+              id: "c7",
+              created: "2026-05-14T19:00:00.000Z",
+              author: { accountId: "jira-user-1" },
+              items: [{ field: "Rank", fromString: "1", toString: "2" }]
+            }
+          ]
+        };
+      }
+
+      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+    });
+    mockGetJiraConnection.mockResolvedValue({
+      resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
+      fetch: jiraFetch
+    });
+
+    const { syncJira } = await import("@/lib/services/sync");
+    await syncJira("user-1", "2026-05-14", "America/Toronto");
+
+    expect(mockUpsertImportedActivities.mock.calls.at(-1)?.[3]).toEqual([]);
+  });
+
+  it("ignores noisy Jira changelog-only activity on issues owned by the user", async () => {
+    const jiraFetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/rest/api/3/myself") {
+        return { accountId: "jira-user-1", displayName: "Employee" };
+      }
+
+      if (path === "/rest/api/3/search/jql") {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+
+        return String(body.jql).includes("worklogDate")
+          ? { issues: [] }
+          : {
+              issues: [
+                {
+                  id: "10008",
+                  key: "GEN-8",
+                  fields: {
+                    summary: "Owned rank shuffle",
+                    updated: "2026-05-14T19:00:00.000Z",
+                    assignee: { accountId: "jira-user-1" },
+                    reporter: { accountId: "jira-user-1" }
+                  }
+                }
+              ]
+            };
+      }
+
+      if (path.includes("GEN-8/changelog")) {
+        return {
+          startAt: 0,
+          maxResults: 100,
+          total: 1,
+          values: [
+            {
+              id: "c8",
+              created: "2026-05-14T19:00:00.000Z",
+              author: { accountId: "jira-user-1" },
+              items: [{ field: "Rank", fromString: "1", toString: "2" }]
+            }
+          ]
+        };
+      }
+
+      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+    });
+    mockGetJiraConnection.mockResolvedValue({
+      resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
+      fetch: jiraFetch
+    });
+
+    const { syncJira } = await import("@/lib/services/sync");
+    await syncJira("user-1", "2026-05-14", "America/Toronto");
+
+    expect(mockUpsertImportedActivities.mock.calls.at(-1)?.[3]).toEqual([]);
   });
 
   it("paginates Google Calendar events", async () => {

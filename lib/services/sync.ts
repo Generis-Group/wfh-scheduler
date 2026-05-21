@@ -7,10 +7,9 @@ import { getJiraConnection } from "@/lib/integrations/jira";
 import {
   normalizeCalendarEvent,
   normalizeGoogleTask,
-  normalizeJiraChangelog,
-  normalizeJiraComment,
-  normalizeJiraIssue,
-  normalizeJiraWorklog,
+  normalizeJiraIssueDay,
+  type JiraIssueActivityType,
+  type JiraIssueDayEvidence,
   type NormalizedActivity
 } from "@/lib/normalizers";
 import { prisma } from "@/lib/prisma";
@@ -23,6 +22,7 @@ type JiraIssue = {
   fields?: {
     summary?: string;
     status?: { name?: string };
+    created?: string;
     updated?: string;
     assignee?: { accountId?: string; displayName?: string };
     creator?: { accountId?: string; displayName?: string };
@@ -75,9 +75,13 @@ type JiraCommentResponse = {
     updated?: string;
     body?: unknown;
     author?: { accountId?: string; displayName?: string };
+    updateAuthor?: { accountId?: string; displayName?: string };
   }>;
 };
 
+type JiraWorklog = NonNullable<JiraWorklogResponse["worklogs"]>[number];
+type JiraChangelog = NonNullable<JiraChangelogResponse["values"]>[number];
+type JiraComment = NonNullable<JiraCommentResponse["comments"]>[number];
 type JiraConnection = Awaited<ReturnType<typeof getJiraConnection>>;
 type GoogleCalendarService = calendar_v3.Calendar;
 type GoogleCalendarEventListParams = Omit<calendar_v3.Params$Resource$Events$List, "calendarId">;
@@ -110,6 +114,84 @@ function jiraProjectClause(projectKeys: string[]) {
 
 function buildJiraJql(clauses: Array<string | null>, orderBy = "updated ASC") {
   return `${clauses.filter(Boolean).join(" AND ")} ORDER BY ${orderBy}`;
+}
+
+const meaningfulJiraChangeFields = new Set([
+  "status",
+  "resolution",
+  "assignee",
+  "priority",
+  "summary",
+  "due date",
+  "duedate",
+  "component",
+  "labels",
+  "components",
+  "fix version",
+  "fix versions",
+  "fixversion",
+  "fixversions",
+  "sprint",
+  "epic link",
+  "parent"
+]);
+const jiraActivityTypeOrder: JiraIssueActivityType[] = ["comment", "worklog", "changelog", "issue"];
+
+function optionalDate(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function jiraChangeFieldName(field: string | undefined) {
+  const name = field?.trim();
+
+  return name ? name : null;
+}
+
+function jiraChangeFieldKey(field: string | undefined) {
+  const name = jiraChangeFieldName(field);
+
+  return name
+    ?.toLowerCase()
+    .replace(/\/s\b/g, "s")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function isMeaningfulJiraChangeField(field: string | undefined) {
+  const key = jiraChangeFieldKey(field);
+
+  return Boolean(key && meaningfulJiraChangeFields.has(key));
+}
+
+function isJiraStatusChangeField(field: string | undefined) {
+  return jiraChangeFieldKey(field) === "status";
+}
+
+function pushDate(values: Date[], date: Date | null) {
+  if (date) {
+    values.push(date);
+  }
+}
+
+function earliestDate(values: Date[]) {
+  return values.reduce<Date | null>(
+    (earliest, date) => (!earliest || date.getTime() < earliest.getTime() ? date : earliest),
+    null
+  );
+}
+
+function latestDate(values: Date[]) {
+  return values.reduce<Date | null>(
+    (latest, date) => (!latest || date.getTime() > latest.getTime() ? date : latest),
+    null
+  );
 }
 
 async function listAllGoogleTaskLists(tasks: GoogleTasksService) {
@@ -270,6 +352,113 @@ async function listJiraComments(jira: JiraConnection, issueKey: string) {
   return comments;
 }
 
+function buildJiraIssueDayEvidence(
+  issue: JiraIssue,
+  accountId: string,
+  start: Date,
+  end: Date,
+  worklogs: JiraWorklog[],
+  changelog: JiraChangelog[],
+  comments: JiraComment[]
+): JiraIssueDayEvidence | null {
+  const activityTypes = new Set<JiraIssueActivityType>();
+  const activityDates: Date[] = [];
+  const changedFields = new Set<string>();
+  const statusTransitions: NonNullable<JiraIssueDayEvidence["statusTransitions"]> = [];
+  let commentCount = 0;
+  let worklogCount = 0;
+  let durationMinutes = 0;
+  const issueCreatedAt = optionalDate(issue.fields?.created);
+
+  if (issue.fields?.creator?.accountId === accountId && isInRange(issueCreatedAt, start, end)) {
+    activityTypes.add("issue");
+    pushDate(activityDates, issueCreatedAt);
+  }
+
+  for (const worklog of worklogs) {
+    const startedAt = optionalDate(worklog.started);
+
+    if (worklog.author?.accountId !== accountId || !isInRange(startedAt, start, end)) {
+      continue;
+    }
+
+    const minutes = worklog.timeSpentSeconds ? Math.round(worklog.timeSpentSeconds / 60) : 0;
+    activityTypes.add("worklog");
+    worklogCount += 1;
+    durationMinutes += minutes;
+    pushDate(activityDates, startedAt);
+
+    if (startedAt && minutes > 0) {
+      activityDates.push(new Date(startedAt.getTime() + minutes * 60_000));
+    }
+  }
+
+  for (const history of changelog) {
+    const changedAt = optionalDate(history.created);
+
+    if (history.author?.accountId !== accountId || !isInRange(changedAt, start, end)) {
+      continue;
+    }
+
+    const meaningfulItems = (history.items ?? []).filter((item) => isMeaningfulJiraChangeField(item.field));
+
+    if (meaningfulItems.length === 0) {
+      continue;
+    }
+
+    activityTypes.add("changelog");
+    pushDate(activityDates, changedAt);
+
+    for (const item of meaningfulItems) {
+      const fieldName = jiraChangeFieldName(item.field);
+
+      if (!fieldName) {
+        continue;
+      }
+
+      changedFields.add(fieldName);
+
+      if (isJiraStatusChangeField(fieldName)) {
+        statusTransitions.push({
+          from: item.fromString ?? null,
+          to: item.toString ?? null
+        });
+      }
+    }
+  }
+
+  for (const comment of comments) {
+    const createdAt = optionalDate(comment.created);
+    const updatedAt = optionalDate(comment.updated);
+    const createdByUser = comment.author?.accountId === accountId && isInRange(createdAt, start, end);
+    const updatedByUser = comment.updateAuthor?.accountId === accountId && isInRange(updatedAt, start, end);
+    const commentedAt = updatedByUser ? updatedAt : createdByUser ? createdAt : null;
+
+    if (!commentedAt) {
+      continue;
+    }
+
+    activityTypes.add("comment");
+    commentCount += 1;
+    pushDate(activityDates, commentedAt);
+  }
+
+  if (activityTypes.size === 0) {
+    return null;
+  }
+
+  return {
+    activityTypes: jiraActivityTypeOrder.filter((type) => activityTypes.has(type)),
+    commentCount,
+    worklogCount,
+    durationMinutes: durationMinutes > 0 ? durationMinutes : null,
+    changedFields: [...changedFields],
+    statusTransitions,
+    firstActivityAt: earliestDate(activityDates),
+    lastActivityAt: latestDate(activityDates)
+  };
+}
+
 async function getJiraProjectFilter() {
   const settings = await getCompanySettings();
   const keys = settings.jiraProjectKeys.filter((item) => item.trim().length > 0);
@@ -336,7 +525,7 @@ export async function syncJira(userId: string, dateString: string, timezone: str
 
     const projectKeys = await getJiraProjectFilter();
     const projectClause = jiraProjectClause(projectKeys);
-    const issueFields = ["summary", "status", "updated", "assignee", "creator", "reporter"];
+    const issueFields = ["summary", "status", "created", "updated", "assignee", "creator", "reporter"];
     const issueMap = new Map<string, JiraIssue>();
     const issueSearches = [
       buildJiraJql([
@@ -359,40 +548,23 @@ export async function syncJira(userId: string, dateString: string, timezone: str
     const activities: NormalizedActivity[] = [];
 
     for (const issue of issueMap.values()) {
-      const issueUpdatedAt = issue.fields?.updated ? new Date(issue.fields.updated) : null;
-      const userOwnsIssueActivity =
-        issue.fields?.assignee?.accountId === myself.accountId ||
-        issue.fields?.creator?.accountId === myself.accountId ||
-        issue.fields?.reporter?.accountId === myself.accountId;
+      const [worklogs, changelog, comments] = await Promise.all([
+        listJiraWorklogs(jira, issue.key, start, end),
+        listJiraChangelog(jira, issue.key),
+        listJiraComments(jira, issue.key)
+      ]);
+      const evidence = buildJiraIssueDayEvidence(
+        issue,
+        myself.accountId,
+        start,
+        end,
+        worklogs,
+        changelog,
+        comments
+      );
 
-      if (userOwnsIssueActivity && isInRange(issueUpdatedAt, start, end)) {
-        activities.push(normalizeJiraIssue(issue, jira.resource.url));
-      }
-
-      for (const worklog of await listJiraWorklogs(jira, issue.key, start, end)) {
-        if (worklog.author?.accountId === myself.accountId) {
-          activities.push(normalizeJiraWorklog(issue, worklog, jira.resource.url));
-        }
-      }
-
-      for (const history of await listJiraChangelog(jira, issue.key)) {
-        const changedAt = history.created ? new Date(history.created) : null;
-
-        if (history.author?.accountId === myself.accountId && isInRange(changedAt, start, end)) {
-          const normalized = normalizeJiraChangelog(issue, history, jira.resource.url);
-
-          if (normalized) {
-            activities.push(normalized);
-          }
-        }
-      }
-
-      for (const comment of await listJiraComments(jira, issue.key)) {
-        const commentedAt = comment.created ? new Date(comment.created) : null;
-
-        if (comment.author?.accountId === myself.accountId && isInRange(commentedAt, start, end)) {
-          activities.push(normalizeJiraComment(issue, comment, jira.resource.url));
-        }
+      if (evidence) {
+        activities.push(normalizeJiraIssueDay(issue, evidence, jira.resource.url));
       }
     }
 
