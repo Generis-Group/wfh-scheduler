@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireSession();
     const input = syncSchema.parse(await request.json());
-    const result = await syncGoogleTasks(session.user.id, input.date, session.user.timezone);
+    const result = await syncGoogleTasks(session.user.id, input.date);
     revalidateReportRoutes();
 
     return json(result);

@@ -11,16 +11,14 @@ vi.mock("@/lib/access", () => ({
     user: {
       id: "user-1",
       role: "EMPLOYEE",
-      status: "ACTIVE",
-      timezone: "America/Toronto"
+      status: "ACTIVE"
     }
   })),
   requireRole: vi.fn(async () => ({
     user: {
       id: "admin-1",
       role: "ADMIN",
-      status: "ACTIVE",
-      timezone: "America/Toronto"
+      status: "ACTIVE"
     }
   })),
   assertCanAccessUser: vi.fn(),
@@ -65,9 +63,9 @@ vi.mock("@/lib/services/admin", () => ({
     id: "user-1",
     name: "Employee",
     email: "employee@generisgp.com",
+    image: null,
     role: "EMPLOYEE",
     status: "ACTIVE",
-    timezone: "America/Toronto",
     mustChangePassword: false
   }))
 }));
@@ -205,7 +203,7 @@ describe("route contracts", () => {
         method: "PATCH",
         body: JSON.stringify({
           name: "Employee",
-          timezone: "America/Toronto"
+          email: "employee@generisgp.com"
         })
       })
     );
@@ -214,8 +212,7 @@ describe("route contracts", () => {
     await expect(response.json()).resolves.toMatchObject({
       user: {
         id: "user-1",
-        email: "employee@generisgp.com",
-        timezone: "America/Toronto"
+        email: "employee@generisgp.com"
       }
     });
   });
@@ -299,9 +296,6 @@ describe("route contracts", () => {
         body: JSON.stringify({
           date: "2026-05-13",
           filters: {
-            groupFilter: "SUBMITTED",
-            statusFilter: "ALL",
-            locationFilter: "ALL",
             search: ""
           }
         })

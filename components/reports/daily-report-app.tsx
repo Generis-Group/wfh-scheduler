@@ -27,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
 import {
   EmptyReferenceState,
   ReferenceBadge,
@@ -389,6 +390,8 @@ export function DailyReportApp({
   const [activityPage, setActivityPage] = useState(1);
   const [activitySearch, setActivitySearch] = useState("");
   const summaryEditorRef = useRef<SummaryEditorHandle>(null);
+  const importMenuRef = useRef<HTMLDivElement | null>(null);
+  const activityMenuRef = useRef<HTMLDivElement | null>(null);
   const autoSaveTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef<Promise<Report | null> | null>(null);
   const saveGenerationRef = useRef(0);
@@ -400,6 +403,18 @@ export function DailyReportApp({
   const lastSavedSignatureRef = useRef(
     draftPayloadSignature(reportDate, initialPayload),
   );
+
+  useDismissableLayer({
+    open: importMenuOpen,
+    refs: [importMenuRef],
+    onDismiss: () => setImportMenuOpen(false),
+  });
+
+  useDismissableLayer({
+    open: Boolean(openActivityMenu),
+    refs: [activityMenuRef],
+    onDismiss: () => setOpenActivityMenu(null),
+  });
 
   useEffect(() => {
     const nextSummary = editorSummaryForReport(initialReport);
@@ -495,6 +510,7 @@ export function DailyReportApp({
       Math.max(12, rect.right - menuWidth),
     );
 
+    setImportMenuOpen(false);
     setOpenActivityMenu({ id: activityId, top, left });
   }
 
@@ -507,18 +523,10 @@ export function DailyReportApp({
       setOpenActivityMenu(null);
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        closeMenu();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", closeMenu);
     window.addEventListener("scroll", closeMenu, true);
 
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("resize", closeMenu);
       window.removeEventListener("scroll", closeMenu, true);
     };
@@ -753,14 +761,17 @@ export function DailyReportApp({
   }
 
   async function submitReport() {
-    if (busyAction || importingProvider || report.status === "SUBMITTED") {
+    if (busyAction || importingProvider) {
       return;
     }
 
+    const wasPublished = reportRef.current.status === "SUBMITTED";
     setBusyAction("submit");
     setMessage(null);
 
-    const saved = await flushAutoDraftSave({ forceCreate: true });
+    const saved = await flushAutoDraftSave({
+      forceCreate: !reportRef.current.id,
+    });
 
     if (!saved?.id) {
       setMessage("Save failed. Try again before submitting.");
@@ -797,7 +808,9 @@ export function DailyReportApp({
     );
     markServerDataStale();
     setAutoSaveStatus("saved");
-    setMessage("Submitted for review.");
+    setMessage(
+      wasPublished ? "Resubmitted for review." : "Submitted for review.",
+    );
     setBusyAction(null);
   }
 
@@ -965,6 +978,15 @@ export function DailyReportApp({
   const isSubmitting = busyAction === "submit";
   const isDeleting = busyAction === "delete";
   const isImporting = importingProvider !== null;
+  const isPublishedReport = report.status === "SUBMITTED";
+  const submitButtonText = isPublishedReport
+    ? "Resubmit update"
+    : "Submit update";
+  const submitProgressText = isPublishedReport
+    ? "Resubmitting..."
+    : "Submitting...";
+  const statusIndicatorLabel = isPublishedReport ? "Published" : "Draft";
+  const StatusIndicatorIcon = isPublishedReport ? CheckCircle2 : PenLine;
   const importStatusLabel = importingProvider
     ? `Importing ${syncProviderLabels[importingProvider].toLowerCase()}...`
     : "Import";
@@ -1085,99 +1107,66 @@ export function DailyReportApp({
     router.push(`/?date=${nextDate}`);
   }
 
-  function shiftReportDate(days: number) {
-    const nextDate = toDate(reportDate) ?? new Date();
-    nextDate.setDate(nextDate.getDate() + days);
-    void goToReportDate(nextDate.toISOString().slice(0, 10));
-  }
-
   const menuActivity = openActivityMenu
     ? activities.find((activity) => activity.id === openActivityMenu.id)
     : null;
 
   return (
     <>
-      <main className="reference-page !px-3 !pb-3 !pt-2 sm:!px-4">
-        <section className="overflow-visible rounded-[10px] bg-white shadow-[0_8px_24px_rgba(15,23,42,0.07)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
-          <div className="flex flex-col gap-3 px-4 pb-3 pt-4 min-[900px]:flex-row min-[900px]:items-center min-[900px]:justify-between min-[1200px]:px-5">
-            <div>
-              <h1 className="text-2xl font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">
-                Daily Update
-              </h1>
-              <p className="mt-0.5 text-xs text-[#667085] dark:text-muted-foreground">
-                Share what you worked on today.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {report.id && report.status === "DRAFT" ? (
-                <Button
-                  variant="outline"
-                  className="h-10 rounded-[7px] bg-white px-4 text-sm font-medium text-[#b42318] shadow-none ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
-                  disabled={isBusy}
-                  onClick={deleteDraft}
-                >
-                  {isDeleting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="mr-2 h-4 w-4" />
-                  )}
-                  {isDeleting ? "Deleting..." : "Delete draft"}
-                </Button>
-              ) : null}
-              {report.status === "SUBMITTED" ? (
-                <span className="inline-flex h-10 items-center gap-2 rounded-[7px] bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-300/20">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Submitted
-                </span>
-              ) : (
-                <Button
-                  className="h-10 rounded-[7px] bg-gradient-to-br from-[#4f6dfd] to-[#4a28df] px-5 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(79,109,253,0.28)] hover:from-[#4663ed] hover:to-[#3f21c8]"
-                  disabled={isBusy}
-                  onClick={submitReport}
-                >
-                  {isSubmitting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="mr-2 h-4 w-4" />
-                  )}
-                  {isSubmitting ? "Submitting..." : "Submit update"}
-                </Button>
-              )}
-            </div>
+      <main className="reference-page">
+        <div className="mb-3 flex flex-col gap-3 min-[900px]:flex-row min-[900px]:items-center min-[900px]:justify-between">
+          <div>
+            <h1 className="text-[24px] font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">
+              Daily Update
+            </h1>
+            <p className="mt-0.5 text-sm text-[#667085] dark:text-muted-foreground">
+              Share what you worked on today.
+            </p>
           </div>
-
-          <div className="mx-4 h-px bg-[#e5e9f1] dark:bg-[#213149] min-[1200px]:mx-5" />
-
-          <div className="grid gap-2 px-4 py-3 min-[900px]:grid-cols-[minmax(320px,430px)_minmax(180px,220px)_minmax(190px,240px)] min-[900px]:items-center min-[900px]:justify-between min-[1200px]:px-5">
-            <div className="flex w-full items-center gap-2">
-              <button
-                type="button"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#101d2e] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-[#132239] dark:hover:text-foreground"
-                aria-label="Previous day"
-                onClick={() => shiftReportDate(-1)}
+          <div className="flex flex-wrap items-center gap-2">
+            {report.id && report.status === "DRAFT" ? (
+              <Button
+                variant="outline"
+                className="h-10 rounded-[8px] bg-white px-4 text-sm font-medium text-[#b42318] shadow-none ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
+                disabled={isBusy}
+                onClick={deleteDraft}
               >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <label className="relative flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-[7px] bg-white px-4 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]">
-                <CalendarDays className="h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
-                <span className="truncate">{formatReportDate(date)}</span>
-                <Input
-                  type="date"
-                  value={reportDate}
-                  onChange={(event) => void goToReportDate(event.target.value)}
-                  className="absolute inset-0 h-full cursor-pointer border-0 bg-transparent opacity-0"
-                  aria-label="Select report date"
-                />
-              </label>
-              <button
-                type="button"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#101d2e] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-[#132239] dark:hover:text-foreground"
-                aria-label="Next day"
-                onClick={() => shiftReportDate(1)}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
+                {isDeleting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-2 h-4 w-4" />
+                )}
+                {isDeleting ? "Deleting..." : "Delete draft"}
+              </Button>
+            ) : null}
+            <Button
+              className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,0.2)] hover:bg-[#1d4ed8]"
+              disabled={isBusy}
+              onClick={submitReport}
+            >
+              {isSubmitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              {isSubmitting ? submitProgressText : submitButtonText}
+            </Button>
+          </div>
+        </div>
+
+        <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
+          <div className="grid gap-2 min-[900px]:grid-cols-[minmax(320px,430px)_minmax(180px,220px)_minmax(190px,240px)] min-[900px]:items-center min-[900px]:justify-between">
+            <label className="relative flex h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-[7px] bg-white px-4 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]">
+              <CalendarDays className="h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
+              <span className="truncate">{formatReportDate(date)}</span>
+              <Input
+                type="date"
+                value={reportDate}
+                onChange={(event) => void goToReportDate(event.target.value)}
+                className="absolute inset-0 h-full cursor-pointer border-0 bg-transparent opacity-0"
+                aria-label="Select report date"
+              />
+            </label>
 
             <label className="flex min-h-10 w-full items-center gap-3 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]">
               <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
@@ -1203,277 +1192,285 @@ export function DailyReportApp({
               className="flex min-h-10 w-full items-center gap-4 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
               aria-live="polite"
             >
+              <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
+                Status
+              </span>
               <span
                 className={cn(
                   "inline-flex items-center gap-2 rounded-full px-2.5 py-1 font-medium",
-                  autoSaveStatus === "error"
-                    ? "bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-300"
-                    : "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300",
+                  isPublishedReport
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300"
+                    : "bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300",
                 )}
               >
-                <CheckCircle2 className="h-4 w-4" />
-                {autoSaveStatus === "error" ? "Save failed" : "Saved"}
+                <StatusIndicatorIcon className="h-4 w-4" />
+                {statusIndicatorLabel}
               </span>
+              {autoSaveStatus === "error" ? (
+                <span className="text-xs font-semibold text-red-700 dark:text-red-300">
+                  Save failed
+                </span>
+              ) : null}
             </div>
           </div>
-
-          <div className="grid gap-3 border-t border-[#e8ecf3] px-4 py-3 dark:border-[#213149] min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1200px]:px-5 min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
-            <section className="flex min-h-[560px] flex-col rounded-[8px] bg-white p-3 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
-                      Work items
-                    </h2>
-                    <ReferenceBadge
-                      tone="neutral"
-                      className="px-2.5 py-1 text-xs"
-                    >
-                      {selectedCount} selected
-                    </ReferenceBadge>
-                  </div>
-                </div>
-                <div className="relative">
-                  <Button
-                    variant="outline"
-                    className="h-9 rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55]"
-                    disabled={isBusy}
-                    onClick={() => setImportMenuOpen((open) => !open)}
-                  >
-                    {isImporting ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Download className="mr-2 h-4 w-4" />
-                    )}
-                    {importStatusLabel}
-                    {!isImporting ? (
-                      <ChevronDown className="ml-2 h-4 w-4" />
-                    ) : null}
-                  </Button>
-                  {importMenuOpen ? (
-                    <div className="absolute right-0 top-12 z-30 w-64 rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
-                      <button
-                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
-                        disabled={!canSyncJira && !oauthConfig.atlassian}
-                        onClick={() => {
-                          setImportMenuOpen(false);
-                          canSyncJira
-                            ? sync("jira")
-                            : connectProvider("atlassian");
-                        }}
-                      >
-                        {canSyncJira ? "Import Jira" : "Connect Jira"}
-                      </button>
-                      <button
-                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
-                        disabled={!canSyncGoogle && !oauthConfig.google}
-                        onClick={() => {
-                          setImportMenuOpen(false);
-                          canSyncGoogle
-                            ? sync("google-calendar")
-                            : connectProvider("google");
-                        }}
-                      >
-                        {canSyncGoogle ? "Import Calendar" : "Connect Google"}
-                      </button>
-                      <button
-                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
-                        disabled={!canSyncGoogle && !oauthConfig.google}
-                        onClick={() => {
-                          setImportMenuOpen(false);
-                          canSyncGoogle
-                            ? sync("google-tasks")
-                            : connectProvider("google");
-                        }}
-                      >
-                        {canSyncGoogle
-                          ? "Import Tasks"
-                          : "Connect Google Tasks"}
-                      </button>
-                      <Link
-                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#2563eb] hover:bg-[#eff6ff] dark:text-[#93c5fd] dark:hover:bg-white/5"
-                        href="/settings"
-                        onClick={() => setImportMenuOpen(false)}
-                      >
-                        Manage integrations
-                      </Link>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <label className="relative mt-3 block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98a2b3]" />
-                <Input
-                  value={activitySearch}
-                  onChange={(event) => {
-                    setActivitySearch(event.target.value);
-                    setActivityPage(1);
-                  }}
-                  placeholder="Search work items"
-                  className="h-9 rounded-[7px] bg-white pl-9 text-sm shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#0f1b2a] dark:ring-[#263a55]"
-                  aria-label="Search work items"
-                />
-              </label>
-
-              <div className="mt-3 h-[390px] space-y-2 overflow-y-auto pr-1">
-                {activities.length === 0 ? (
-                  <EmptyReferenceState>
-                    No activities yet. Import work from Jira, Calendar, or
-                    Tasks.
-                  </EmptyReferenceState>
-                ) : pagedActivities.length === 0 ? (
-                  <EmptyReferenceState>
-                    No work items match your search.
-                  </EmptyReferenceState>
-                ) : (
-                  pagedActivities.map((activity) => (
-                    <article
-                      key={activity.id}
-                      className="grid min-h-[68px] grid-cols-[24px_34px_minmax(0,1fr)_auto_58px_28px] items-center gap-2.5 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-5 w-5 rounded border-[#cbd5e1] accent-[#4f46e5]"
-                        checked={activity.selected}
-                        onChange={(event) =>
-                          setActivity(activity.id, {
-                            selected: event.target.checked,
-                          })
-                        }
-                        aria-label={`Include ${activity.title}`}
-                      />
-                      <div
-                        className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-[7px]",
-                          sourceStyles[activity.source],
-                        )}
-                      >
-                        {sourceIcon(activity.source)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-[#111827] dark:text-foreground">
-                          {activity.sourceUrl && activity.sourceUrl !== "#" ? (
-                            <a
-                              href={activity.sourceUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="hover:text-[#2563eb]"
-                            >
-                              {activity.title || "Untitled activity"}
-                            </a>
-                          ) : (
-                            activity.title || "Untitled activity"
-                          )}
-                        </div>
-                        <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-[#667085] dark:text-muted-foreground">
-                          <span className="shrink-0">
-                            {sourceLabels[activity.source]}
-                          </span>
-                          {activity.description ? (
-                            <>
-                              <span className="text-[#98a2b3]">•</span>
-                              <span className="truncate">
-                                {activity.description}
-                              </span>
-                            </>
-                          ) : null}
-                        </div>
-                      </div>
-                      <ReferenceBadge
-                        tone={statusTone(activity.status)}
-                        className="justify-self-start px-2.5 py-1 text-xs"
-                      >
-                        {activity.status || "Not set"}
-                      </ReferenceBadge>
-                      <div className="text-sm font-medium text-[#111827] dark:text-foreground">
-                        {formatDuration(activity.durationMinutes)}
-                      </div>
-                      <button
-                        className="reference-menu-button"
-                        aria-label={`More actions for ${activity.title}`}
-                        onClick={(event) =>
-                          toggleActivityMenu(activity.id, event)
-                        }
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </button>
-                    </article>
-                  ))
-                )}
-              </div>
-
-              <div className="mt-auto border-t border-[#e6eaf2] pt-3 dark:border-[#263a55]">
-                <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[#667085] dark:text-muted-foreground">
-                  <span>
-                    {selectedCount} of {activities.length} items selected
-                    {activities.length > 0
-                      ? normalizedActivitySearch
-                        ? `, showing ${activityPageStart}-${activityPageEnd} of ${filteredActivities.length} matches (${filteredSelectedCount} selected)`
-                        : `, showing ${activityPageStart}-${activityPageEnd}`
-                      : ""}
-                  </span>
-                </div>
-                <div className="mt-3 flex min-h-8 justify-end">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 w-8 rounded-[7px] bg-white p-0 dark:bg-[#0f1b2a]"
-                      aria-label="Previous work items page"
-                      disabled={
-                        currentActivityPage === 1 ||
-                        filteredActivities.length === 0
-                      }
-                      onClick={() =>
-                        setActivityPage((page) => Math.max(1, page - 1))
-                      }
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="min-w-20 text-center text-xs font-medium text-[#667085] dark:text-muted-foreground">
-                      Page {currentActivityPage} of {activityPageCount}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 w-8 rounded-[7px] bg-white p-0 dark:bg-[#0f1b2a]"
-                      aria-label="Next work items page"
-                      disabled={
-                        currentActivityPage === activityPageCount ||
-                        filteredActivities.length === 0
-                      }
-                      onClick={() =>
-                        setActivityPage((page) =>
-                          Math.min(activityPageCount, page + 1),
-                        )
-                      }
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <aside className="min-h-[560px] rounded-[8px] bg-white p-3 ring-1 ring-[#e1e6ef] dark:bg-[#101d2e] dark:ring-[#263a55]">
-              <div>
-                <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
-                  Summary
-                </h2>
-              </div>
-              <SummaryEditor
-                ref={summaryEditorRef}
-                initialSummary={editorSummaryForReport(initialReport)}
-                initialBlockers={blockersForReport(initialReport)}
-                resetKey={`${date}:${initialReport.id}:${initialReport.updatedAt ?? ""}`}
-                onChange={handleSummaryChange}
-              />
-            </aside>
-          </div>
         </section>
+
+        <div className="grid gap-3 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
+          <section className="flex min-h-[560px] flex-col rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#101d2e] dark:ring-[#263a55]">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
+                    Work items
+                  </h2>
+                  <ReferenceBadge
+                    tone="neutral"
+                    className="px-2.5 py-1 text-xs"
+                  >
+                    {selectedCount} selected
+                  </ReferenceBadge>
+                </div>
+              </div>
+              <div ref={importMenuRef} className="relative">
+                <Button
+                  variant="outline"
+                  className="h-9 rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55]"
+                  disabled={isBusy}
+                  onClick={() => {
+                    setOpenActivityMenu(null);
+                    setImportMenuOpen((open) => !open);
+                  }}
+                >
+                  {isImporting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                  )}
+                  {importStatusLabel}
+                  {!isImporting ? (
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                  ) : null}
+                </Button>
+                {importMenuOpen ? (
+                  <div className="absolute right-0 top-12 z-30 w-64 rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+                    <button
+                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+                      disabled={!canSyncJira && !oauthConfig.atlassian}
+                      onClick={() => {
+                        setImportMenuOpen(false);
+                        canSyncJira
+                          ? sync("jira")
+                          : connectProvider("atlassian");
+                      }}
+                    >
+                      {canSyncJira ? "Import Jira" : "Connect Jira"}
+                    </button>
+                    <button
+                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+                      disabled={!canSyncGoogle && !oauthConfig.google}
+                      onClick={() => {
+                        setImportMenuOpen(false);
+                        canSyncGoogle
+                          ? sync("google-calendar")
+                          : connectProvider("google");
+                      }}
+                    >
+                      {canSyncGoogle ? "Import Calendar" : "Connect Google"}
+                    </button>
+                    <button
+                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+                      disabled={!canSyncGoogle && !oauthConfig.google}
+                      onClick={() => {
+                        setImportMenuOpen(false);
+                        canSyncGoogle
+                          ? sync("google-tasks")
+                          : connectProvider("google");
+                      }}
+                    >
+                      {canSyncGoogle ? "Import Tasks" : "Connect Google Tasks"}
+                    </button>
+                    <Link
+                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#2563eb] hover:bg-[#eff6ff] dark:text-[#93c5fd] dark:hover:bg-white/5"
+                      href="/settings#integrations"
+                      onClick={() => setImportMenuOpen(false)}
+                    >
+                      Manage integrations
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <label className="relative mt-3 block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98a2b3]" />
+              <Input
+                value={activitySearch}
+                onChange={(event) => {
+                  setActivitySearch(event.target.value);
+                  setActivityPage(1);
+                }}
+                placeholder="Search work items"
+                className="h-9 rounded-[7px] bg-white pl-9 text-sm shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                aria-label="Search work items"
+              />
+            </label>
+
+            <div className="mt-3 h-[390px] space-y-2 overflow-y-auto pr-1">
+              {activities.length === 0 ? (
+                <EmptyReferenceState>
+                  No activities yet. Import work from Jira, Calendar, or Tasks.
+                </EmptyReferenceState>
+              ) : pagedActivities.length === 0 ? (
+                <EmptyReferenceState>
+                  No work items match your search.
+                </EmptyReferenceState>
+              ) : (
+                pagedActivities.map((activity) => (
+                  <article
+                    key={activity.id}
+                    className="grid min-h-[68px] grid-cols-[24px_34px_minmax(0,1fr)_auto_58px_28px] items-center gap-2.5 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-5 w-5 rounded border-[#cbd5e1] accent-[#4f46e5]"
+                      checked={activity.selected}
+                      onChange={(event) =>
+                        setActivity(activity.id, {
+                          selected: event.target.checked,
+                        })
+                      }
+                      aria-label={`Include ${activity.title}`}
+                    />
+                    <div
+                      className={cn(
+                        "flex h-8 w-8 items-center justify-center rounded-[7px]",
+                        sourceStyles[activity.source],
+                      )}
+                    >
+                      {sourceIcon(activity.source)}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-[#111827] dark:text-foreground">
+                        {activity.sourceUrl && activity.sourceUrl !== "#" ? (
+                          <a
+                            href={activity.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hover:text-[#2563eb]"
+                          >
+                            {activity.title || "Untitled activity"}
+                          </a>
+                        ) : (
+                          activity.title || "Untitled activity"
+                        )}
+                      </div>
+                      <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-[#667085] dark:text-muted-foreground">
+                        <span className="shrink-0">
+                          {sourceLabels[activity.source]}
+                        </span>
+                        {activity.description ? (
+                          <>
+                            <span className="text-[#98a2b3]">•</span>
+                            <span className="truncate">
+                              {activity.description}
+                            </span>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                    <ReferenceBadge
+                      tone={statusTone(activity.status)}
+                      className="justify-self-start px-2.5 py-1 text-xs"
+                    >
+                      {activity.status || "Not set"}
+                    </ReferenceBadge>
+                    <div className="text-sm font-medium text-[#111827] dark:text-foreground">
+                      {formatDuration(activity.durationMinutes)}
+                    </div>
+                    <button
+                      className="reference-menu-button"
+                      aria-label={`More actions for ${activity.title}`}
+                      onClick={(event) =>
+                        toggleActivityMenu(activity.id, event)
+                      }
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </button>
+                  </article>
+                ))
+              )}
+            </div>
+
+            <div className="mt-auto border-t border-[#e6eaf2] pt-3 dark:border-[#263a55]">
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[#667085] dark:text-muted-foreground">
+                <span>
+                  {selectedCount} of {activities.length} items selected
+                  {activities.length > 0
+                    ? normalizedActivitySearch
+                      ? `, showing ${activityPageStart}-${activityPageEnd} of ${filteredActivities.length} matches (${filteredSelectedCount} selected)`
+                      : `, showing ${activityPageStart}-${activityPageEnd}`
+                    : ""}
+                </span>
+              </div>
+              <div className="mt-3 flex min-h-8 justify-end">
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 rounded-[7px] bg-white p-0 dark:bg-[#0f1b2a]"
+                    aria-label="Previous work items page"
+                    disabled={
+                      currentActivityPage === 1 ||
+                      filteredActivities.length === 0
+                    }
+                    onClick={() =>
+                      setActivityPage((page) => Math.max(1, page - 1))
+                    }
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="min-w-20 text-center text-xs font-medium text-[#667085] dark:text-muted-foreground">
+                    Page {currentActivityPage} of {activityPageCount}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 rounded-[7px] bg-white p-0 dark:bg-[#0f1b2a]"
+                    aria-label="Next work items page"
+                    disabled={
+                      currentActivityPage === activityPageCount ||
+                      filteredActivities.length === 0
+                    }
+                    onClick={() =>
+                      setActivityPage((page) =>
+                        Math.min(activityPageCount, page + 1),
+                      )
+                    }
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside className="min-h-[560px] rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#101d2e] dark:ring-[#263a55]">
+            <div>
+              <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
+                Summary
+              </h2>
+            </div>
+            <SummaryEditor
+              ref={summaryEditorRef}
+              initialSummary={editorSummaryForReport(initialReport)}
+              initialBlockers={blockersForReport(initialReport)}
+              resetKey={`${date}:${initialReport.id}:${initialReport.updatedAt ?? ""}`}
+              onChange={handleSummaryChange}
+            />
+          </aside>
+        </div>
       </main>
       {menuActivity && openActivityMenu ? (
         <>
@@ -1484,6 +1481,7 @@ export function DailyReportApp({
             onClick={() => setOpenActivityMenu(null)}
           />
           <div
+            ref={activityMenuRef}
             className="fixed z-50 w-60 rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] dark:bg-[#0f1b2a]"
             style={{ top: openActivityMenu.top, left: openActivityMenu.left }}
             role="menu"

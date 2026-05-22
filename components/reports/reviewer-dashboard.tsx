@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CalendarDays,
@@ -10,7 +11,6 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  CircleHelp,
   Clock3,
   Download,
   Edit3,
@@ -109,21 +109,6 @@ function toDate(value?: string | Date | null) {
 
 function dateInputValue(value: string | Date) {
   return dateOnlyString(value);
-}
-
-function formatReportDate(value?: string | Date) {
-  const date = dateOnlyDisplayDate(value);
-  const parts = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    weekday: "short",
-  }).formatToParts(date);
-  const lookup = Object.fromEntries(
-    parts.map((part) => [part.type, part.value]),
-  );
-
-  return `${lookup.month} ${lookup.day}, ${lookup.year} (${lookup.weekday})`;
 }
 
 function formatShortDate(value?: string | Date) {
@@ -385,6 +370,7 @@ export function ReviewerDashboard({
   date: string;
   reviewerId?: string | null;
 }) {
+  const router = useRouter();
   const [items, setItems] = useState(rows);
   const [activeReportUserId, setActiveReportUserId] = useState<string | null>(
     null,
@@ -392,11 +378,10 @@ export function ReviewerDashboard({
   const [notice, setNotice] = useState<string | null>(null);
   const [isSendingDigest, setIsSendingDigest] = useState(false);
   const [search, setSearch] = useState("");
-  const [groupFilter, setGroupFilter] = useState("EMPLOYEES");
-  const [locationFilter, setLocationFilter] = useState("ALL");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
+  const pendingDateRef = useRef<string | null>(null);
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -405,17 +390,10 @@ export function ReviewerDashboard({
       const employee =
         `${row.user.name ?? ""} ${row.user.email ?? ""}`.toLowerCase();
       const matchesSearch = !query || employee.includes(query);
-      const matchesGroup =
-        (groupFilter === "EMPLOYEES" && row.user.role === "EMPLOYEE") ||
-        (groupFilter === "SUBMITTED" && row.report?.status === "SUBMITTED") ||
-        (groupFilter === "MISSING" && !row.report) ||
-        (groupFilter === "BLOCKERS" && hasBlockers(row.report));
-      const matchesLocation =
-        locationFilter === "ALL" || row.report?.workLocation === locationFilter;
 
-      return matchesSearch && matchesGroup && matchesLocation;
+      return matchesSearch && row.user.role === "EMPLOYEE";
     });
-  }, [groupFilter, items, locationFilter, search]);
+  }, [items, search]);
 
   const pageCount = Math.max(1, Math.ceil(filteredItems.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -439,7 +417,9 @@ export function ReviewerDashboard({
   const submitted = filteredItems.filter(
     (row) => row.report?.status === "SUBMITTED",
   ).length;
-  const missing = filteredItems.filter((row) => !row.report).length;
+  const unread = filteredItems.filter((row) =>
+    isUnreadForReviewer(row.report, reviewerId),
+  ).length;
   const blockers = filteredItems.filter((row) =>
     hasBlockers(row.report),
   ).length;
@@ -448,12 +428,25 @@ export function ReviewerDashboard({
   ).length;
   const coverage = total ? Math.round((submitted / total) * 100) : 0;
 
+  useEffect(() => {
+    setItems(rows);
+    setActiveReportUserId(null);
+    setSelectedReportIds([]);
+    setPage(1);
+    pendingDateRef.current = null;
+  }, [date, rows]);
+
   function goToDate(nextDate: string) {
-    if (!nextDate) {
+    if (!nextDate || nextDate === dateInputValue(date)) {
       return;
     }
 
-    window.location.href = `/review?date=${nextDate}`;
+    if (pendingDateRef.current === nextDate) {
+      return;
+    }
+
+    pendingDateRef.current = nextDate;
+    router.push(`/review?date=${nextDate}`);
   }
 
   function downloadCsv() {
@@ -550,8 +543,6 @@ export function ReviewerDashboard({
       body: JSON.stringify({
         date,
         filters: {
-          groupFilter,
-          locationFilter,
           search,
         },
       }),
@@ -677,78 +668,28 @@ export function ReviewerDashboard({
           </div>
 
           <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-            <div className="grid gap-3 lg:grid-cols-4 xl:grid-cols-[minmax(180px,230px)_minmax(120px,160px)_minmax(140px,180px)_minmax(190px,1fr)_auto]">
-              <Field label="Report Date">
-                <label className="relative flex h-10 min-w-0 items-center rounded-[8px] border border-[#d8dee8] bg-white px-3 text-xs font-medium text-[#344054] dark:border-[#263a55] dark:bg-[#0b1523] dark:text-foreground">
-                  <CalendarDays className="mr-2 h-3.5 w-3.5 shrink-0 text-[#667085]" />
-                  <span className="pointer-events-none min-w-0 flex-1 truncate whitespace-nowrap">
-                    {formatReportDate(date)}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="relative flex h-10 w-full min-w-[210px] cursor-pointer items-center gap-2 rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] min-[560px]:w-[230px] dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55]">
+                  <CalendarDays className="mr-2 h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
+                  <span className="min-w-0 truncate">
+                    {formatShortDate(date)}
                   </span>
-                  <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 text-[#667085]" />
-                  <Input
-                    type="date"
-                    value={dateInputValue(date)}
-                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                    onChange={(event) => goToDate(event.target.value)}
-                    aria-label="Report date"
-                  />
-                </label>
-              </Field>
+                <Input
+                  type="date"
+                  value={dateInputValue(date)}
+                  className="absolute inset-0 h-full w-full cursor-pointer border-0 bg-transparent opacity-0"
+                  onInput={(event) =>
+                    goToDate((event.currentTarget as HTMLInputElement).value)
+                  }
+                  onChange={(event) => goToDate(event.target.value)}
+                  aria-label="Select report date"
+                />
+              </label>
 
-              <Field label="Group">
-                <Select
-                  value={groupFilter}
-                  className="h-10 rounded-[8px] bg-white text-xs dark:bg-[#0b1523]"
-                  onChange={(event) => {
-                    setGroupFilter(event.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="EMPLOYEES">Employees</option>
-                  <option value="SUBMITTED">Submitted</option>
-                  <option value="MISSING">Missing</option>
-                  <option value="BLOCKERS">With blockers</option>
-                </Select>
-              </Field>
-
-              <Field label="Work Location">
-                <Select
-                  value={locationFilter}
-                  className="h-10 rounded-[8px] bg-white text-xs dark:bg-[#0b1523]"
-                  onChange={(event) => {
-                    setLocationFilter(event.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="ALL">All Locations</option>
-                  <option value="OFFICE">Office</option>
-                  <option value="WFH">WFH</option>
-                  <option value="HYBRID">Hybrid</option>
-                  <option value="PTO">PTO</option>
-                  <option value="OUT_OF_OFFICE">Out of office</option>
-                  <option value="UNKNOWN">Unspecified</option>
-                </Select>
-              </Field>
-
-              <Field label="Search employees">
-                <label className="relative block">
-                  <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#667085]" />
-                  <Input
-                    value={search}
-                    onChange={(event) => {
-                      setSearch(event.target.value);
-                      setPage(1);
-                    }}
-                    className="h-10 rounded-[8px] bg-white pl-11 text-xs dark:bg-[#0b1523]"
-                    placeholder="Search by name or email..."
-                  />
-                </label>
-              </Field>
-
-              <div className="flex items-end justify-start gap-2 lg:col-span-4 xl:col-span-1 xl:justify-end">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="outline"
-                  className="h-10 rounded-[8px] bg-white px-3 text-xs dark:bg-[#0b1523]"
+                  className="h-10 min-w-[118px] shrink-0 justify-center rounded-[8px] bg-white px-3 text-xs shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]"
                   onClick={sendEmailDigest}
                   disabled={isSendingDigest}
                 >
@@ -756,7 +697,7 @@ export function ReviewerDashboard({
                   {isSendingDigest ? "Sending..." : "Email digest"}
                 </Button>
                 <Button
-                  className="h-10 rounded-[8px] bg-[#2563eb] px-3 text-xs text-white hover:bg-[#1d4ed8]"
+                  className="h-10 min-w-[96px] shrink-0 justify-center rounded-[8px] bg-[#2563eb] px-3 text-xs font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,0.2)] hover:bg-[#1d4ed8]"
                   onClick={downloadCsv}
                 >
                   <Download className="mr-1.5 h-3.5 w-3.5" />
@@ -772,81 +713,85 @@ export function ReviewerDashboard({
             </div>
           ) : null}
 
-          <section className="mb-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <DashboardStat
-              icon={<CheckCircle2 />}
-              label="Submitted"
-              value={submitted}
-              tone="green"
-            />
-            <DashboardStat
-              icon={<CircleHelp />}
-              label="Missing"
-              value={missing}
-              tone="orange"
-            />
-            <DashboardStat
-              icon={<TriangleAlert />}
-              label="With blockers"
-              value={blockers}
-              tone="red"
-            />
-            <DashboardStat
-              icon={<Edit3 />}
-              label="Late edits"
-              value={lateEdits}
-              tone="purple"
-            />
-          </section>
-
-          <section className="mb-3 rounded-[8px] bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-              <div>
-                <h2 className="text-base font-semibold text-[#101828] dark:text-foreground">
-                  Submission Coverage
-                </h2>
-                <div className="mt-2 flex items-end gap-3">
-                  <span className="text-[32px] font-semibold leading-none text-[#2563eb]">
+          <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="min-w-[240px] flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <h2 className="text-sm font-semibold text-[#101828] dark:text-foreground">
+                    Coverage
+                  </h2>
+                  <span className="text-xs font-medium text-[#667085] dark:text-muted-foreground">
+                    {submitted}/{total} submitted
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center gap-3">
+                  <span className="w-14 text-[26px] font-semibold leading-none text-[#2563eb]">
                     {coverage}%
                   </span>
-                  <span className="pb-1 text-sm font-medium text-[#475467] dark:text-muted-foreground">
-                    {submitted} of {total} expected reports submitted
-                  </span>
-                </div>
-                <div className="mt-4 h-2 rounded-full bg-[#e9edf5] dark:bg-[#263a55]">
-                  <div
-                    className="h-2 rounded-full bg-[#2563eb]"
-                    style={{ width: `${coverage}%` }}
-                  />
+                  <div className="h-2 flex-1 rounded-full bg-[#e9edf5] dark:bg-[#263a55]">
+                    <div
+                      className="h-2 rounded-full bg-[#2563eb]"
+                      style={{ width: `${coverage}%` }}
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 divide-x divide-[#e2e8f0] dark:divide-[#263a55]">
-                <CoverageMetric label="Expected" value={total} />
-                <CoverageMetric label="Submitted" value={submitted} />
+
+              <div className="flex flex-wrap items-center gap-2">
+                <CompactMetric label="Unread" value={unread} tone="blue" />
+                <CompactMetric
+                  label="Blockers"
+                  value={blockers}
+                  tone="red"
+                />
+                <CompactMetric
+                  label="Late"
+                  value={lateEdits}
+                  tone="purple"
+                />
               </div>
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+          <section className="rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
             <div className="flex flex-wrap items-center justify-between gap-3 p-3">
-              <h2 className="text-lg font-semibold text-[#101828] dark:text-foreground">
-                Employee Reports
-              </h2>
-              {selectedRows.length > 0 ? (
-                <div className="flex items-center gap-2 rounded-[9px] bg-[#f4f8ff] px-2 py-1.5 ring-1 ring-[#dbe7f5] dark:bg-blue-400/10 dark:ring-blue-300/15">
-                  <span className="px-1 text-xs font-semibold text-[#475467] dark:text-muted-foreground">
-                    {selectedRows.length} selected
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 rounded-[7px] bg-white px-3 text-xs dark:bg-[#0b1523]"
-                    onClick={markSelectedUnread}
-                  >
-                    Mark as unread
-                  </Button>
-                </div>
-              ) : null}
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <h2 className="text-lg font-semibold text-[#101828] dark:text-foreground">
+                  Employee Reports
+                </h2>
+                {selectedRows.length > 0 ? (
+                  <div className="flex items-center gap-2 rounded-[9px] bg-[#f4f8ff] px-2 py-1.5 ring-1 ring-[#dbe7f5] dark:bg-blue-400/10 dark:ring-blue-300/15">
+                    <span className="px-1 text-xs font-semibold text-[#475467] dark:text-muted-foreground">
+                      {selectedRows.length} selected
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-[7px] bg-white px-3 text-xs dark:bg-[#0b1523]"
+                      onClick={markSelectedUnread}
+                    >
+                      Mark as unread
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex w-full flex-wrap items-center gap-2 min-[760px]:w-auto">
+                <label className="relative flex h-9 min-w-0 flex-1 items-center rounded-[7px] bg-white text-sm shadow-none ring-1 ring-[#dfe4ee] min-[560px]:w-[300px] min-[560px]:flex-none dark:bg-[#0b1523] dark:ring-[#263a55]">
+                  <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#667085]" />
+                  <Input
+                    value={search}
+                    onChange={(event) => {
+                      setSearch(event.target.value);
+                      setPage(1);
+                    }}
+                    className="h-8 min-w-0 border-0 bg-transparent pl-9 pr-3 text-sm font-medium text-[#111827] shadow-none placeholder:text-[#98a2b3] focus-visible:ring-0 dark:bg-transparent dark:text-foreground"
+                    placeholder="Search employees"
+                    aria-label="Search employees"
+                  />
+                </label>
+
+              </div>
             </div>
             <div className="overflow-x-auto px-3">
               <table className="w-full min-w-[980px] text-xs">
@@ -877,7 +822,7 @@ export function ReviewerDashboard({
                     <tr>
                       <td colSpan={8} className="px-4 py-8">
                         <EmptyReferenceState>
-                          No employee reports match these filters.
+                          No employee reports match this search.
                         </EmptyReferenceState>
                       </td>
                     </tr>
@@ -1107,69 +1052,31 @@ function setLocalReadReceipt(
   });
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <div className="mb-2 text-xs font-semibold text-[#64748b] dark:text-muted-foreground">
-        {label}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function DashboardStat({
-  icon,
+function CompactMetric({
   label,
   value,
   tone,
 }: {
-  icon: ReactNode;
   label: string;
   value: number;
-  tone: "green" | "orange" | "red" | "purple";
+  tone: "blue" | "red" | "purple";
 }) {
   const toneClass = {
-    green:
-      "bg-[#e8f9ef] text-[#16a34a] dark:bg-emerald-400/15 dark:text-emerald-200",
-    orange:
-      "bg-[#fff4df] text-[#f59e0b] dark:bg-amber-400/15 dark:text-amber-200",
-    red: "bg-[#fdecee] text-[#ef4444] dark:bg-red-400/15 dark:text-red-200",
+    blue: "bg-[#f4f8ff] text-[#1d4ed8] ring-[#dbe7f5] dark:bg-blue-400/10 dark:text-blue-100 dark:ring-blue-300/15",
+    red: "bg-[#fff5f5] text-[#dc2626] ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15",
     purple:
-      "bg-[#f2eafe] text-[#9b5de5] dark:bg-purple-400/15 dark:text-purple-200",
+      "bg-[#f8f3ff] text-[#7c3aed] ring-[#eadcff] dark:bg-purple-400/10 dark:text-purple-100 dark:ring-purple-300/15",
   }[tone];
 
   return (
-    <div className="flex min-h-[82px] items-center gap-3 rounded-[8px] bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-      <div
-        className={cn(
-          "flex h-11 w-11 items-center justify-center rounded-full",
-          toneClass,
-        )}
-      >
-        <span className="[&>svg]:h-6 [&>svg]:w-6">{icon}</span>
-      </div>
-      <div>
-        <div className="text-sm font-semibold text-[#475467] dark:text-muted-foreground">
-          {label}
-        </div>
-        <div className="mt-1 text-[24px] font-semibold leading-none text-[#101828] dark:text-foreground">
-          {value}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CoverageMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="px-5">
-      <div className="text-sm font-semibold text-[#667085] dark:text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-1 text-[24px] font-medium leading-none text-[#344054] dark:text-foreground">
-        {value}
-      </div>
+    <div
+      className={cn(
+        "flex min-w-[86px] items-baseline justify-between gap-3 rounded-[8px] px-3 py-2 ring-1",
+        toneClass,
+      )}
+    >
+      <div className="text-xs font-semibold">{label}</div>
+      <div className="text-lg font-semibold leading-none">{value}</div>
     </div>
   );
 }

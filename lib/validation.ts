@@ -66,7 +66,6 @@ export const updateUserSchema = z.object({
   name: z.string().min(1).max(200).nullable().optional(),
   role: z.enum(["EMPLOYEE", "REVIEWER", "ADMIN"]).optional(),
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).optional(),
-  timezone: z.string().min(1).max(100).optional(),
   reviewerAllDepartments: z.boolean().optional(),
   departmentIds: z.array(z.string()).optional()
 });
@@ -86,7 +85,17 @@ export const changePasswordSchema = z.object({
 
 export const accountProfileSchema = z.object({
   name: z.string().max(200).nullable().optional(),
-  timezone: z.string().min(1).max(100)
+  email: z.string().email().refine(isGenerisEmail, generisEmailMessage()),
+  image: z
+    .union([
+      z
+        .string()
+        .max(350_000)
+        .regex(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/),
+      z.string().url().max(2000)
+    ])
+    .nullable()
+    .optional()
 });
 
 export const companySettingsSchema = z.object({
@@ -107,9 +116,6 @@ export const reviewDigestSchema = z.object({
   date: dateStringSchema,
   filters: z
     .object({
-      groupFilter: z.enum(["EMPLOYEES", "SUBMITTED", "MISSING", "BLOCKERS"]).optional(),
-      statusFilter: z.string().max(100).optional(),
-      locationFilter: z.string().max(100).optional(),
       search: z.string().max(200).optional()
     })
     .optional()

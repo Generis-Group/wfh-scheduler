@@ -15,6 +15,14 @@ import { prisma } from "@/lib/prisma";
 
 const oauthConfig = getOAuthProviderConfig();
 
+function imageSafeForSessionCookie(image?: string | null) {
+  if (!image || image.startsWith("data:")) {
+    return null;
+  }
+
+  return image;
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: encryptedPrismaAdapter(prisma),
   session: {
@@ -93,7 +101,6 @@ export const authOptions: NextAuthOptions = {
           image: user.image,
           role: user.role,
           status: user.status,
-          timezone: user.timezone,
           mustChangePassword: user.mustChangePassword
         };
       }
@@ -103,6 +110,26 @@ export const authOptions: NextAuthOptions = {
     async signIn({ account, user }) {
       if (account?.provider === "credentials") {
         return true;
+      }
+
+      if (account?.provider && account.providerAccountId) {
+        const linkedAccount = await prisma.account.findUnique({
+          where: {
+            provider_providerAccountId: {
+              provider: account.provider,
+              providerAccountId: account.providerAccountId
+            }
+          },
+          select: {
+            user: {
+              select: { status: true }
+            }
+          }
+        });
+
+        if (linkedAccount) {
+          return linkedAccount.user.status !== "DISABLED" && isGenerisEmail(user.email);
+        }
       }
 
       if (!isGenerisEmail(user.email)) {
@@ -129,9 +156,11 @@ export const authOptions: NextAuthOptions = {
       }
 
       token.userId = dbUser.id;
+      token.name = dbUser.name;
+      token.email = dbUser.email;
+      token.picture = imageSafeForSessionCookie(dbUser.image);
       token.role = dbUser.role;
       token.status = dbUser.status;
-      token.timezone = dbUser.timezone;
       token.mustChangePassword = dbUser.mustChangePassword;
 
       return token;
@@ -139,9 +168,11 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user && token.userId && token.role && token.status) {
         session.user.id = token.userId;
+        session.user.name = token.name ?? null;
+        session.user.email = token.email ?? null;
+        session.user.image = token.picture ?? null;
         session.user.role = token.role;
         session.user.status = token.status;
-        session.user.timezone = token.timezone ?? "America/Toronto";
         session.user.mustChangePassword = Boolean(token.mustChangePassword);
       }
 

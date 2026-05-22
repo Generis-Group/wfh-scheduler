@@ -1,7 +1,12 @@
 import type { ActivityItem, SyncProvider } from "@prisma/client";
 import type { calendar_v3, tasks_v1 } from "googleapis";
 
-import { parseReportDate, reportDateString, zonedDayRange } from "@/lib/dates";
+import {
+  DEFAULT_TIMEZONE,
+  parseReportDate,
+  reportDateString,
+  zonedDayRange,
+} from "@/lib/dates";
 import { getGoogleServices } from "@/lib/integrations/google";
 import { getJiraConnection } from "@/lib/integrations/jira";
 import {
@@ -511,9 +516,9 @@ async function runSync(
   }
 }
 
-export async function syncJira(userId: string, dateString: string, timezone: string) {
+export async function syncJira(userId: string, dateString: string) {
   return runSync("JIRA", userId, dateString, async () => {
-    const { start, end } = zonedDayRange(dateString, timezone);
+    const { start, end } = zonedDayRange(dateString, DEFAULT_TIMEZONE);
     const jira = await getJiraConnection(userId);
     const myself = await jira.fetch<JiraUser>("/rest/api/3/myself");
 
@@ -572,9 +577,9 @@ export async function syncJira(userId: string, dateString: string, timezone: str
   });
 }
 
-export async function syncGoogleCalendar(userId: string, dateString: string, timezone: string) {
+export async function syncGoogleCalendar(userId: string, dateString: string) {
   return runSync("GOOGLE_CALENDAR", userId, dateString, async () => {
-    const { start, end } = zonedDayRange(dateString, timezone);
+    const { start, end } = zonedDayRange(dateString, DEFAULT_TIMEZONE);
     const services = await getGoogleServices(userId);
     const user = await prisma.user.findUnique({ where: { id: userId } });
     const settings = await prisma.userIntegrationSettings.upsert({
@@ -598,9 +603,9 @@ export async function syncGoogleCalendar(userId: string, dateString: string, tim
   });
 }
 
-export async function syncGoogleTasks(userId: string, dateString: string, timezone: string) {
+export async function syncGoogleTasks(userId: string, dateString: string) {
   return runSync("GOOGLE_TASKS", userId, dateString, async () => {
-    const { start, end } = zonedDayRange(dateString, timezone);
+    const { start, end } = zonedDayRange(dateString, DEFAULT_TIMEZONE);
     const services = await getGoogleServices(userId);
     const settings = await prisma.userIntegrationSettings.upsert({
       where: { userId },
@@ -632,7 +637,7 @@ export async function syncGoogleTasks(userId: string, dateString: string, timezo
         if (
           isInRange(normalized.startedAt, start, end) ||
           isInRange(normalized.endedAt, start, end) ||
-          reportDateString(normalized.startedAt ?? start, timezone) === dateString
+          reportDateString(normalized.startedAt ?? start, DEFAULT_TIMEZONE) === dateString
         ) {
           activities.push(normalized);
         }

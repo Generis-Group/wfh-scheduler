@@ -235,7 +235,8 @@ describe("DailyReportApp auto-draft", () => {
         body: expect.stringContaining("Finished the rollout note"),
       }),
     );
-    expect(screen.getByText("Saved")).toBeTruthy();
+    expect(screen.queryByText("Saved")).toBeNull();
+    expect(screen.getByText("Draft")).toBeTruthy();
   });
 
   it("imports tasks and autosaves the imported work item", async () => {
@@ -376,7 +377,9 @@ describe("DailyReportApp auto-draft", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
       target: { value: "Needs saving" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Next day" }));
+    fireEvent.change(screen.getByLabelText("Select report date"), {
+      target: { value: "2026-05-21" },
+    });
 
     await flushReact();
     expect(screen.getByText("Save failed")).toBeTruthy();
@@ -413,7 +416,8 @@ describe("DailyReportApp auto-draft", () => {
         expect.objectContaining({ method: "POST" }),
       );
     });
-    expect(await screen.findByText("Submitted")).toBeTruthy();
+    expect(await screen.findByText("Published")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resubmit update" })).toBeTruthy();
   });
 
   it("autosaves submitted report edits through the update route", async () => {
@@ -431,7 +435,7 @@ describe("DailyReportApp auto-draft", () => {
 
     renderDailyReportApp(submittedReport);
 
-    expect(screen.queryByRole("button", { name: "Submit update" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Resubmit update" })).toBeTruthy();
     fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
       target: { value: "Submitted edit" },
     });
@@ -441,6 +445,43 @@ describe("DailyReportApp auto-draft", () => {
       "/api/reports/report-1",
       expect.objectContaining({ method: "PUT" }),
     );
+  });
+
+  it("resubmits an already published report", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, _init?: RequestInit) => {
+        if (String(input) === "/api/reports/report-1/submit") {
+          return Response.json({
+            report: {
+              ...submittedReport,
+              submittedAt: "2026-05-20T14:30:00.000Z",
+            },
+          });
+        }
+
+        return Response.json({ error: "Unexpected request." }, { status: 500 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp(submittedReport);
+
+    fireEvent.click(screen.getByRole("button", { name: "Resubmit update" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports/report-1/submit",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input) === "/api/reports/report-1" && init?.method === "PUT",
+      ),
+    ).toBe(false);
+    expect(await screen.findByText("Resubmitted for review.")).toBeTruthy();
+    expect(screen.getByText("Published")).toBeTruthy();
   });
 
   it("deletes a draft without immediately recreating it", async () => {

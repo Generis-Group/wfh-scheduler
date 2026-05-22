@@ -7,7 +7,6 @@ declare module "next-auth" {
       id: string;
       role: UserRole;
       status: UserStatus;
-      timezone: string;
       mustChangePassword: boolean;
     } & DefaultSession["user"];
   }
@@ -15,7 +14,6 @@ declare module "next-auth" {
   interface User {
     role: UserRole;
     status: UserStatus;
-    timezone: string;
     mustChangePassword: boolean;
   }
 }
@@ -25,7 +23,6 @@ declare module "next-auth/jwt" {
     userId?: string;
     role?: UserRole;
     status?: UserStatus;
-    timezone?: string;
     mustChangePassword?: boolean;
   }
 }

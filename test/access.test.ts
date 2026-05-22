@@ -16,7 +16,6 @@ function session(role: "EMPLOYEE" | "REVIEWER" | "ADMIN", patch: Record<string, 
       id: "user-1",
       role,
       status: "ACTIVE",
-      timezone: "America/Toronto",
       mustChangePassword: false,
       ...patch
     }

@@ -78,7 +78,7 @@ describe("authenticated app shell loading boundaries", () => {
     expect(activeNavKey("/coo")).toBe("review");
     expect(activeNavKey("/admin")).toBe("employees");
     expect(activeNavKey("/settings")).toBe("settings");
-    expect(activeNavKey("/account")).toBe("account");
+    expect(activeNavKey("/account")).toBe("settings");
   });
 
   it("prefers the daily route date before falling back to the saved report date", () => {

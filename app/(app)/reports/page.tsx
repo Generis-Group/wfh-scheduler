@@ -26,10 +26,5 @@ export default async function ReportsPage() {
 
   const reports = await listReportHistory(session.user.id);
 
-  return (
-    <ReportHistory
-      reports={serialize(reports)}
-      timezone={session.user.timezone}
-    />
-  );
+  return <ReportHistory reports={serialize(reports)} />;
 }

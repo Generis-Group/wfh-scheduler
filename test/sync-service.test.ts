@@ -192,7 +192,7 @@ describe("sync service pagination", () => {
     });
 
     const { syncJira } = await import("@/lib/services/sync");
-    await syncJira("user-1", "2026-05-14", "America/Toronto");
+    await syncJira("user-1", "2026-05-14");
 
     expect(jiraFetch).toHaveBeenCalledWith(
       "/rest/api/3/search/jql",
@@ -320,7 +320,7 @@ describe("sync service pagination", () => {
     });
 
     const { syncJira } = await import("@/lib/services/sync");
-    await syncJira("user-1", "2026-05-14", "America/Toronto");
+    await syncJira("user-1", "2026-05-14");
 
     const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
 
@@ -403,7 +403,7 @@ describe("sync service pagination", () => {
     });
 
     const { syncJira } = await import("@/lib/services/sync");
-    await syncJira("user-1", "2026-05-14", "America/Toronto");
+    await syncJira("user-1", "2026-05-14");
 
     const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
 
@@ -472,7 +472,7 @@ describe("sync service pagination", () => {
     });
 
     const { syncJira } = await import("@/lib/services/sync");
-    await syncJira("user-1", "2026-05-14", "America/Toronto");
+    await syncJira("user-1", "2026-05-14");
 
     const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
 
@@ -543,7 +543,7 @@ describe("sync service pagination", () => {
     });
 
     const { syncJira } = await import("@/lib/services/sync");
-    await syncJira("user-1", "2026-05-14", "America/Toronto");
+    await syncJira("user-1", "2026-05-14");
 
     const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
 
@@ -595,7 +595,7 @@ describe("sync service pagination", () => {
     });
 
     const { syncJira } = await import("@/lib/services/sync");
-    await syncJira("user-1", "2026-05-14", "America/Toronto");
+    await syncJira("user-1", "2026-05-14");
 
     const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
 
@@ -661,7 +661,7 @@ describe("sync service pagination", () => {
     });
 
     const { syncJira } = await import("@/lib/services/sync");
-    await syncJira("user-1", "2026-05-14", "America/Toronto");
+    await syncJira("user-1", "2026-05-14");
 
     expect(mockUpsertImportedActivities.mock.calls.at(-1)?.[3]).toEqual([]);
   });
@@ -717,7 +717,7 @@ describe("sync service pagination", () => {
     });
 
     const { syncJira } = await import("@/lib/services/sync");
-    await syncJira("user-1", "2026-05-14", "America/Toronto");
+    await syncJira("user-1", "2026-05-14");
 
     expect(mockUpsertImportedActivities.mock.calls.at(-1)?.[3]).toEqual([]);
   });
@@ -743,7 +743,7 @@ describe("sync service pagination", () => {
     });
 
     const { syncGoogleCalendar } = await import("@/lib/services/sync");
-    await syncGoogleCalendar("user-1", "2026-05-14", "America/Toronto");
+    await syncGoogleCalendar("user-1", "2026-05-14");
 
     expect(eventsList).toHaveBeenCalledWith(expect.objectContaining({ pageToken: "event-page-2" }));
     expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
@@ -792,7 +792,7 @@ describe("sync service pagination", () => {
     });
 
     const { syncGoogleTasks } = await import("@/lib/services/sync");
-    await syncGoogleTasks("user-1", "2026-05-14", "America/Toronto");
+    await syncGoogleTasks("user-1", "2026-05-14");
 
     expect(tasklistsList).toHaveBeenCalledWith(expect.objectContaining({ pageToken: "task-list-page-2" }));
     expect(tasksList).toHaveBeenCalledWith(expect.objectContaining({ pageToken: "task-page-2" }));
@@ -843,7 +843,7 @@ describe("sync service pagination", () => {
     });
 
     const { syncGoogleTasks } = await import("@/lib/services/sync");
-    await syncGoogleTasks("user-1", "2026-05-14", "America/Toronto");
+    await syncGoogleTasks("user-1", "2026-05-14");
 
     expect(tasksList).toHaveBeenCalledWith(expect.objectContaining({ showAssigned: true, showHidden: true }));
     expect(mockUpsertImportedActivities).toHaveBeenCalledWith(

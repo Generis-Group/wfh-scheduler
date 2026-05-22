@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import {
   ArrowLeft,
@@ -26,6 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
 import { EmptyReferenceState } from "@/components/reports/reference-shell";
 import {
   SummaryRenderer,
@@ -33,7 +34,7 @@ import {
 } from "@/components/reports/summary-renderer";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
-import { reportDayEnd } from "@/lib/dates";
+import { reportDayEnd, todayDateString } from "@/lib/dates";
 import { cn, titleCase } from "@/lib/utils";
 
 type HistoryActivity = {
@@ -91,20 +92,6 @@ function toDate(value?: string | Date | null) {
 
 function dateInputValue(value: string | Date) {
   return dateOnlyString(value);
-}
-
-function todayInTimezone(timezone?: string | null) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone || "America/Toronto",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const lookup = Object.fromEntries(
-    parts.map((part) => [part.type, part.value]),
-  );
-
-  return `${lookup.year}-${lookup.month}-${lookup.day}`;
 }
 
 function formatReportDate(value: string | Date) {
@@ -261,13 +248,7 @@ function getInitialOpenedId() {
 
 const PAGE_SIZE = 8;
 
-export function ReportHistory({
-  reports,
-  timezone,
-}: {
-  reports: HistoryReport[];
-  timezone?: string | null;
-}) {
+export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
   const [items, setItems] = useState(reports);
   const [openedReportId, setOpenedReportId] = useState(getInitialOpenedId);
   const [query, setQuery] = useState("");
@@ -283,6 +264,20 @@ export function ReportHistory({
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [page, setPage] = useState(1);
+  const datePickerRef = useRef<HTMLDivElement | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useDismissableLayer({
+    open: datePickerOpen,
+    refs: [datePickerRef],
+    onDismiss: () => setDatePickerOpen(false),
+  });
+
+  useDismissableLayer({
+    open: Boolean(rowMenu),
+    refs: [rowMenuRef],
+    onDismiss: () => setRowMenu(null),
+  });
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -343,21 +338,12 @@ export function ReportHistory({
       setRowMenu(null);
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        closeMenus();
-        setDatePickerOpen(false);
-      }
-    }
-
     window.addEventListener("resize", closeMenus);
     window.addEventListener("scroll", closeMenus, true);
-    document.addEventListener("keydown", handleKeyDown);
 
     return () => {
       window.removeEventListener("resize", closeMenus);
       window.removeEventListener("scroll", closeMenus, true);
-      document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 
@@ -388,7 +374,7 @@ export function ReportHistory({
   }
 
   function openNewReport() {
-    openReportDate(todayInTimezone(timezone));
+    openReportDate(todayDateString());
   }
 
   function editReport(report: HistoryReport) {
@@ -469,6 +455,7 @@ export function ReportHistory({
     const rect = event.currentTarget.getBoundingClientRect();
     const menuWidth = 220;
     const menuHeight = report.status === "DRAFT" ? 220 : 132;
+    setDatePickerOpen(false);
     setRowMenu({
       id: report.id,
       top: Math.min(
@@ -551,10 +538,13 @@ export function ReportHistory({
                 <option value="DRAFT">Draft</option>
                 <option value="SUBMITTED">Submitted</option>
               </Select>
-              <div className="relative">
+              <div ref={datePickerRef} className="relative">
                 <button
                   className="flex h-11 w-full items-center gap-3 rounded-[8px] bg-white px-4 text-left text-sm font-medium text-[#111827] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]"
-                  onClick={() => setDatePickerOpen((open) => !open)}
+                  onClick={() => {
+                    setRowMenu(null);
+                    setDatePickerOpen((open) => !open);
+                  }}
                 >
                   <CalendarDays className="h-4 w-4 text-[#475467]" />
                   <span className="min-w-0 flex-1 truncate">
@@ -723,6 +713,7 @@ export function ReportHistory({
                 onClick={() => setRowMenu(null)}
               />
               <div
+                ref={rowMenuRef}
                 className="fixed z-50 w-[220px] rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
                 style={{ top: rowMenu.top, left: rowMenu.left }}
                 role="menu"

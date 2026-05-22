@@ -18,7 +18,6 @@ type User = {
   name?: string | null;
   role: "EMPLOYEE" | "REVIEWER" | "ADMIN";
   status: "INVITED" | "ACTIVE" | "DISABLED";
-  timezone: string;
   reviewerAllDepartments?: boolean;
   departments?: Array<{
     departmentId: string;
@@ -277,14 +276,13 @@ export function AdminUsers({
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Departments</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Password</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-sm text-[#64748b]">
+                    <TableCell colSpan={5} className="py-8 text-center text-sm text-[#64748b]">
                       No users have been created yet.
                     </TableCell>
                   </TableRow>
@@ -339,16 +337,6 @@ export function AdminUsers({
                             )}
                           </div>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          value={user.status}
-                          onChange={(event) => updateUser(user, { status: event.target.value as User["status"] })}
-                        >
-                          <option value="INVITED">Invited</option>
-                          <option value="ACTIVE">Active</option>
-                          <option value="DISABLED">Disabled</option>
-                        </Select>
                       </TableCell>
                       <TableCell>
                         <Button variant="outline" size="sm" onClick={() => resetPassword(user)}>

@@ -16,9 +16,8 @@ export async function PATCH(request: Request) {
         id: user.id,
         name: user.name,
         email: user.email,
+        image: user.image,
         role: user.role,
-        status: user.status,
-        timezone: user.timezone,
         mustChangePassword: user.mustChangePassword
       }
     });

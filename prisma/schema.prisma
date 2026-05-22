@@ -72,7 +72,6 @@ model User {
   image                String?
   role                 UserRole                 @default(EMPLOYEE)
   status               UserStatus               @default(INVITED)
-  timezone             String                   @default("America/Toronto")
   passwordHash         String?
   mustChangePassword   Boolean                  @default(false)
   reviewerAllDepartments Boolean                @default(false)

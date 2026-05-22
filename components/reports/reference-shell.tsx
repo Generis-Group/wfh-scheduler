@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ElementType, MouseEvent, ReactNode } from "react";
 import {
   BarChart3,
@@ -25,6 +25,7 @@ import {
   loadingKindFromHref,
 } from "@/components/reports/page-loading-skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
 import {
   getFreshServerDataVersion,
   getServerDataVersion,
@@ -65,13 +66,6 @@ const employeeNav: NavItem[] = [
     key: "settings",
     prefetch: "intent",
   },
-  {
-    href: "/account",
-    label: "Account",
-    icon: CircleUser,
-    key: "account",
-    prefetch: "intent",
-  },
 ];
 
 const adminNav: NavItem[] = [
@@ -96,13 +90,6 @@ const adminNav: NavItem[] = [
     key: "settings",
     prefetch: "intent",
   },
-  {
-    href: "/account",
-    label: "Account",
-    icon: CircleUser,
-    key: "account",
-    prefetch: "intent",
-  },
 ];
 
 export function ReferenceAppShell({
@@ -110,18 +97,16 @@ export function ReferenceAppShell({
   variant,
   displayName,
   userEmail,
+  profileImage,
   userRole,
-  userStatus,
-  timezone,
   mustChangePassword,
 }: {
   children: ReactNode;
   variant: "employee" | "admin";
   displayName: string;
   userEmail?: string | null;
+  profileImage?: string | null;
   userRole: string;
-  userStatus: string;
-  timezone: string;
   mustChangePassword: boolean;
 }) {
   const router = useRouter();
@@ -129,10 +114,7 @@ export function ReferenceAppShell({
   const searchParams = useSearchParams();
   const nav = variant === "admin" ? adminNav : employeeNav;
   const active = activeNavKey(pathname);
-  const displayEmail =
-    userEmail ?? (displayName.includes("@") ? displayName : null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
   const [lastReportDate, setLastReportDate] = useState<string | null>(null);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [optimisticActive, setOptimisticActive] = useState(active);
@@ -140,10 +122,32 @@ export function ReferenceAppShell({
   const [freshServerDataVersion, setFreshServerDataVersion] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const prefetchedHrefsRef = useRef<Set<string>>(new Set());
   const currentHref = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
   const logoHref = variant === "admin" ? "/review" : "/";
-  const mobileLogoHref = "/";
+  const mobileLogoHref = logoHref;
   const hasStalePrefetchedData = serverDataVersion !== freshServerDataVersion;
+
+  useDismissableLayer({
+    open: profileOpen,
+    refs: [profileMenuRef],
+    onDismiss: () => setProfileOpen(false),
+  });
+
+  const prefetchRoute = useCallback(
+    (href: string) => {
+      const prefetchHref = href.split("#")[0] || "/";
+
+      if (prefetchedHrefsRef.current.has(prefetchHref)) {
+        return;
+      }
+
+      prefetchedHrefsRef.current.add(prefetchHref);
+      router.prefetch(prefetchHref);
+    },
+    [router],
+  );
 
   useEffect(() => {
     const storedCollapsed =
@@ -198,6 +202,7 @@ export function ReferenceAppShell({
 
   useEffect(() => {
     if (hasStalePrefetchedData) {
+      prefetchedHrefsRef.current.clear();
       return;
     }
 
@@ -211,7 +216,7 @@ export function ReferenceAppShell({
 
     hrefs.forEach((href) => {
       if (href !== currentHref) {
-        router.prefetch(href);
+        prefetchRoute(href);
       }
     });
   }, [
@@ -221,7 +226,7 @@ export function ReferenceAppShell({
     logoHref,
     mobileLogoHref,
     nav,
-    router,
+    prefetchRoute,
   ]);
 
   function routeLinkProps(
@@ -229,19 +234,24 @@ export function ReferenceAppShell({
     activeKey?: string,
     prefetch: NavItem["prefetch"] = "intent",
   ) {
+    const prefetchHref = href.split("#")[0] || "/";
+
     return {
-      prefetch: !hasStalePrefetchedData && prefetch === "eager",
+      prefetch: false,
       onMouseEnter: () => {
-        if (!hasStalePrefetchedData) {
-          router.prefetch(href);
+        if (!hasStalePrefetchedData && prefetch) {
+          prefetchRoute(prefetchHref);
         }
       },
       onFocus: () => {
-        if (!hasStalePrefetchedData) {
-          router.prefetch(href);
+        if (!hasStalePrefetchedData && prefetch) {
+          prefetchRoute(prefetchHref);
         }
       },
       onClick: (event: MouseEvent<HTMLAnchorElement>) => {
+        const hashOnlyCurrentPage =
+          href.includes("#") && href.split("#")[0] === currentHref;
+
         if (
           event.defaultPrevented ||
           event.button !== 0 ||
@@ -251,6 +261,11 @@ export function ReferenceAppShell({
           event.altKey ||
           href === currentHref
         ) {
+          return;
+        }
+
+        if (hashOnlyCurrentPage) {
+          setProfileOpen(false);
           return;
         }
 
@@ -369,16 +384,16 @@ export function ReferenceAppShell({
                 aria-label={sidebarCollapsed ? item.label : undefined}
                 title={sidebarCollapsed ? item.label : undefined}
                 className={cn(
-                  "reference-sidebar-nav-link flex items-center rounded-[9px] text-[13px] font-semibold transition-colors",
+                  "reference-sidebar-nav-link flex items-center rounded-[9px] text-[15px] font-semibold transition-colors",
                   sidebarCollapsed
-                    ? "h-10 justify-center px-0"
-                    : "gap-2.5 px-2.5 py-2",
+                    ? "h-11 justify-center px-0"
+                    : "gap-3 px-3 py-2.5",
                   optimisticActive === item.key
                     ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
                     : "text-[#52647a] hover:bg-[#eef4fb] hover:text-[#0f172a] dark:text-[#93a4b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]",
                 )}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-[18px] w-[18px]" />
                 {sidebarCollapsed ? null : (
                   <span className="reference-sidebar-nav-label">
                     {item.label}
@@ -436,103 +451,82 @@ export function ReferenceAppShell({
               </nav>
             </div>
 
-            <div className="relative flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <ThemeToggle />
-              <button
-                className="flex min-w-0 items-center gap-2 rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
-                onClick={() => {
-                  setProfileOpen((open) => !open);
-                }}
-                aria-expanded={profileOpen}
-                aria-haspopup="menu"
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1d4ed8] text-xs font-semibold text-white shadow-[0_8px_18px_rgba(29,78,216,0.22)] dark:bg-[#1d4ed8]">
-                  {initials(displayName)}
-                </div>
-                <div className="hidden max-w-[200px] truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0] sm:block">
-                  {displayName}
-                </div>
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 text-[#64748b] transition-transform dark:text-[#94a3b8]",
-                    profileOpen && "rotate-180",
-                  )}
-                />
-              </button>
-              {profileOpen ? (
-                <div
-                  className="absolute right-0 top-12 z-30 w-72 overflow-hidden rounded-[12px] border border-[#dbe3ee] bg-[#ffffff] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.16)] dark:border-[#24354c] dark:bg-[#0f1b2a] dark:shadow-[0_18px_45px_rgba(0,0,0,0.42)]"
-                  role="menu"
+              <div ref={profileMenuRef} className="relative flex items-center">
+                <button
+                  className="flex min-w-0 items-center gap-2 rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
+                  onClick={() => {
+                    setProfileOpen((open) => !open);
+                  }}
+                  aria-expanded={profileOpen}
+                  aria-haspopup="menu"
                 >
-                  <div className="rounded-[8px] bg-[#f8fafc] px-3 py-2 dark:bg-[#0b1523]">
-                    <div className="truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0]">
-                      {displayName}
-                    </div>
-                    <div className="text-xs text-[#64748b] dark:text-[#94a3b8]">
-                      {userRole ||
-                        (variant === "admin" ? "Reviewer" : "Employee")}
-                    </div>
+                  <div
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1d4ed8] bg-cover bg-center text-xs font-semibold text-white shadow-[0_8px_18px_rgba(29,78,216,0.22)] dark:bg-[#1d4ed8]"
+                    style={
+                      profileImage
+                        ? { backgroundImage: `url("${profileImage}")` }
+                        : undefined
+                    }
+                  >
+                    {profileImage ? null : initials(displayName)}
                   </div>
-                  <button
-                    className="mt-1.5 flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
-                    onClick={() => setProfileDetailsOpen((open) => !open)}
+                  <div className="hidden max-w-[200px] truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0] sm:block">
+                    {displayName}
+                  </div>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 text-[#64748b] transition-transform dark:text-[#94a3b8]",
+                      profileOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+                {profileOpen ? (
+                  <div
+                    className="absolute right-0 top-12 z-30 w-72 overflow-hidden rounded-[12px] border border-[#dbe3ee] bg-[#ffffff] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.16)] dark:border-[#24354c] dark:bg-[#0f1b2a] dark:shadow-[0_18px_45px_rgba(0,0,0,0.42)]"
+                    role="menu"
                   >
-                    <CircleUser className="h-4 w-4" />
-                    Profile details
-                  </button>
-                  {profileDetailsOpen ? (
-                    <div className="mx-1 mb-1 rounded-[8px] bg-[#f8fafc] px-3 py-2 text-xs text-[#475569] ring-1 ring-[#e2e8f0] dark:bg-[#0b1523] dark:text-[#94a3b8] dark:ring-[#24354c]">
-                      <ProfileLine label="Name" value={displayName} />
-                      <ProfileLine
-                        label="Email"
-                        value={displayEmail ?? "Not set"}
-                      />
-                      <ProfileLine
-                        label="Role"
-                        value={
-                          userRole ||
-                          (variant === "admin" ? "Reviewer" : "Employee")
-                        }
-                      />
-                      <ProfileLine
-                        label="Status"
-                        value={userStatus ?? "Active"}
-                      />
-                      <ProfileLine
-                        label="Timezone"
-                        value={timezone ?? "America/Toronto"}
-                      />
+                    <div className="rounded-[8px] bg-[#f8fafc] px-3 py-2 dark:bg-[#0b1523]">
+                      <div className="truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0]">
+                        {displayName}
+                      </div>
+                      <div className="text-xs text-[#64748b] dark:text-[#94a3b8]">
+                        {userEmail ??
+                          (userRole ||
+                            (variant === "admin" ? "Reviewer" : "Employee"))}
+                      </div>
                     </div>
-                  ) : null}
-                  <Link
-                    href="/account"
-                    {...routeLinkProps("/account", "account")}
-                    className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
-                  >
-                    <CircleUser className="h-4 w-4" />
-                    Account settings
-                  </Link>
-                  {mustChangePassword ? (
                     <Link
-                      href="/change-password"
-                      {...routeLinkProps("/change-password", "account")}
+                      href="/settings#account"
+                      {...routeLinkProps("/settings#account", "settings")}
                       className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
                     >
-                      <KeyRound className="h-4 w-4" />
-                      Change password
+                      <CircleUser className="h-4 w-4" />
+                      Account settings
                     </Link>
-                  ) : null}
-                  <button
-                    className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
-                    onClick={() => {
-                      signOut({ callbackUrl: "/login" });
-                    }}
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Sign out
-                  </button>
-                </div>
-              ) : null}
+                    {mustChangePassword ? (
+                      <Link
+                        href="/change-password"
+                        {...routeLinkProps("/change-password", "account")}
+                        className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                        Change password
+                      </Link>
+                    ) : null}
+                    <button
+                      className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                      onClick={() => {
+                        signOut({ callbackUrl: "/login" });
+                      }}
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sign out
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
           <nav className="flex h-11 items-center gap-2 overflow-x-auto px-[clamp(14px,1.7vw,26px)] shadow-[0_-1px_0_rgba(15,23,42,0.04)] dark:shadow-[0_-1px_0_rgba(255,255,255,0.04)] md:hidden">
@@ -576,19 +570,6 @@ export function ReferenceAppShell({
   );
 }
 
-function ProfileLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-1">
-      <span className="font-medium text-[#64748b] dark:text-[#94a3b8]">
-        {label}
-      </span>
-      <span className="max-w-[145px] truncate text-right text-[#0f172a] dark:text-[#e2e8f0]">
-        {value}
-      </span>
-    </div>
-  );
-}
-
 function getNavHref(item: NavItem, lastReportDate?: string | null) {
   if (item.key === "report" && lastReportDate) {
     return `/?date=${lastReportDate}`;
@@ -620,12 +601,8 @@ export function activeNavKey(pathname: string | null) {
     return "employees";
   }
 
-  if (path.startsWith("/settings")) {
+  if (path.startsWith("/settings") || path.startsWith("/account")) {
     return "settings";
-  }
-
-  if (path.startsWith("/account")) {
-    return "account";
   }
 
   return "report";

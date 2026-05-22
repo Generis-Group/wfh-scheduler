@@ -7,8 +7,7 @@ export type PageLoadingKind =
   | "reports"
   | "review"
   | "employees"
-  | "settings"
-  | "account";
+  | "settings";
 
 function LoadingBar({ className = "" }: { className?: string }) {
   return <Skeleton className={className} />;
@@ -175,13 +174,10 @@ function EmployeesSkeleton() {
   );
 }
 
-function SettingsSkeleton({ account = false }: { account?: boolean }) {
+function SettingsSkeleton() {
   return (
     <>
-      <LoadingHeader
-        titleWidth={account ? "w-36" : "w-40"}
-        subtitleWidth="w-96"
-      />
+      <LoadingHeader titleWidth="w-40" subtitleWidth="w-96" />
       <div className="grid gap-4 min-[1060px]:grid-cols-2">
         <LoadingCard className="min-h-[260px]">
           <LoadingBar className="h-7 w-44" />
@@ -204,7 +200,7 @@ export function loadingKindFromHref(
   href: string,
   fallbackVariant: "employee" | "admin" = "employee",
 ): PageLoadingKind {
-  const path = href.split("?")[0] || "/";
+  const path = href.split("#")[0].split("?")[0] || "/";
 
   if (path.endsWith("/reports") || path.endsWith("/history")) {
     return "reports";
@@ -219,7 +215,7 @@ export function loadingKindFromHref(
   }
 
   if (path.endsWith("/account")) {
-    return "account";
+    return "settings";
   }
 
   if (path.endsWith("/settings") || path.endsWith("/admin-settings")) {
@@ -245,7 +241,6 @@ export function PageLoadingSkeleton({
       {kind === "review" ? <ReviewSkeleton /> : null}
       {kind === "employees" ? <EmployeesSkeleton /> : null}
       {kind === "settings" ? <SettingsSkeleton /> : null}
-      {kind === "account" ? <SettingsSkeleton account /> : null}
     </main>
   );
 }

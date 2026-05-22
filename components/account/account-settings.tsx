@@ -1,41 +1,44 @@
 "use client";
 
-import { useState } from "react";
-import { KeyRound, Moon, Palette, Save, ShieldCheck, Sun, UserRound } from "lucide-react";
+import type { FormEvent } from "react";
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Camera, KeyRound, Save, UserRound } from "lucide-react";
 
-import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
-import { cn, titleCase } from "@/lib/utils";
+import { cn, initials } from "@/lib/utils";
 
-type AccountUser = {
+export type AccountUser = {
   id: string;
   name?: string | null;
   email?: string | null;
+  image?: string | null;
   role: string;
-  status: string;
-  timezone: string;
   mustChangePassword: boolean;
   hasPassword: boolean;
 };
 
-const timezoneOptions = [
-  "America/Toronto",
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "UTC"
-];
-
-export function AccountSettings({ user }: { user: AccountUser }) {
-  const { theme, setTheme } = useTheme();
+export function AccountSettings({
+  user,
+  embedded = false,
+}: {
+  user: AccountUser;
+  embedded?: boolean;
+}) {
+  const router = useRouter();
   const [name, setName] = useState(user.name ?? "");
-  const [timezone, setTimezone] = useState(user.timezone || "America/Toronto");
+  const [email, setEmail] = useState(user.email ?? "");
+  const [profileImage, setProfileImage] = useState(user.image ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -43,8 +46,9 @@ export function AccountSettings({ user }: { user: AccountUser }) {
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSavingProfile(true);
     setProfileMessage(null);
@@ -54,20 +58,26 @@ export function AccountSettings({ user }: { user: AccountUser }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: name.trim() || null,
-        timezone
-      })
+        email,
+        image: profileImage || null,
+      }),
     });
     const body = await response.json().catch(() => ({}));
 
     if (response.ok) {
       markServerDataStale();
+      router.refresh();
     }
 
-    setProfileMessage(response.ok ? "Account details saved." : body.error ?? "Unable to save account details.");
+    setProfileMessage(
+      response.ok
+        ? "Profile saved."
+        : (body.error ?? "Unable to save profile."),
+    );
     setIsSavingProfile(false);
   }
 
-  async function savePassword(event: React.FormEvent<HTMLFormElement>) {
+  async function savePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPasswordMessage(null);
 
@@ -80,7 +90,7 @@ export function AccountSettings({ user }: { user: AccountUser }) {
     const response = await fetch("/api/account/password", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentPassword, newPassword })
+      body: JSON.stringify({ currentPassword, newPassword }),
     });
     const body = await response.json().catch(() => ({}));
 
@@ -91,8 +101,224 @@ export function AccountSettings({ user }: { user: AccountUser }) {
       markServerDataStale();
     }
 
-    setPasswordMessage(response.ok ? "Password updated." : body.error ?? "Unable to update password.");
+    setPasswordMessage(
+      response.ok
+        ? "Password updated."
+        : (body.error ?? "Unable to update password."),
+    );
     setIsSavingPassword(false);
+  }
+
+  async function selectProfileImage(file?: File | null) {
+    if (!file) {
+      return;
+    }
+
+    setProfileMessage(null);
+
+    try {
+      const standardizedImage = await standardizeProfileImage(file);
+      setProfileImage(standardizedImage);
+      setProfileMessage("Profile picture ready to save.");
+    } catch (error) {
+      setProfileMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to load that profile picture.",
+      );
+    }
+  }
+
+  const content = (
+    <div
+      className={cn(
+        "grid items-start gap-4",
+        user.hasPassword && "min-[1080px]:grid-cols-[minmax(0,1fr)_420px]",
+      )}
+    >
+      <Card className="overflow-hidden">
+        <CardHeader className="px-5 py-5">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+              <UserRound className="h-5 w-5" />
+            </span>
+            <div>
+              <CardTitle className="text-[18px]">Profile</CardTitle>
+              <CardDescription>
+                Update your personal information and profile.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="px-5 pb-5">
+          <form className="space-y-5" onSubmit={saveProfile}>
+            <div className="relative flex flex-wrap items-center gap-5 rounded-[8px] border border-[#dfe7f2] bg-white px-5 py-4 shadow-[inset_0_1px_0_rgba(15,23,42,0.02)] dark:border-[#263a55] dark:bg-[#0b1523]">
+              <span className="absolute -top-px left-36 h-px w-8 bg-white dark:bg-[#0b1523]" />
+              <button
+                type="button"
+                className="group relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[#1d4ed8] bg-cover bg-center text-[30px] font-semibold text-white shadow-[0_20px_45px_rgba(29,78,216,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#1d4ed8]"
+                style={
+                  profileImage
+                    ? { backgroundImage: `url("${profileImage}")` }
+                    : undefined
+                }
+                aria-label="Choose profile picture"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {profileImage ? null : initials(name || email || "User")}
+                <span className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#1d4ed8] text-white shadow-[0_8px_16px_rgba(29,78,216,0.28)] transition-colors group-hover:bg-[#1e40af] dark:border-[#0b1523]">
+                  <Camera className="h-4 w-4" />
+                </span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(event) => {
+                  selectProfileImage(event.target.files?.[0]);
+                  event.target.value = "";
+                }}
+              />
+              <div className="min-w-0">
+                <div className="truncate text-[17px] font-semibold text-[#111827] dark:text-foreground">
+                  {name.trim() || "Your name"}
+                </div>
+                <div className="mt-1 truncate text-sm text-[#64748b] dark:text-muted-foreground">
+                  {email.trim() || "name@generisgp.com"}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="account-name">Name</Label>
+                <Input
+                  id="account-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Your name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="account-email">Email</Label>
+                <Input
+                  id="account-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="name@generisgp.com"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e6ebf3] pt-5 dark:border-[#263a55]">
+              <p
+                className={cn(
+                  "min-h-5 text-sm",
+                  profileMessage?.includes("Unable") ||
+                    profileMessage?.includes("Choose")
+                    ? "text-[#dc2626]"
+                    : "text-[#64748b]",
+                )}
+              >
+                {profileMessage}
+              </p>
+              <Button
+                className="min-w-40 bg-[#2563eb] hover:bg-[#1d4ed8]"
+                disabled={isSavingProfile}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {isSavingProfile ? "Saving..." : "Save profile"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {user.hasPassword ? (
+        <Card className="overflow-hidden">
+          <CardHeader className="px-5 py-5">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+                <KeyRound className="h-5 w-5" />
+              </span>
+              <div>
+                <CardTitle className="text-[18px]">Password</CardTitle>
+                <CardDescription>
+                  Change your credentials password.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="px-5 pb-5">
+            <form className="space-y-4" onSubmit={savePassword}>
+              <div className="space-y-2">
+                <Label htmlFor="current-password">Current password</Label>
+                <Input
+                  id="current-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  required
+                  minLength={8}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm new password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  required
+                  minLength={8}
+                />
+              </div>
+              {passwordMessage ? (
+                <p
+                  className={cn(
+                    "text-sm",
+                    passwordMessage.includes("Unable") ||
+                      passwordMessage.includes("match")
+                      ? "text-[#dc2626]"
+                      : "text-[#64748b]",
+                  )}
+                >
+                  {passwordMessage}
+                </p>
+              ) : null}
+              <Button
+                className="mt-2 w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
+                disabled={isSavingPassword}
+              >
+                <KeyRound className="mr-2 h-4 w-4" />
+                {isSavingPassword ? "Updating..." : "Update password"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  );
+
+  if (embedded) {
+    return content;
   }
 
   return (
@@ -100,166 +326,72 @@ export function AccountSettings({ user }: { user: AccountUser }) {
       <div className="reference-page-header">
         <div>
           <h1 className="reference-title">Account Settings</h1>
-          <p className="reference-subtitle">Manage your profile, timezone, and credentials.</p>
+          <p className="reference-subtitle">
+            Manage your profile and credentials.
+          </p>
         </div>
       </div>
 
-      <div className="grid items-start gap-4 min-[1120px]:grid-cols-[minmax(0,1fr)_390px]">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <UserRound className="h-5 w-5 text-[#2563eb]" />
-              <div>
-                <CardTitle>Profile</CardTitle>
-                <CardDescription>Your reporting identity and local reporting timezone.</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <form className="grid gap-4" onSubmit={saveProfile}>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="account-name">Name</Label>
-                  <Input id="account-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input value={user.email ?? ""} disabled />
-                </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>Role</Label>
-                  <Input value={titleCase(user.role)} disabled />
-                </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Input value={titleCase(user.status)} disabled />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="account-timezone">Timezone</Label>
-                  <Select id="account-timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)}>
-                    {timezoneOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className={cn("text-sm", profileMessage?.includes("Unable") ? "text-[#dc2626]" : "text-[#64748b]")}>{profileMessage}</p>
-                <Button className="bg-[#2563eb] hover:bg-[#1d4ed8]" disabled={isSavingProfile}>
-                  <Save className="mr-2 h-4 w-4" />
-                  {isSavingProfile ? "Saving..." : "Save profile"}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <ShieldCheck className="h-5 w-5 text-[#16a34a]" />
-                <div>
-                  <CardTitle>Access</CardTitle>
-                  <CardDescription>Generis accounts are restricted to company email.</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-[#475569]">
-              <div className="reference-card-muted p-3">
-                Required domain: <span className="font-semibold text-[#0f172a]">@generisgp.com</span>
-              </div>
-              <div className="reference-card-muted p-3">
-                Account type: <span className="font-semibold text-[#0f172a]">{user.hasPassword ? "Credentials enabled" : "OAuth only"}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <Palette className="h-5 w-5 text-[#2563eb]" />
-                <div>
-                  <CardTitle>Appearance</CardTitle>
-                  <CardDescription>Choose the interface theme for this browser.</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 rounded-[10px] bg-[#f8fafc] p-1 dark:bg-[#0b1523]">
-                <button
-                  type="button"
-                  className={cn(
-                    "flex h-10 items-center justify-center gap-2 rounded-[6px] text-sm font-semibold transition-colors",
-                    theme === "light"
-                      ? "bg-white text-[#0f172a] shadow-sm dark:bg-[#1e293b] dark:text-white dark:ring-1 dark:ring-border"
-                      : "text-[#64748b] dark:text-muted-foreground"
-                  )}
-                  onClick={() => setTheme("light")}
-                >
-                  <Sun className="h-4 w-4" />
-                  Light
-                </button>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex h-10 items-center justify-center gap-2 rounded-[6px] text-sm font-semibold transition-colors",
-                    theme === "dark"
-                      ? "bg-white text-[#0f172a] shadow-sm dark:bg-[#1e293b] dark:text-white dark:ring-1 dark:ring-border"
-                      : "text-[#64748b] dark:text-muted-foreground"
-                  )}
-                  onClick={() => setTheme("dark")}
-                >
-                  <Moon className="h-4 w-4" />
-                  Dark
-                </button>
-              </div>
-              <p className="text-sm text-[#64748b]">This preference is saved locally on this device.</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <KeyRound className="h-5 w-5 text-[#2563eb]" />
-                <div>
-                  <CardTitle>Password</CardTitle>
-                  <CardDescription>{user.hasPassword ? "Change your credentials password." : "This account signs in with OAuth."}</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {user.hasPassword ? (
-                <form className="space-y-4" onSubmit={savePassword}>
-                  <div className="space-y-2">
-                    <Label htmlFor="current-password">Current password</Label>
-                    <Input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="new-password">New password</Label>
-                    <Input id="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required minLength={8} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirm-password">Confirm new password</Label>
-                    <Input id="confirm-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required minLength={8} />
-                  </div>
-                  {passwordMessage ? <p className={cn("text-sm", passwordMessage.includes("Unable") || passwordMessage.includes("match") ? "text-[#dc2626]" : "text-[#64748b]")}>{passwordMessage}</p> : null}
-                  <Button className="w-full bg-[#2563eb] hover:bg-[#1d4ed8]" disabled={isSavingPassword}>
-                    <KeyRound className="mr-2 h-4 w-4" />
-                    {isSavingPassword ? "Updating..." : "Update password"}
-                  </Button>
-                </form>
-              ) : (
-                <p className="text-sm text-[#64748b]">Password changes are only available for admin-created credentials accounts.</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      {content}
     </main>
   );
+}
+
+function readImageFile(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("Unable to read that profile picture."));
+    };
+    reader.onerror = () =>
+      reject(new Error("Unable to read that profile picture."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function standardizeProfileImage(file: File) {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Choose an image file for your profile picture.");
+  }
+
+  const dataUrl = await readImageFile(file);
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new window.Image();
+    img.onload = () => resolve(img);
+    img.onerror = () =>
+      reject(new Error("Unable to load that profile picture."));
+    img.src = dataUrl;
+  });
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Unable to prepare that profile picture.");
+  }
+
+  const sourceSize = Math.min(image.naturalWidth, image.naturalHeight);
+  const sourceX = Math.max(0, (image.naturalWidth - sourceSize) / 2);
+  const sourceY = Math.max(0, (image.naturalHeight - sourceSize) / 2);
+
+  canvas.width = size;
+  canvas.height = size;
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceSize,
+    sourceSize,
+    0,
+    0,
+    size,
+    size,
+  );
+
+  return canvas.toDataURL("image/jpeg", 0.86);
 }

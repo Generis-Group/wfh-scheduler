@@ -33,7 +33,7 @@ export default async function HomePage({
     redirect("/review");
   }
 
-  const date = searchParams?.date ?? todayDateString(session.user.timezone);
+  const date = searchParams?.date ?? todayDateString();
   const [{ report, activities }, accounts] = await Promise.all([
     getDailyReportEditorData(session.user.id, date),
     prisma.account.findMany({

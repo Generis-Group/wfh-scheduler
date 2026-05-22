@@ -31,7 +31,7 @@ export default async function ReviewPage({
     redirect("/");
   }
 
-  const date = searchParams?.date ?? todayDateString(session.user.timezone);
+  const date = searchParams?.date ?? todayDateString();
   const scope = { userId: session.user.id, role: session.user.role };
   const { rows, metrics } = await getReviewDashboardData(date, scope);
 

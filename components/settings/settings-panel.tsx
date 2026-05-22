@@ -3,19 +3,22 @@
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  CalendarDays,
+  Cable,
   CheckCircle2,
-  Clock3,
-  KanbanSquare,
-  ListChecks,
-  Mail,
+  RefreshCw,
   Save,
+  UserRound,
   Users,
+  X,
   XCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { signIn } from "next-auth/react";
 
+import {
+  AccountSettings,
+  type AccountUser,
+} from "@/components/account/account-settings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +36,7 @@ import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
 import type { IntegrationMetadata } from "@/lib/services/integration-metadata";
-import { titleCase } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 type Settings = {
   jiraCloudId?: string | null;
@@ -45,26 +48,12 @@ type CompanySettings = {
   jiraProjectKeys: string[];
 };
 
-type EmailStatus = {
-  configured: boolean;
-  provider: string;
-  from?: string | null;
-  digestTime: string;
-  recipientRule: string;
+type SettingsSectionId = "account" | "integrations" | "company";
+type SettingsSectionConfig = {
+  id: SettingsSectionId;
+  label: string;
+  icon: LucideIcon;
 };
-
-type LastEmailRun = {
-  reportDate: string | Date;
-  trigger: string;
-  status: string;
-  recipientEmails: string[];
-  subject: string;
-  errorMessage?: string | null;
-  createdAt: string | Date;
-  completedAt?: string | Date | null;
-};
-
-type IntegrationSaveStatus = "saved" | "saving" | "error";
 
 function normalizeIntegrationSettings(settings: Settings): Settings {
   return {
@@ -74,36 +63,16 @@ function normalizeIntegrationSettings(settings: Settings): Settings {
   };
 }
 
-function formatSettingTimestamp(value?: string | Date | null) {
-  if (!value) {
-    return "Never";
-  }
-
-  const date = value instanceof Date ? value : new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Never";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
-
 export function SettingsPanel({
+  user,
   connected,
   oauthConfig,
   initialSettings,
   initialIntegrationMetadata,
   companySettings,
   canManageCompanySettings = false,
-  viewerKind = "employee",
-  emailStatus,
-  lastEmailRun,
 }: {
+  user: AccountUser;
   connected: {
     google: boolean;
     atlassian: boolean;
@@ -113,9 +82,6 @@ export function SettingsPanel({
   initialIntegrationMetadata?: IntegrationMetadata;
   companySettings?: CompanySettings;
   canManageCompanySettings?: boolean;
-  viewerKind?: "employee" | "admin";
-  emailStatus?: EmailStatus;
-  lastEmailRun?: LastEmailRun | null;
 }) {
   const [settings, setSettings] = useState(initialSettings);
   const [connectionState, setConnectionState] = useState(connected);
@@ -132,8 +98,6 @@ export function SettingsPanel({
     atlassian: connected.atlassian && !initialIntegrationMetadata,
   });
   const [message, setMessage] = useState<string | null>(null);
-  const [integrationSaveStatus, setIntegrationSaveStatus] =
-    useState<IntegrationSaveStatus>("saved");
   const [isSavingCompany, setIsSavingCompany] = useState(false);
   const [jiraProjectsInput, setJiraProjectsInput] = useState(
     (companySettings?.jiraProjectKeys ?? []).join(", "),
@@ -154,7 +118,34 @@ export function SettingsPanel({
     (resource) => resource.id === settings.jiraCloudId,
   );
   const googleConfigured = oauthConfig.google;
+  const googleTasksDisabled = !connectionState.google;
   const atlassianConfigured = oauthConfig.atlassian;
+  const settingsSections = useMemo<SettingsSectionConfig[]>(
+    () => [
+      {
+        id: "account" as const,
+        label: "Account",
+        icon: UserRound,
+      },
+      {
+        id: "integrations" as const,
+        label: "Integrations",
+        icon: Cable,
+      },
+      ...(canManageCompanySettings
+        ? [
+            {
+              id: "company" as const,
+              label: "Company",
+              icon: Users,
+            },
+          ]
+        : []),
+    ],
+    [canManageCompanySettings],
+  );
+  const [activeSection, setActiveSection] =
+    useState<SettingsSectionId>("account");
 
   function toggleTaskList(id: string, checked: boolean) {
     setSettings((current) => ({
@@ -229,6 +220,21 @@ export function SettingsPanel({
   }, [connectionState.atlassian, connectionState.google]);
 
   useEffect(() => {
+    function syncHashSection() {
+      const nextSection = window.location.hash.replace("#", "");
+
+      if (settingsSections.some((section) => section.id === nextSection)) {
+        setActiveSection(nextSection as SettingsSectionId);
+      }
+    }
+
+    syncHashSection();
+    window.addEventListener("hashchange", syncHashSection);
+
+    return () => window.removeEventListener("hashchange", syncHashSection);
+  }, [settingsSections]);
+
+  useEffect(() => {
     const payload = normalizeIntegrationSettings(settings);
     const serialized = JSON.stringify(payload);
 
@@ -236,7 +242,6 @@ export function SettingsPanel({
       return;
     }
 
-    setIntegrationSaveStatus("saving");
     const currentRequestId = saveRequestId.current + 1;
     saveRequestId.current = currentRequestId;
 
@@ -254,23 +259,14 @@ export function SettingsPanel({
       if (response?.ok) {
         lastSavedIntegrationSettings.current = serialized;
         markServerDataStale();
-        setIntegrationSaveStatus("saved");
         return;
       }
 
-      setIntegrationSaveStatus("error");
       setMessage("Unable to save integration settings automatically.");
     }, 600);
 
     return () => window.clearTimeout(timeout);
   }, [settings]);
-
-  const integrationSaveLabel =
-    integrationSaveStatus === "saving"
-      ? "Saving changes..."
-      : integrationSaveStatus === "error"
-        ? "Could not save changes"
-        : "Changes save automatically";
 
   async function saveCompanySettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -319,7 +315,7 @@ export function SettingsPanel({
   function connect(provider: "google" | "atlassian") {
     signIn(
       provider,
-      { callbackUrl: "/settings" },
+      { callbackUrl: "/settings#integrations" },
       provider === "google"
         ? {
             access_type: "offline",
@@ -334,361 +330,391 @@ export function SettingsPanel({
     );
   }
 
-  function openAtlassianLogout() {
-    window.open(
-      "https://id.atlassian.com/logout",
-      "_blank",
-      "noopener,noreferrer",
-    );
-    setMessage(
-      "A new tab opened to sign out of Atlassian. After signing out there, return here and click Connect Jira again.",
-    );
+  function selectSection(sectionId: SettingsSectionId) {
+    setActiveSection(sectionId);
+    window.history.replaceState(null, "", `/settings#${sectionId}`);
   }
+
+  const activeSectionConfig =
+    settingsSections.find((section) => section.id === activeSection) ??
+    settingsSections[0];
 
   return (
     <main className="reference-page">
-      <div className="reference-page-header">
-        <div>
-          <h1 className="reference-title">Settings</h1>
-          <p className="reference-subtitle">
-            Manage reporting integrations, import rules, and reviewer/admin
-            delivery settings.
-          </p>
+      <div className="mb-5">
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
+          <span className="text-[#2563eb]">Settings</span>
+          <span className="text-[#98a2b3]">/</span>
+          <span className="text-[#475467] dark:text-muted-foreground">
+            {activeSectionConfig.label}
+          </span>
         </div>
+        <h1 className="reference-title">Settings</h1>
+        <p className="reference-subtitle">
+          Manage your account, integrations, and reporting preferences.
+        </p>
       </div>
 
       {message ? (
-        <div className="mb-4 rounded-[10px] bg-white/80 px-4 py-3 text-sm text-[#475569] shadow-[0_8px_24px_rgba(15,23,42,0.05)] dark:bg-[#0f1b2a] dark:text-muted-foreground">
+        <div className="mb-4 rounded-[8px] border border-[#dfe7f2] bg-white px-4 py-3 text-sm text-[#475569] shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-[#263a55] dark:bg-[#0f1b2a] dark:text-muted-foreground">
           {message}
         </div>
       ) : null}
 
-      <div className="space-y-4">
-        <div className="grid gap-4 min-[900px]:grid-cols-2">
-          <ProviderCard
-            title="Atlassian Jira"
-            description="Issues, worklogs, and changelogs become report activity."
-            icon={KanbanSquare}
-            connected={connectionState.atlassian}
-            configured={atlassianConfigured}
-            configMessage="Add ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET to enable Jira sign-in."
-            error={providerErrors?.atlassian}
-            connectLabel={
-              connectionState.atlassian ? "Reconnect Jira" : "Connect Jira"
-            }
-            onConnect={() => connect("atlassian")}
-            onDisconnect={() => disconnect("atlassian")}
-          >
-            <div className="rounded-[8px] border border-[#bfdbfe] bg-[#eff6ff] p-3 text-sm text-[#1f3b68] dark:border-blue-300/15 dark:bg-blue-400/10 dark:text-blue-100">
-              <p>
-                Atlassian may reuse the account already signed in at
-                id.atlassian.com. If the wrong account opens, sign out of
-                Atlassian first, then reconnect Jira.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3 bg-white dark:bg-[#0f1b2a]"
-                onClick={openAtlassianLogout}
-              >
-                Use a different Atlassian account
-              </Button>
-            </div>
-            <div className="space-y-2">
-              <Label>Jira cloud site</Label>
-              <Select
-                value={settings.jiraCloudId ?? ""}
-                onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    jiraCloudId: event.target.value || null,
-                  }))
-                }
-                disabled={
-                  !connectionState.atlassian ||
-                  metadataLoading.atlassian ||
-                  jiraResources.length === 0
-                }
-              >
-                <option value="">Auto-select first available site</option>
-                {jiraResources.map((resource) => (
-                  <option key={resource.id} value={resource.id}>
-                    {resource.name}
-                  </option>
-                ))}
-              </Select>
-              {metadataLoading.atlassian ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-3.5 w-48 rounded-[4px]" />
-                  <Skeleton className="h-3.5 w-32 rounded-[4px]" />
-                </div>
-              ) : (
-                <p className="text-xs text-[#64748b]">
-                  {selectedJiraSite
-                    ? `Selected site: ${selectedJiraSite.name}`
-                    : "Connect Jira to select a cloud site."}
-                </p>
+      <nav
+        className="mb-6 flex gap-6 overflow-x-auto border-b border-[#d9e1ec] dark:border-[#263a55]"
+        aria-label="Settings categories"
+      >
+        {settingsSections.map((section) => {
+          const Icon = section.icon;
+          const isActive = activeSection === section.id;
+
+          return (
+            <button
+              key={section.id}
+              type="button"
+              className={cn(
+                "flex shrink-0 items-center gap-2 border-b-2 px-2 pb-3 text-sm font-semibold transition-colors",
+                isActive
+                  ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#bfdbfe]"
+                  : "border-transparent text-[#475467] hover:text-[#111827] dark:text-muted-foreground dark:hover:text-foreground",
               )}
-            </div>
-          </ProviderCard>
+              aria-current={isActive ? "page" : undefined}
+              onClick={() => selectSection(section.id)}
+            >
+              <Icon className="h-[18px] w-[18px]" />
+              {section.label}
+            </button>
+          );
+        })}
+      </nav>
 
-          <ProviderCard
-            title="Google Workspace"
-            description="Calendar meetings and selected Tasks lists become report activity."
-            icon={CalendarDays}
-            connected={connectionState.google}
-            configured={googleConfigured}
-            configMessage="Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable Google sign-in."
-            error={providerErrors?.google}
-            connectLabel={
-              connectionState.google ? "Reconnect Google" : "Connect Google"
-            }
-            onConnect={() => connect("google")}
-            onDisconnect={() => disconnect("google")}
+      {activeSection === "account" ? (
+        <AccountSettings user={user} embedded />
+      ) : null}
+
+      {activeSection === "integrations" ? (
+        <section className="min-w-0 space-y-4">
+          <div className="grid min-w-0 gap-4 min-[980px]:grid-cols-2">
+            <ProviderCard
+              title="Atlassian Jira"
+              description="Issues, worklogs, and changelogs become report activity."
+              logo={<JiraLogo className="h-8 w-8" />}
+              connected={connectionState.atlassian}
+              configured={atlassianConfigured}
+              configMessage="Add ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET to enable Jira sign-in."
+              error={providerErrors?.atlassian}
+              connectLabel={
+                connectionState.atlassian ? "Reconnect Jira" : "Connect Jira"
+              }
+              onConnect={() => connect("atlassian")}
+              onDisconnect={() => disconnect("atlassian")}
+            >
+              <div className="min-w-0 space-y-2">
+                <Label>Jira cloud site</Label>
+                <Select
+                  value={settings.jiraCloudId ?? ""}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      jiraCloudId: event.target.value || null,
+                    }))
+                  }
+                  disabled={
+                    !connectionState.atlassian ||
+                    metadataLoading.atlassian ||
+                    jiraResources.length === 0
+                  }
+                >
+                  <option value="">Auto-select first available site</option>
+                  {jiraResources.map((resource) => (
+                    <option key={resource.id} value={resource.id}>
+                      {resource.name}
+                    </option>
+                  ))}
+                </Select>
+                {metadataLoading.atlassian ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-3.5 w-48 rounded-[4px]" />
+                    <Skeleton className="h-3.5 w-32 rounded-[4px]" />
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#64748b]">
+                    {selectedJiraSite
+                      ? `Selected site: ${selectedJiraSite.name}`
+                      : "Connect Jira to select a cloud site."}
+                  </p>
+                )}
+              </div>
+            </ProviderCard>
+
+            <ProviderCard
+              title="Google Workspace"
+              description="Calendar and Tasks activity can be imported into daily reports."
+              logo={<GoogleWorkspaceLogo className="h-8 w-8" />}
+              connected={connectionState.google}
+              configured={googleConfigured}
+              configMessage="Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable Google sign-in."
+              error={providerErrors?.google}
+              connectLabel={
+                connectionState.google ? "Reconnect Google" : "Connect Google"
+              }
+              onConnect={() => connect("google")}
+              onDisconnect={() => disconnect("google")}
+            >
+              <div className="min-w-0 space-y-2">
+                <Label htmlFor="calendarId">Calendar ID</Label>
+                <Input
+                  id="calendarId"
+                  value={settings.googleCalendarId}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      googleCalendarId: event.target.value || "primary",
+                    }))
+                  }
+                />
+                <p className="text-xs text-[#64748b]">
+                  Use `primary` unless a separate calendar should feed reports.
+                </p>
+              </div>
+            </ProviderCard>
+          </div>
+
+          <Card
+            className={cn(
+              "overflow-hidden transition-opacity",
+              googleTasksDisabled && "opacity-55 grayscale",
+            )}
+            aria-disabled={googleTasksDisabled}
           >
-            <div className="space-y-2">
-              <Label htmlFor="calendarId">Calendar ID</Label>
-              <Input
-                id="calendarId"
-                value={settings.googleCalendarId}
-                onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    googleCalendarId: event.target.value || "primary",
-                  }))
-                }
-              />
-              <p className="text-xs text-[#64748b]">
-                Use `primary` unless a separate calendar should feed reports.
-              </p>
-            </div>
-          </ProviderCard>
-        </div>
+            <CardContent className="p-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex min-w-0 items-start gap-4">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+                    <GoogleTasksLogo className="h-8 w-8" />
+                  </span>
+                  <div className="min-w-0">
+                    <CardTitle className="text-[18px]">
+                      Google Tasks import
+                    </CardTitle>
+                    <CardDescription>
+                      Choose which Google Tasks lists are eligible for daily
+                      reports.
+                    </CardDescription>
+                  </div>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="shrink-0 bg-[#f4f7fb] text-[#475569]"
+                >
+                  {settings.googleTaskListIds.length === 0
+                    ? "All lists"
+                    : `${settings.googleTaskListIds.length} selected`}
+                </Badge>
+              </div>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <ListChecks className="h-5 w-5 text-[#2563eb]" />
+              <div className="mt-4 grid max-h-52 min-w-0 gap-2 overflow-y-auto rounded-[8px] border border-[#dfe7f2] bg-white p-2 dark:border-[#263a55] dark:bg-[#0b1523]">
+                {metadataLoading.google ? (
+                  <>
+                    <Skeleton className="h-10 rounded-[6px]" />
+                    <Skeleton className="h-10 rounded-[6px]" />
+                    <Skeleton className="h-10 rounded-[6px]" />
+                    <Skeleton className="h-10 rounded-[6px]" />
+                  </>
+                ) : taskLists.length === 0 ? (
+                  <p className="col-span-full px-2 py-3 text-sm text-[#64748b]">
+                    {providerErrors?.google
+                      ? "Reconnect Google to load task lists."
+                      : connectionState.google
+                        ? "No task lists found. Empty selection imports all lists."
+                        : "Connect Google to load task lists. Empty selection imports all lists."}
+                  </p>
+                ) : (
+                  taskLists.map((list) => (
+                    <label
+                      key={list.id}
+                      className="flex h-11 items-center justify-between gap-3 rounded-[7px] bg-[#f8fafc] px-3 text-sm ring-1 ring-[#e6ebf3] transition-colors hover:bg-[#f3f8ff] dark:bg-white/[0.03] dark:ring-[#263a55] dark:hover:bg-white/[0.06]"
+                    >
+                      <span className="min-w-0 truncate font-medium text-[#334155]">
+                        {list.title}
+                      </span>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 rounded border-[#cbd5e1] accent-[#2563eb]"
+                        checked={selectedTaskLists.has(list.id)}
+                        disabled={googleTasksDisabled}
+                        onChange={(event) =>
+                          toggleTaskList(list.id, event.target.checked)
+                        }
+                      />
+                    </label>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+        </section>
+      ) : null}
+
+      {activeSection === "company" && canManageCompanySettings ? (
+        <section className="space-y-4">
+          <SectionHeading
+            icon={Users}
+            title="Company"
+            description="Shared rules used by reviewer/admin workflows."
+          />
+          <Card>
+            <CardHeader className="px-5 py-5">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+                  <Users className="h-5 w-5" />
+                </span>
                 <div>
-                  <CardTitle>Google Tasks Lists</CardTitle>
+                  <CardTitle className="text-[18px]">
+                    Company Controls
+                  </CardTitle>
                   <CardDescription>
-                    Select the task lists that should be imported into daily
-                    reports.
+                    Shared rules used by reviewer/admin workflows.
                   </CardDescription>
                 </div>
               </div>
-              <Badge variant="outline" className="bg-[#f8fafc] text-[#475569]">
-                {settings.googleTaskListIds.length === 0
-                  ? "All lists"
-                  : `${settings.googleTaskListIds.length} selected`}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="reference-card-muted grid gap-2 p-3">
-              {metadataLoading.google ? (
-                <>
-                  <Skeleton className="h-9 rounded-[6px]" />
-                  <Skeleton className="h-9 rounded-[6px]" />
-                  <Skeleton className="h-9 rounded-[6px]" />
-                </>
-              ) : taskLists.length === 0 ? (
-                <p className="text-sm text-[#64748b]">
-                  {providerErrors?.google
-                    ? "Reconnect Google to load task lists."
-                    : connectionState.google
-                      ? "No task lists found. Empty selection imports all lists."
-                      : "Connect Google to load task lists. Empty selection imports all lists."}
-                </p>
-              ) : (
-                taskLists.map((list) => (
-                  <label
-                    key={list.id}
-                    className="flex items-center justify-between gap-3 rounded-[6px] px-2 py-2 text-sm hover:bg-[#f8fafc] dark:hover:bg-muted"
-                  >
-                    <span className="font-medium text-[#334155]">
-                      {list.title}
-                    </span>
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-[#cbd5e1] accent-[#2563eb]"
-                      checked={selectedTaskLists.has(list.id)}
-                      onChange={(event) =>
-                        toggleTaskList(list.id, event.target.checked)
-                      }
-                    />
-                  </label>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {viewerKind === "admin" && emailStatus ? (
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <Mail className="h-5 w-5 text-[#2563eb]" />
-                  <div>
-                    <CardTitle>Email Digests</CardTitle>
-                    <CardDescription>
-                      Reviewer/admin report summaries delivered through Resend.
-                    </CardDescription>
-                  </div>
-                </div>
-                <Badge
-                  variant="outline"
-                  className={
-                    emailStatus.configured
-                      ? "border-[#b7e4bf] bg-[#ecfdf0] text-[#15803d]"
-                      : "border-[#fed7aa] bg-[#fff7ed] text-[#ea580c]"
-                  }
-                >
-                  {emailStatus.configured ? "Configured" : "Needs env vars"}
-                </Badge>
-              </div>
             </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2">
-              <InfoRow
-                icon={Mail}
-                label="Provider"
-                value={emailStatus.provider}
-              />
-              <InfoRow
-                icon={Clock3}
-                label="Daily digest"
-                value={emailStatus.digestTime}
-              />
-              <InfoRow
-                icon={Users}
-                label="Recipients"
-                value={emailStatus.recipientRule}
-              />
-              <InfoRow
-                icon={Mail}
-                label="From address"
-                value={emailStatus.from ?? "Not configured"}
-              />
-              <InfoRow
-                icon={CheckCircle2}
-                label="Last run"
-                value={
-                  lastEmailRun
-                    ? `${titleCase(lastEmailRun.status)} - ${formatSettingTimestamp(lastEmailRun.completedAt ?? lastEmailRun.createdAt)}`
-                    : "Never"
-                }
-              />
-              <InfoRow
-                icon={CalendarDays}
-                label="Last report date"
-                value={
-                  lastEmailRun
-                    ? String(lastEmailRun.reportDate).slice(0, 10)
-                    : "None"
-                }
-              />
-              {lastEmailRun?.errorMessage ? (
-                <div className="rounded-[8px] border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive md:col-span-2">
-                  {lastEmailRun.errorMessage}
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <div className="flex justify-end text-xs font-medium text-[#64748b] dark:text-muted-foreground">
-          <span
-            className={
-              integrationSaveStatus === "error"
-                ? "text-destructive"
-                : integrationSaveStatus === "saving"
-                  ? "text-[#2563eb] dark:text-[#7db4ff]"
-                  : "text-[#15803d] dark:text-[#54d387]"
-            }
-          >
-            {integrationSaveLabel}
-          </span>
-        </div>
-
-        {viewerKind === "admin" ? (
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <Users className="h-5 w-5 text-[#2563eb]" />
-                  <div>
-                    <CardTitle>Company Controls</CardTitle>
-                    <CardDescription>
-                      Shared rules used by reviewer/admin workflows.
-                    </CardDescription>
-                  </div>
-                </div>
-                <Badge
-                  variant="outline"
-                  className="bg-[#f8fafc] text-[#475569]"
-                >
-                  {canManageCompanySettings ? "Editable" : "Read only"}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
+            <CardContent className="px-5 pb-5">
               <form className="space-y-4" onSubmit={saveCompanySettings}>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Required email domain</Label>
-                    <div className="rounded-[8px] bg-[#f8fafc] px-3 py-2 text-sm font-semibold text-[#0f172a] dark:bg-muted dark:text-foreground">
-                      @generisgp.com
-                    </div>
-                    <p className="text-xs text-[#64748b]">
-                      Company access is hard-restricted to this domain.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="jira-projects">Jira project filters</Label>
-                    <Input
-                      id="jira-projects"
-                      value={jiraProjectsInput}
-                      onChange={(event) =>
-                        setJiraProjectsInput(event.target.value)
-                      }
-                      placeholder="GEN, OPS"
-                      disabled={!canManageCompanySettings}
-                    />
-                    <p className="text-xs text-[#64748b]">
-                      Leave empty to import matching Jira activity from every
-                      accessible project.
-                    </p>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="jira-projects">Jira project filters</Label>
+                  <Input
+                    id="jira-projects"
+                    value={jiraProjectsInput}
+                    onChange={(event) =>
+                      setJiraProjectsInput(event.target.value)
+                    }
+                    placeholder="GEN, OPS"
+                    disabled={!canManageCompanySettings}
+                  />
+                  <p className="text-xs text-[#64748b]">
+                    Leave empty to import matching Jira activity from every
+                    accessible project.
+                  </p>
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-xs text-[#64748b]">
-                    Employee access is managed from the Employees page.
-                  </div>
-                  {canManageCompanySettings ? (
-                    <Button
-                      className="bg-[#2563eb] hover:bg-[#1d4ed8]"
-                      disabled={isSavingCompany}
-                    >
-                      <Save className="mr-2 h-4 w-4" />
-                      {isSavingCompany ? "Saving..." : "Save company settings"}
-                    </Button>
-                  ) : null}
+                <div className="flex justify-end">
+                  <Button
+                    className="bg-[#2563eb] hover:bg-[#1d4ed8]"
+                    disabled={isSavingCompany}
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    {isSavingCompany ? "Saving..." : "Save company settings"}
+                  </Button>
                 </div>
               </form>
             </CardContent>
           </Card>
-        ) : null}
-      </div>
+        </section>
+      ) : null}
     </main>
+  );
+}
+
+function SectionHeading({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-4">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+        <Icon className="h-6 w-6" />
+      </span>
+      <div className="min-w-0 pt-1">
+        <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
+          {title}
+        </h2>
+        <p className="mt-0.5 text-sm text-[#667085] dark:text-muted-foreground">
+          {description}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function GoogleTasksLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 527.1 500"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <polygon
+        fill="#0066DA"
+        points="410.4,58.3 368.8,81.2 348.2,120.6 368.8,168.8 407.8,211 450,187.5 475.9,142.8 450,87.5"
+      />
+      <path
+        fill="#2684FC"
+        d="M249.3,219.4l98.9-98.9c29.1,22.1,50.5,53.8,59.6,90.4L272.1,346.7c-12.2,12.2-32,12.2-44.2,0l-91.5-91.5c-9.8-9.8-9.8-25.6,0-35.3l39-39c9.8-9.8,25.6-9.8,35.3,0L249.3,219.4z M519.8,63.6l-39.7-39.7c-9.7-9.7-25.6-9.7-35.3,0l-34.4,34.4c27.5,23,49.9,51.8,65.5,84.5l43.9-43.9C529.6,89.2,529.6,73.3,519.8,63.6z M412.5,250c0,89.8-72.8,162.5-162.5,162.5S87.5,339.8,87.5,250S160.2,87.5,250,87.5c36.9,0,70.9,12.3,98.2,33.1l62.2-62.2C367,21.9,311.1,0,250,0C111.9,0,0,111.9,0,250s111.9,250,250,250s250-111.9,250-250c0-38.3-8.7-74.7-24.1-107.2L407.8,211C410.8,223.5,412.5,236.6,412.5,250z"
+      />
+    </svg>
+  );
+}
+
+function JiraLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        fill="#0052CC"
+        d="M7.12 11.084a.683.683 0 0 0-1.16.126L.075 22.974a.703.703 0 0 0 .63 1.018h8.19a.678.678 0 0 0 .63-.39c1.767-3.65.696-9.203-2.406-12.52z"
+      />
+      <path
+        fill="#2684FF"
+        d="M11.434.386a15.515 15.515 0 0 0-.906 15.317l3.95 7.9a.703.703 0 0 0 .628.388h8.19a.703.703 0 0 0 .63-1.017L12.63.38a.664.664 0 0 0-1.196.006z"
+      />
+    </svg>
+  );
+}
+
+function GoogleWorkspaceLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 48 48"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        fill="#4285F4"
+        d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M11.69 28.18A13.18 13.18 0 0 1 11 24c0-1.45.25-2.86.69-4.18v-5.7H4.34A21.94 21.94 0 0 0 2 24c0 3.55.85 6.9 2.34 9.88l7.35-5.7z"
+      />
+      <path
+        fill="#EA4335"
+        d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"
+      />
+    </svg>
   );
 }
 
 function ProviderCard({
   title,
   description,
-  icon: Icon,
+  logo,
   connected,
   configured,
   configMessage,
@@ -700,7 +726,7 @@ function ProviderCard({
 }: {
   title: string;
   description: string;
-  icon: LucideIcon;
+  logo: ReactNode;
   connected: boolean;
   configured: boolean;
   configMessage: string;
@@ -711,32 +737,42 @@ function ProviderCard({
   children: ReactNode;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Icon className="h-5 w-5 text-[#2563eb]" />
-            <div>
-              <CardTitle>{title}</CardTitle>
+    <Card className="overflow-hidden">
+      <CardHeader className="px-5 py-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+              {logo}
+            </span>
+            <div className="min-w-0 pt-1">
+              <CardTitle className="text-[18px]">{title}</CardTitle>
               <CardDescription>{description}</CardDescription>
             </div>
           </div>
           <ConnectionBadge connected={connected} />
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 px-5 pb-5">
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
+            size="sm"
+            className="border border-[#dfe7f2] bg-white text-[#2563eb] hover:bg-[#eff6ff] dark:border-[#263a55] dark:bg-white/[0.04]"
             disabled={!configured}
             title={configured ? connectLabel : configMessage}
             onClick={onConnect}
           >
-            <Icon className="mr-2 h-4 w-4" />
+            <RefreshCw className="mr-2 h-4 w-4" />
             {connectLabel}
           </Button>
           {connected ? (
-            <Button variant="ghost" onClick={onDisconnect}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border border-[#dfe7f2] bg-white text-[#111827] hover:bg-[#f8fafc] dark:border-[#263a55] dark:bg-white/[0.04]"
+              onClick={onDisconnect}
+            >
+              <X className="mr-2 h-4 w-4" />
               Disconnect
             </Button>
           ) : null}
@@ -745,7 +781,7 @@ function ProviderCard({
           <p className="text-sm text-[#64748b]">{configMessage}</p>
         ) : null}
         {error ? (
-          <p className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="rounded-[8px] border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         ) : null}
@@ -772,25 +808,5 @@ function ConnectionBadge({ connected }: { connected: boolean }) {
       )}
       {connected ? "Connected" : "Not connected"}
     </Badge>
-  );
-}
-
-function InfoRow({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-[8px] bg-[#f8fafc] p-3 dark:bg-muted">
-      <div className="flex items-center gap-2 text-xs font-medium text-[#64748b]">
-        <Icon className="h-3.5 w-3.5" />
-        {label}
-      </div>
-      <div className="mt-1 text-sm font-semibold text-[#0f172a]">{value}</div>
-    </div>
   );
 }

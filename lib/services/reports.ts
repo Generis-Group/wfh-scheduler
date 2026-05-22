@@ -28,7 +28,6 @@ const reportUserSelect = {
   ...userIdentitySelect,
   role: true,
   status: true,
-  timezone: true,
   ...departmentMembershipSelect
 };
 
@@ -317,7 +316,14 @@ export async function submitReport(reportId: string, editedById: string) {
   const report = await getReportById(reportId);
 
   if (report.status === "SUBMITTED") {
-    return report;
+    await prisma.dailyReport.update({
+      where: { id: report.id },
+      data: {
+        submittedAt: new Date()
+      }
+    });
+
+    return getReportById(reportId);
   }
 
   await createRevision(report.id, editedById);
@@ -410,20 +416,22 @@ export async function listReportsForDate(dateString: string, scope?: ReviewScope
 }
 
 async function listReportsForDateForWhere(reportDate: Date, employeeWhere: Prisma.UserWhereInput, scope?: ReviewScope) {
-  const [users, reports] = await Promise.all([
-    prisma.user.findMany({
+  const { users, reports } = await prisma.$transaction(async (tx) => {
+    const users = await tx.user.findMany({
       where: employeeWhere,
       orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
       select: dashboardUserSelect
-    }),
-    prisma.dailyReport.findMany({
+    });
+    const reports = await tx.dailyReport.findMany({
       where: {
         reportDate,
         user: employeeWhere
       },
       include: dashboardReportInclude(scope)
-    })
-  ]);
+    });
+
+    return { users, reports };
+  });
   const reportsByUserId = new Map(reports.map((report) => [report.userId, report]));
 
   return users.map((user) => ({
@@ -435,10 +443,8 @@ async function listReportsForDateForWhere(reportDate: Date, employeeWhere: Prism
 export async function getReviewDashboardData(dateString: string, scope?: ReviewScope) {
   const reportDate = parseReportDate(dateString);
   const employeeWhere = await getReviewableEmployeeWhere(scope);
-  const [rows, metrics] = await Promise.all([
-    listReportsForDateForWhere(reportDate, employeeWhere, scope),
-    getDashboardMetricsForWhere(reportDate, employeeWhere)
-  ]);
+  const rows = await listReportsForDateForWhere(reportDate, employeeWhere, scope);
+  const metrics = await getDashboardMetricsForWhere(reportDate, employeeWhere);
 
   return { rows, metrics };
 }
@@ -494,22 +500,22 @@ async function getDashboardMetricsForWhere(reportDate: Date, employeeWhere: Pris
   const trendStart = new Date(reportDate);
   trendStart.setUTCDate(trendStart.getUTCDate() - 6);
 
-  const [users, submitted, activities, blockers, blockerTrendRows] = await Promise.all([
-    prisma.user.count({ where: employeeWhere }),
-    prisma.dailyReport.count({ where: { reportDate, status: "SUBMITTED", user: employeeWhere } }),
-    prisma.activityItem.groupBy({
+  const { users, submitted, activities, blockers, blockerTrendRows } = await prisma.$transaction(async (tx) => {
+    const users = await tx.user.count({ where: employeeWhere });
+    const submitted = await tx.dailyReport.count({ where: { reportDate, status: "SUBMITTED", user: employeeWhere } });
+    const activities = await tx.activityItem.groupBy({
       by: ["source"],
       where: { reportDate, selected: true, staleAt: null, user: employeeWhere },
       _count: true
-    }),
-    prisma.dailyReport.count({
+    });
+    const blockers = await tx.dailyReport.count({
       where: {
         reportDate,
         blockers: { not: "" },
         user: employeeWhere
       }
-    }),
-    prisma.dailyReport.groupBy({
+    });
+    const blockerTrendRows = await tx.dailyReport.groupBy({
       by: ["reportDate"],
       where: {
         reportDate: {
@@ -520,8 +526,10 @@ async function getDashboardMetricsForWhere(reportDate: Date, employeeWhere: Pris
         user: employeeWhere
       },
       _count: true
-    })
-  ]);
+    });
+
+    return { users, submitted, activities, blockers, blockerTrendRows };
+  });
   const blockerCounts = new Map(blockerTrendRows.map((row) => [row.reportDate.toISOString().slice(0, 10), row._count]));
   const blockerTrend = Array.from({ length: 7 }, (_, index) => {
     const day = new Date(trendStart);

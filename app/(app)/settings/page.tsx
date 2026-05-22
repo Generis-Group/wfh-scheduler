@@ -6,10 +6,6 @@ import { getOAuthProviderConfig } from "@/lib/oauth-config";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serializers";
 import { getCompanySettings } from "@/lib/services/company-settings";
-import {
-  getLastReviewDigestRun,
-  getReviewDigestEmailStatus,
-} from "@/lib/services/email-digest";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -26,9 +22,8 @@ export default async function SettingsPage() {
     redirect("/change-password");
   }
 
-  const isReviewer =
-    session.user.role === "REVIEWER" || session.user.role === "ADMIN";
-  const [settings, accounts, companySetting, lastEmailRun] = await Promise.all([
+  const canManageCompanySettings = session.user.role === "ADMIN";
+  const [settings, accounts, companySetting, user] = await Promise.all([
     prisma.userIntegrationSettings.upsert({
       where: { userId: session.user.id },
       update: {},
@@ -38,11 +33,26 @@ export default async function SettingsPage() {
       where: { userId: session.user.id },
       select: { provider: true },
     }),
-    isReviewer
+    canManageCompanySettings
       ? getCompanySettings()
       : Promise.resolve({ jiraProjectKeys: [] }),
-    isReviewer ? getLastReviewDigestRun() : Promise.resolve(null),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+        role: true,
+        mustChangePassword: true,
+        passwordHash: true,
+      },
+    }),
   ]);
+
+  if (!user) {
+    redirect("/login");
+  }
 
   const connected = {
     google: accounts.some((account) => account.provider === "google"),
@@ -52,14 +62,16 @@ export default async function SettingsPage() {
 
   return (
     <SettingsPanel
+      user={serialize({
+        ...user,
+        passwordHash: undefined,
+        hasPassword: Boolean(user.passwordHash),
+      })}
       connected={connected}
       oauthConfig={oauthConfig}
       initialSettings={serialize(settings)}
       companySettings={companySetting}
-      canManageCompanySettings={session.user.role === "ADMIN"}
-      viewerKind={isReviewer ? "admin" : "employee"}
-      emailStatus={isReviewer ? getReviewDigestEmailStatus() : undefined}
-      lastEmailRun={serialize(lastEmailRun)}
+      canManageCompanySettings={canManageCompanySettings}
     />
   );
 }

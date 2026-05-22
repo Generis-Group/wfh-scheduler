@@ -20,7 +20,6 @@ export const adminUserSelect = {
   name: true,
   role: true,
   status: true,
-  timezone: true,
   reviewerAllDepartments: true,
   ...departmentMembershipSelect
 };
@@ -129,13 +128,40 @@ export async function changeOwnPassword(userId: string, input: ChangePasswordInp
 
 export async function updateOwnProfile(userId: string, input: AccountProfileInput) {
   const name = input.name?.trim() || null;
+  const email = normalizeEmail(input.email);
+
+  if (!isGenerisEmail(email)) {
+    throw new HttpError(422, "User email must end with @generisgp.com.");
+  }
+
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      email,
+      id: { not: userId }
+    },
+    select: { id: true }
+  });
+
+  if (existingUser) {
+    throw new HttpError(409, "That email is already in use.");
+  }
+
+  const data: {
+    name: string | null;
+    email: string;
+    image?: string | null;
+  } = {
+    name,
+    email
+  };
+
+  if ("image" in input) {
+    data.image = input.image ?? null;
+  }
 
   return prisma.user.update({
     where: { id: userId },
-    data: {
-      name,
-      timezone: input.timezone
-    }
+    data
   });
 }
 

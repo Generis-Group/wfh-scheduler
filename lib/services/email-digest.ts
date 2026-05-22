@@ -9,9 +9,6 @@ import type { ReviewScope } from "@/lib/services/departments";
 import { listReportsForDate } from "@/lib/services/reports";
 
 export type ReviewDigestFilters = {
-  groupFilter?: string;
-  statusFilter?: string;
-  locationFilter?: string;
   search?: string;
 };
 
@@ -98,32 +95,14 @@ export function reportDigestStatus(row: DigestRow, date: string) {
   return row.report.status === "SUBMITTED" ? "Submitted" : "Draft";
 }
 
-export function applyReviewDigestFilters(rows: DigestRow[], date: string, filters: ReviewDigestFilters = {}) {
-  const groupFilter = filters.groupFilter ?? "EMPLOYEES";
-  const statusFilter = filters.statusFilter ?? "ALL";
-  const locationFilter = filters.locationFilter ?? "ALL";
+export function applyReviewDigestFilters(rows: DigestRow[], _date: string, filters: ReviewDigestFilters = {}) {
   const query = filters.search?.trim().toLowerCase() ?? "";
 
   return rows.filter((row) => {
-    const status = reportDigestStatus(row, date);
-    const location = row.report?.workLocation ?? "MISSING";
     const employee = `${row.user.name ?? ""} ${row.user.email ?? ""}`.toLowerCase();
     const matchesSearch = !query || employee.includes(query);
-    const matchesGroup =
-      (groupFilter === "EMPLOYEES" && row.user.role === "EMPLOYEE") ||
-      (groupFilter === "SUBMITTED" && row.report?.status === "SUBMITTED") ||
-      (groupFilter === "MISSING" && !row.report) ||
-      (groupFilter === "BLOCKERS" && hasBlockers(row.report));
-    const matchesStatus =
-      statusFilter === "ALL" ||
-      (statusFilter === "MISSING" && !row.report) ||
-      (statusFilter === "SUBMITTED" && row.report?.status === "SUBMITTED" && !status.includes("Late") && !status.includes("Edited")) ||
-      (statusFilter === "DRAFT" && row.report?.status === "DRAFT") ||
-      (statusFilter === "LATE" && status.includes("Late")) ||
-      (statusFilter === "EDITED" && status.includes("Edited"));
-    const matchesLocation = locationFilter === "ALL" || location === locationFilter;
 
-    return matchesSearch && matchesGroup && matchesStatus && matchesLocation;
+    return matchesSearch && row.user.role === "EMPLOYEE";
   });
 }
 
@@ -152,9 +131,6 @@ export function buildReviewDigest({
   const reviewUrl = `${appBaseUrl.replace(/\/$/, "")}/review?date=${encodeURIComponent(date)}`;
   const subject = `Generis daily report digest - ${date}`;
   const filterSummary = [
-    filters.groupFilter && filters.groupFilter !== "EMPLOYEES" ? `group ${filters.groupFilter}` : null,
-    filters.statusFilter && filters.statusFilter !== "ALL" ? `status ${filters.statusFilter}` : null,
-    filters.locationFilter && filters.locationFilter !== "ALL" ? `location ${filters.locationFilter}` : null,
     filters.search?.trim() ? `search "${filters.search.trim()}"` : null
   ].filter(Boolean).join(", ");
 
