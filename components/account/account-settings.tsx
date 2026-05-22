@@ -153,7 +153,6 @@ export function AccountSettings({
         <CardContent className="px-5 pb-5">
           <form className="space-y-5" onSubmit={saveProfile}>
             <div className="relative flex flex-wrap items-center gap-5 rounded-[8px] border border-[#dfe7f2] bg-white px-5 py-4 shadow-[inset_0_1px_0_rgba(15,23,42,0.02)] dark:border-[#263a55] dark:bg-[#0b1523]">
-              <span className="absolute -top-px left-36 h-px w-8 bg-white dark:bg-[#0b1523]" />
               <button
                 type="button"
                 className="group relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[#1d4ed8] bg-cover bg-center text-[30px] font-semibold text-white shadow-[0_20px_45px_rgba(29,78,216,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#1d4ed8]"

@@ -209,6 +209,25 @@
     scrollbar-gutter: stable;
   }
 
+  .reference-route-progress-bar {
+    animation: reference-route-progress 1.1s ease-in-out infinite;
+    transform: translateX(-100%);
+  }
+
+  @keyframes reference-route-progress {
+    0% {
+      transform: translateX(-100%);
+    }
+
+    50% {
+      transform: translateX(150%);
+    }
+
+    100% {
+      transform: translateX(330%);
+    }
+  }
+
   html[data-sidebar-collapsed="true"] .reference-app-shell {
     grid-template-columns: 64px minmax(0, 1fr);
   }

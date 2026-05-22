@@ -24,6 +24,7 @@ vi.mock("@/components/theme-toggle", () => ({
 import {
   activeNavKey,
   resolveLastReportDate,
+  resolveLastReviewDate,
 } from "@/components/reports/reference-shell";
 
 const root = process.cwd();
@@ -89,6 +90,16 @@ describe("authenticated app shell loading boundaries", () => {
       "2026-05-20",
     );
     expect(resolveLastReportDate("/", null, null)).toBeNull();
+  });
+
+  it("prefers the review route date before falling back to the saved review date", () => {
+    expect(resolveLastReviewDate("/review", "2026-05-19", "2026-05-18")).toBe(
+      "2026-05-19",
+    );
+    expect(resolveLastReviewDate("/admin", null, "2026-05-18")).toBe(
+      "2026-05-18",
+    );
+    expect(resolveLastReviewDate("/review", null, null)).toBeNull();
   });
 
   it("keeps desktop scrolling inside the page content pane", () => {

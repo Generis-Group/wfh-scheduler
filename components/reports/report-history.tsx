@@ -34,7 +34,11 @@ import {
 } from "@/components/reports/summary-renderer";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
-import { reportDayEnd, todayDateString } from "@/lib/dates";
+import {
+  clampReportDateToToday,
+  reportDayEnd,
+  todayDateString,
+} from "@/lib/dates";
 import { cn, titleCase } from "@/lib/utils";
 
 type HistoryActivity = {
@@ -266,6 +270,7 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
   const [page, setPage] = useState(1);
   const datePickerRef = useRef<HTMLDivElement | null>(null);
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
+  const maxReportDate = todayDateString();
 
   useDismissableLayer({
     open: datePickerOpen,
@@ -370,7 +375,7 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
   }
 
   function openReportDate(date: string) {
-    window.location.href = `/?date=${date}`;
+    window.location.href = `/?date=${clampReportDateToToday(date)}`;
   }
 
   function openNewReport() {
@@ -560,7 +565,14 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
                         <Input
                           type="date"
                           value={fromDate}
-                          onChange={(event) => setFromDate(event.target.value)}
+                          max={maxReportDate}
+                          onChange={(event) =>
+                            setFromDate(
+                              event.target.value
+                                ? clampReportDateToToday(event.target.value)
+                                : "",
+                            )
+                          }
                           className="mt-1 h-10"
                         />
                       </label>
@@ -569,8 +581,13 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
                         <Input
                           type="date"
                           value={toDateValue}
+                          max={maxReportDate}
                           onChange={(event) =>
-                            setToDateValue(event.target.value)
+                            setToDateValue(
+                              event.target.value
+                                ? clampReportDateToToday(event.target.value)
+                                : "",
+                            )
                           }
                           className="mt-1 h-10"
                         />

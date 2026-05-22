@@ -15,6 +15,7 @@ import {
   Download,
   Edit3,
   FileText,
+  Loader2,
   Mail,
   MessageSquare,
   Search,
@@ -30,7 +31,12 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
-import { reportDayEnd } from "@/lib/dates";
+import {
+  addReportDateDays,
+  clampReportDateToToday,
+  reportDayEnd,
+  todayDateString,
+} from "@/lib/dates";
 import { cn, initials, titleCase } from "@/lib/utils";
 
 type DashboardUser = {
@@ -88,6 +94,7 @@ type Row = {
 
 type EmployeeStatusFilter = "ALL" | "SUBMITTED" | "MISSING";
 type EmployeeRowStatus = DashboardReport["status"] | "MISSING";
+type PendingDateControl = "previous" | "next" | "picker";
 type EmployeeSortKey =
   | "employee"
   | "department"
@@ -695,7 +702,14 @@ export function ReviewerDashboard({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
+  const [pendingDateControl, setPendingDateControl] =
+    useState<PendingDateControl | null>(null);
   const pendingDateRef = useRef<string | null>(null);
+  const dateInputRef = useRef<HTMLInputElement | null>(null);
+  const maxReportDate = todayDateString();
+  const currentReviewDate = dateInputValue(date);
+  const canGoToNextReviewDate = currentReviewDate < maxReportDate;
+  const dateNavigationPending = pendingDateControl !== null;
 
   const departmentOptions = useMemo(() => {
     return [
@@ -779,7 +793,23 @@ export function ReviewerDashboard({
     setSelectedReportIds([]);
     setPage(1);
     pendingDateRef.current = null;
+    setPendingDateControl(null);
   }, [date, rows]);
+
+  useEffect(() => {
+    if (!pendingDateControl) {
+      return;
+    }
+
+    const fallbackTimer = window.setTimeout(() => {
+      pendingDateRef.current = null;
+      setPendingDateControl(null);
+    }, 15000);
+
+    return () => {
+      window.clearTimeout(fallbackTimer);
+    };
+  }, [pendingDateControl]);
 
   useEffect(() => {
     const storedControls = readEmployeeTableControls();
@@ -826,17 +856,54 @@ export function ReviewerDashboard({
     setPage(1);
   }, [departmentFilter, search, sortState, statusFilter]);
 
-  function goToDate(nextDate: string) {
-    if (!nextDate || nextDate === dateInputValue(date)) {
+  function goToDate(
+    nextDate: string,
+    control: PendingDateControl = "picker",
+  ) {
+    if (!nextDate) {
       return;
     }
 
-    if (pendingDateRef.current === nextDate) {
+    const targetDate = clampReportDateToToday(nextDate);
+
+    if (targetDate === currentReviewDate) {
       return;
     }
 
-    pendingDateRef.current = nextDate;
-    router.push(`/review?date=${nextDate}`);
+    if (pendingDateRef.current === targetDate) {
+      return;
+    }
+
+    pendingDateRef.current = targetDate;
+    setPendingDateControl(control);
+    router.push(`/review?date=${targetDate}`);
+  }
+
+  function openReviewDatePicker() {
+    const input = dateInputRef.current;
+
+    if (!input) {
+      return;
+    }
+
+    if (typeof input.showPicker === "function") {
+      try {
+        input.showPicker();
+        return;
+      } catch {
+        // Fall through to the focus/click fallback.
+      }
+    }
+
+    input.focus();
+    input.click();
+  }
+
+  function goToRelativeReviewDate(days: number) {
+    goToDate(
+      addReportDateDays(currentReviewDate, days),
+      days < 0 ? "previous" : "next",
+    );
   }
 
   function downloadCsv() {
@@ -1082,22 +1149,64 @@ export function ReviewerDashboard({
 
           <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="relative flex h-10 w-full min-w-[210px] cursor-pointer items-center gap-2 rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] min-[560px]:w-[230px] dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55]">
-                <CalendarDays className="mr-2 h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
-                <span className="min-w-0 truncate">
-                  {formatShortDate(date)}
-                </span>
+              <div className="relative grid h-10 w-full min-w-[210px] grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] gap-1 min-[560px]:w-[270px]">
+                <button
+                  type="button"
+                  className="flex h-10 w-10 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#0b1523] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:hover:text-foreground"
+                  aria-label="Previous day"
+                  onClick={() => goToRelativeReviewDate(-1)}
+                  disabled={dateNavigationPending}
+                >
+                  {pendingDateControl === "previous" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ChevronLeft className="h-4 w-4" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="flex h-10 min-w-0 cursor-pointer items-center gap-2 rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-70 dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55] dark:hover:bg-white/5"
+                  onClick={openReviewDatePicker}
+                  aria-label="Open review date picker"
+                  disabled={dateNavigationPending}
+                >
+                  {pendingDateControl === "picker" ? (
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#475467] dark:text-muted-foreground" />
+                  ) : (
+                    <CalendarDays className="h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
+                  )}
+                  <span className="min-w-0 truncate">
+                    {formatShortDate(date)}
+                  </span>
+                </button>
+                {canGoToNextReviewDate ? (
+                  <button
+                    type="button"
+                    className="flex h-10 w-10 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#0b1523] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:hover:text-foreground"
+                    aria-label="Next day"
+                    onClick={() => goToRelativeReviewDate(1)}
+                    disabled={dateNavigationPending}
+                  >
+                    {pendingDateControl === "next" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </button>
+                ) : (
+                  <span aria-hidden="true" />
+                )}
                 <Input
+                  ref={dateInputRef}
                   type="date"
-                  value={dateInputValue(date)}
-                  className="absolute inset-0 h-full w-full cursor-pointer border-0 bg-transparent opacity-0"
-                  onInput={(event) =>
-                    goToDate((event.currentTarget as HTMLInputElement).value)
-                  }
+                  value={currentReviewDate}
+                  max={maxReportDate}
+                  className="pointer-events-none absolute left-1/2 top-1/2 h-px w-px -translate-x-1/2 -translate-y-1/2 border-0 p-0 opacity-0"
                   onChange={(event) => goToDate(event.target.value)}
+                  disabled={dateNavigationPending}
                   aria-label="Select report date"
                 />
-              </label>
+              </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 <Button

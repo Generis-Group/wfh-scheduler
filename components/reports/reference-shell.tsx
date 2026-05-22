@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ElementType, MouseEvent, ReactNode } from "react";
 import {
   BarChart3,
@@ -20,10 +20,6 @@ import {
   Users,
 } from "lucide-react";
 
-import {
-  PageLoadingSkeleton,
-  loadingKindFromHref,
-} from "@/components/reports/page-loading-skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
 import {
@@ -33,6 +29,7 @@ import {
   serverDataFreshEvent,
   serverDataStaleEvent,
 } from "@/lib/client-cache-invalidation";
+import { clampReportDateToToday } from "@/lib/dates";
 import { cn, initials } from "@/lib/utils";
 import generisLogo from "@/images/Generis_logo.png";
 
@@ -42,6 +39,11 @@ type NavItem = {
   icon: ElementType;
   key: string;
   prefetch: "eager" | "intent";
+};
+
+type RememberedDates = {
+  lastReportDate?: string | null;
+  lastReviewDate?: string | null;
 };
 
 const employeeNav: NavItem[] = [
@@ -116,8 +118,11 @@ export function ReferenceAppShell({
   const active = activeNavKey(pathname);
   const [profileOpen, setProfileOpen] = useState(false);
   const [lastReportDate, setLastReportDate] = useState<string | null>(null);
-  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [lastReviewDate, setLastReviewDate] = useState<string | null>(null);
   const [optimisticActive, setOptimisticActive] = useState(active);
+  const [navigationPendingHref, setNavigationPendingHref] = useState<
+    string | null
+  >(null);
   const [serverDataVersion, setServerDataVersion] = useState(0);
   const [freshServerDataVersion, setFreshServerDataVersion] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -125,9 +130,14 @@ export function ReferenceAppShell({
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const prefetchedHrefsRef = useRef<Set<string>>(new Set());
   const currentHref = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
-  const logoHref = variant === "admin" ? "/review" : "/";
+  const rememberedDates = useMemo(
+    () => ({ lastReportDate, lastReviewDate }),
+    [lastReportDate, lastReviewDate],
+  );
+  const logoHref = getLogoHref(variant, lastReviewDate);
   const mobileLogoHref = logoHref;
   const hasStalePrefetchedData = serverDataVersion !== freshServerDataVersion;
+  const navigationPending = navigationPendingHref !== null;
 
   useDismissableLayer({
     open: profileOpen,
@@ -172,17 +182,58 @@ export function ReferenceAppShell({
     );
 
     if (routeReportDate) {
-      window.localStorage.setItem("generis.lastReportDate", routeReportDate);
+      window.localStorage.setItem(
+        "generis.lastReportDate",
+        clampReportDateToToday(routeReportDate),
+      );
     }
 
     setLastReportDate(nextReportDate);
   }, [pathname, searchParams, variant]);
 
   useEffect(() => {
-    setPendingHref(null);
+    if (variant !== "admin") {
+      return;
+    }
+
+    const routeReviewDate =
+      pathname === "/review" ? searchParams?.get("date") : null;
+    const storedDate = window.localStorage.getItem("generis.lastReviewDate");
+    const nextReviewDate = resolveLastReviewDate(
+      pathname,
+      routeReviewDate,
+      storedDate,
+    );
+
+    if (routeReviewDate) {
+      window.localStorage.setItem(
+        "generis.lastReviewDate",
+        clampReportDateToToday(routeReviewDate),
+      );
+    }
+
+    setLastReviewDate(nextReviewDate);
+  }, [pathname, searchParams, variant]);
+
+  useEffect(() => {
+    setNavigationPendingHref(null);
     setOptimisticActive(active);
     resetContentScroll(contentScrollRef.current);
   }, [active, pathname, searchParams]);
+
+  useEffect(() => {
+    if (!navigationPendingHref) {
+      return;
+    }
+
+    const fallbackTimer = window.setTimeout(() => {
+      setNavigationPendingHref(null);
+    }, 10000);
+
+    return () => {
+      window.clearTimeout(fallbackTimer);
+    };
+  }, [navigationPendingHref]);
 
   useEffect(() => {
     function syncServerDataVersions() {
@@ -211,7 +262,7 @@ export function ReferenceAppShell({
       mobileLogoHref,
       ...nav
         .filter((item) => item.prefetch === "eager")
-        .map((item) => getNavHref(item, lastReportDate)),
+        .map((item) => getNavHref(item, rememberedDates)),
     ];
 
     hrefs.forEach((href) => {
@@ -222,8 +273,8 @@ export function ReferenceAppShell({
   }, [
     currentHref,
     hasStalePrefetchedData,
-    lastReportDate,
     logoHref,
+    rememberedDates,
     mobileLogoHref,
     nav,
     prefetchRoute,
@@ -269,11 +320,11 @@ export function ReferenceAppShell({
           return;
         }
 
-        setPendingHref(href);
         resetContentScroll(contentScrollRef.current);
         if (activeKey) {
           setOptimisticActive(activeKey);
         }
+        setNavigationPendingHref(href);
         setProfileOpen(false);
 
         if (hasStalePrefetchedData) {
@@ -374,7 +425,7 @@ export function ReferenceAppShell({
         >
           {nav.map((item) => {
             const Icon = item.icon;
-            const href = getNavHref(item, lastReportDate);
+            const href = getNavHref(item, rememberedDates);
 
             return (
               <Link
@@ -429,7 +480,7 @@ export function ReferenceAppShell({
               <nav className="hidden h-full items-center gap-1 md:flex">
                 {nav.map((item) => {
                   const Icon = item.icon;
-                  const href = getNavHref(item, lastReportDate);
+                  const href = getNavHref(item, rememberedDates);
 
                   return (
                     <Link
@@ -532,7 +583,7 @@ export function ReferenceAppShell({
           <nav className="flex h-11 items-center gap-2 overflow-x-auto px-[clamp(14px,1.7vw,26px)] shadow-[0_-1px_0_rgba(15,23,42,0.04)] dark:shadow-[0_-1px_0_rgba(255,255,255,0.04)] md:hidden">
             {nav.map((item) => {
               const Icon = item.icon;
-              const href = getNavHref(item, lastReportDate);
+              const href = getNavHref(item, rememberedDates);
 
               return (
                 <Link
@@ -555,24 +606,44 @@ export function ReferenceAppShell({
         </header>
         <div
           ref={contentScrollRef}
+          aria-busy={navigationPending}
           className="reference-content-scroll min-w-0 flex-1 lg:min-h-0 lg:overflow-y-auto"
         >
-          {pendingHref ? (
-            <PageLoadingSkeleton
-              kind={loadingKindFromHref(pendingHref, variant)}
-            />
-          ) : (
-            children
-          )}
+          {children}
         </div>
       </div>
+      {navigationPending ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-x-0 top-0 z-[80] h-0.5 overflow-hidden"
+        >
+          <div className="reference-route-progress-bar h-full w-1/3 rounded-r-full bg-[#2563eb] shadow-[0_0_14px_rgba(37,99,235,0.45)] dark:bg-[#60a5fa]" />
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function getNavHref(item: NavItem, lastReportDate?: string | null) {
-  if (item.key === "report" && lastReportDate) {
-    return `/?date=${lastReportDate}`;
+function getLogoHref(
+  variant: "employee" | "admin",
+  lastReviewDate?: string | null,
+) {
+  if (variant === "admin") {
+    return lastReviewDate
+      ? `/review?date=${clampReportDateToToday(lastReviewDate)}`
+      : "/review";
+  }
+
+  return "/";
+}
+
+function getNavHref(item: NavItem, dates: RememberedDates) {
+  if (item.key === "report" && dates.lastReportDate) {
+    return `/?date=${clampReportDateToToday(dates.lastReportDate)}`;
+  }
+
+  if (item.key === "review" && dates.lastReviewDate) {
+    return `/review?date=${clampReportDateToToday(dates.lastReviewDate)}`;
   }
 
   return item.href;
@@ -614,10 +685,22 @@ export function resolveLastReportDate(
   storedReportDate?: string | null,
 ) {
   if ((pathname || "/") === "/" && routeReportDate) {
-    return routeReportDate;
+    return clampReportDateToToday(routeReportDate);
   }
 
-  return storedReportDate ?? null;
+  return storedReportDate ? clampReportDateToToday(storedReportDate) : null;
+}
+
+export function resolveLastReviewDate(
+  pathname: string | null,
+  routeReviewDate?: string | null,
+  storedReviewDate?: string | null,
+) {
+  if ((pathname || "/") === "/review" && routeReviewDate) {
+    return clampReportDateToToday(routeReviewDate);
+  }
+
+  return storedReviewDate ? clampReportDateToToday(storedReviewDate) : null;
 }
 
 export function ReferencePanel({

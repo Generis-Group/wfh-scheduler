@@ -1,12 +1,18 @@
 import { z } from "zod";
 
 import { generisEmailMessage, isGenerisEmail } from "@/lib/auth-domain";
+import { isFutureReportDateString } from "@/lib/dates";
 
-export const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.");
+export const dateStringSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.")
+  .refine((date) => !isFutureReportDateString(date), {
+    message: "Future dates are not available.",
+  });
 
 export const reportQuerySchema = z.object({
   date: dateStringSchema,
-  userId: z.string().optional()
+  userId: z.string().optional(),
 });
 
 export const updateReportSchema = z.object({
@@ -20,8 +26,8 @@ export const updateReportSchema = z.object({
       z.object({
         id: z.string(),
         selected: z.boolean().optional(),
-        employeeNote: z.string().max(4000).nullable().optional()
-      })
+        employeeNote: z.string().max(4000).nullable().optional(),
+      }),
     )
     .optional(),
   deletedActivityIds: z.array(z.string()).optional(),
@@ -31,25 +37,31 @@ export const updateReportSchema = z.object({
         title: z.string().min(1).max(300),
         description: z.string().max(4000).nullable().optional(),
         status: z.string().max(100).nullable().optional(),
-        durationMinutes: z.number().int().min(0).max(1440).nullable().optional(),
+        durationMinutes: z
+          .number()
+          .int()
+          .min(0)
+          .max(1440)
+          .nullable()
+          .optional(),
         startedAt: z.string().datetime().nullable().optional(),
         endedAt: z.string().datetime().nullable().optional(),
-        employeeNote: z.string().max(4000).nullable().optional()
-      })
+        employeeNote: z.string().max(4000).nullable().optional(),
+      }),
     )
-    .optional()
+    .optional(),
 });
 
 export const createReportSchema = updateReportSchema.extend({
-  date: dateStringSchema
+  date: dateStringSchema,
 });
 
 export const commentSchema = z.object({
-  body: z.string().min(1).max(4000)
+  body: z.string().min(1).max(4000),
 });
 
 export const reportReadStateSchema = z.object({
-  read: z.boolean()
+  read: z.boolean(),
 });
 
 export const createUserSchema = z.object({
@@ -59,7 +71,7 @@ export const createUserSchema = z.object({
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).default("INVITED"),
   temporaryPassword: z.string().min(8).optional(),
   reviewerAllDepartments: z.boolean().optional(),
-  departmentIds: z.array(z.string()).optional()
+  departmentIds: z.array(z.string()).optional(),
 });
 
 export const updateUserSchema = z.object({
@@ -67,20 +79,20 @@ export const updateUserSchema = z.object({
   role: z.enum(["EMPLOYEE", "REVIEWER", "ADMIN"]).optional(),
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).optional(),
   reviewerAllDepartments: z.boolean().optional(),
-  departmentIds: z.array(z.string()).optional()
+  departmentIds: z.array(z.string()).optional(),
 });
 
 export const createDepartmentSchema = z.object({
-  name: z.string().min(1).max(120)
+  name: z.string().min(1).max(120),
 });
 
 export const resetPasswordSchema = z.object({
-  temporaryPassword: z.string().min(8).optional()
+  temporaryPassword: z.string().min(8).optional(),
 });
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8).max(200)
+  newPassword: z.string().min(8).max(200),
 });
 
 export const accountProfileSchema = z.object({
@@ -92,31 +104,31 @@ export const accountProfileSchema = z.object({
         .string()
         .max(350_000)
         .regex(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/),
-      z.string().url().max(2000)
+      z.string().url().max(2000),
     ])
     .nullable()
-    .optional()
+    .optional(),
 });
 
 export const companySettingsSchema = z.object({
-  jiraProjectKeys: z.array(z.string().min(1)).default([])
+  jiraProjectKeys: z.array(z.string().min(1)).default([]),
 });
 
 export const userIntegrationSettingsSchema = z.object({
   jiraCloudId: z.string().nullable().optional(),
   googleCalendarId: z.string().min(1).optional(),
-  googleTaskListIds: z.array(z.string()).optional()
+  googleTaskListIds: z.array(z.string()).optional(),
 });
 
 export const syncSchema = z.object({
-  date: dateStringSchema
+  date: dateStringSchema,
 });
 
 export const reviewDigestSchema = z.object({
   date: dateStringSchema,
   filters: z
     .object({
-      search: z.string().max(200).optional()
+      search: z.string().max(200).optional(),
     })
-    .optional()
+    .optional(),
 });

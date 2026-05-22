@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { DailyReportApp } from "@/components/reports/daily-report-app";
 import { auth } from "@/lib/auth";
-import { todayDateString } from "@/lib/dates";
+import { clampReportDateToToday } from "@/lib/dates";
 import { getOAuthProviderConfig } from "@/lib/oauth-config";
 import { prisma } from "@/lib/prisma";
 import { serialize } from "@/lib/serializers";
@@ -33,7 +33,13 @@ export default async function HomePage({
     redirect("/review");
   }
 
-  const date = searchParams?.date ?? todayDateString();
+  const requestedDate = searchParams?.date;
+  const date = clampReportDateToToday(requestedDate);
+
+  if (requestedDate && requestedDate !== date) {
+    redirect(`/?date=${date}`);
+  }
+
   const [{ report, activities }, accounts] = await Promise.all([
     getDailyReportEditorData(session.user.id, date),
     prisma.account.findMany({

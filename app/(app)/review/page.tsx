@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { ReviewerDashboard } from "@/components/reports/reviewer-dashboard";
 import { auth } from "@/lib/auth";
-import { todayDateString } from "@/lib/dates";
+import { clampReportDateToToday } from "@/lib/dates";
 import { serialize } from "@/lib/serializers";
 import { getReviewDashboardData } from "@/lib/services/reports";
 
@@ -31,7 +31,13 @@ export default async function ReviewPage({
     redirect("/");
   }
 
-  const date = searchParams?.date ?? todayDateString();
+  const requestedDate = searchParams?.date;
+  const date = clampReportDateToToday(requestedDate);
+
+  if (requestedDate && requestedDate !== date) {
+    redirect(`/review?date=${date}`);
+  }
+
   const scope = { userId: session.user.id, role: session.user.role };
   const { rows, metrics } = await getReviewDashboardData(date, scope);
 

@@ -42,6 +42,11 @@ import {
   markServerDataStale,
   refreshStaleServerData,
 } from "@/lib/client-cache-invalidation";
+import {
+  addReportDateDays,
+  clampReportDateToToday,
+  todayDateString,
+} from "@/lib/dates";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
 import {
@@ -157,6 +162,8 @@ type AutoDraftSnapshot = {
   signature: string;
   hasMeaningfulContent: boolean;
 };
+
+type PendingDateControl = "previous" | "next" | "picker";
 
 function toDate(value?: string | Date | null) {
   if (!value) {
@@ -387,11 +394,14 @@ export function DailyReportApp({
   const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
   const [importingProvider, setImportingProvider] =
     useState<SyncProviderKey | null>(null);
+  const [pendingDateControl, setPendingDateControl] =
+    useState<PendingDateControl | null>(null);
   const [activityPage, setActivityPage] = useState(1);
   const [activitySearch, setActivitySearch] = useState("");
   const summaryEditorRef = useRef<SummaryEditorHandle>(null);
   const importMenuRef = useRef<HTMLDivElement | null>(null);
   const activityMenuRef = useRef<HTMLDivElement | null>(null);
+  const dateInputRef = useRef<HTMLInputElement | null>(null);
   const autoSaveTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef<Promise<Report | null> | null>(null);
   const saveGenerationRef = useRef(0);
@@ -459,7 +469,22 @@ export function DailyReportApp({
     setAutoSaveStatus("saved");
     setActivityPage(1);
     setActivitySearch("");
+    setPendingDateControl(null);
   }, [initialReport, date, reportDate]);
+
+  useEffect(() => {
+    if (!pendingDateControl) {
+      return;
+    }
+
+    const fallbackTimer = window.setTimeout(() => {
+      setPendingDateControl(null);
+    }, 15000);
+
+    return () => {
+      window.clearTimeout(fallbackTimer);
+    };
+  }, [pendingDateControl]);
 
   function setActivity(id: string, patch: Partial<Activity>) {
     setActivities((items) =>
@@ -987,10 +1012,11 @@ export function DailyReportApp({
     : "Submitting...";
   const statusIndicatorLabel = isPublishedReport ? "Published" : "Draft";
   const StatusIndicatorIcon = isPublishedReport ? CheckCircle2 : PenLine;
-  const importStatusLabel = importingProvider
-    ? `Importing ${syncProviderLabels[importingProvider].toLowerCase()}...`
-    : "Import";
-  const isBusy = busyAction !== null || isImporting;
+  const dateNavigationPending = pendingDateControl !== null;
+  const isBusy = busyAction !== null || isImporting || dateNavigationPending;
+  const dateControlsDisabled = isBusy;
+  const maxReportDate = todayDateString();
+  const canGoToNextReportDate = reportDate < maxReportDate;
   const selectedCount = activities.filter(
     (activity) => activity.selected,
   ).length;
@@ -1079,14 +1105,19 @@ export function DailyReportApp({
     };
   }, [currentDraftSignature, report.id, report.status]);
 
-  async function goToReportDate(nextDate: string) {
+  async function goToReportDate(
+    nextDate: string,
+    control: PendingDateControl = "picker",
+  ) {
     if (!nextDate) {
       return;
     }
 
-    if (nextDate === reportDate) {
+    const targetDate = clampReportDateToToday(nextDate);
+
+    if (targetDate === reportDate) {
       refreshStaleServerData(router);
-      router.push(`/?date=${nextDate}`);
+      router.push(`/?date=${targetDate}`);
       return;
     }
 
@@ -1094,17 +1125,47 @@ export function DailyReportApp({
       return;
     }
 
+    setPendingDateControl(control);
+
     const snapshot = latestDraftRef.current;
     const needsSave = snapshot ? shouldAutoSaveSnapshot(snapshot) : false;
     const saved = await flushAutoDraftSave();
 
     if (needsSave && !saved) {
+      setPendingDateControl(null);
       setMessage("Save failed. Stay on this date and try again.");
       return;
     }
 
     refreshStaleServerData(router);
-    router.push(`/?date=${nextDate}`);
+    router.push(`/?date=${targetDate}`);
+  }
+
+  function openReportDatePicker() {
+    const input = dateInputRef.current;
+
+    if (!input) {
+      return;
+    }
+
+    if (typeof input.showPicker === "function") {
+      try {
+        input.showPicker();
+        return;
+      } catch {
+        // Fall through to the focus/click fallback.
+      }
+    }
+
+    input.focus();
+    input.click();
+  }
+
+  function goToRelativeReportDate(days: number) {
+    void goToReportDate(
+      addReportDateDays(reportDate, days),
+      days < 0 ? "previous" : "next",
+    );
   }
 
   const menuActivity = openActivityMenu
@@ -1156,17 +1217,62 @@ export function DailyReportApp({
 
         <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
           <div className="grid gap-2 min-[900px]:grid-cols-[minmax(320px,430px)_minmax(180px,220px)_minmax(190px,240px)] min-[900px]:items-center min-[900px]:justify-between">
-            <label className="relative flex h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-[7px] bg-white px-4 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]">
-              <CalendarDays className="h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
-              <span className="truncate">{formatReportDate(date)}</span>
+            <div className="relative grid h-10 min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] gap-1">
+              <button
+                type="button"
+                className="flex h-10 w-10 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#101d2e] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:hover:text-foreground"
+                aria-label="Previous day"
+                onClick={() => goToRelativeReportDate(-1)}
+                disabled={dateControlsDisabled}
+              >
+                {pendingDateControl === "previous" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ChevronLeft className="h-4 w-4" />
+                )}
+              </button>
+              <button
+                type="button"
+                className="flex h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-[7px] bg-white px-4 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-70 dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55] dark:hover:bg-white/5"
+                onClick={openReportDatePicker}
+                aria-label="Open report date picker"
+                disabled={dateControlsDisabled}
+              >
+                {pendingDateControl === "picker" ? (
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#475467] dark:text-muted-foreground" />
+                ) : (
+                  <CalendarDays className="h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
+                )}
+                <span className="truncate">{formatReportDate(date)}</span>
+              </button>
+              {canGoToNextReportDate ? (
+                <button
+                  type="button"
+                  className="flex h-10 w-10 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#101d2e] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:hover:text-foreground"
+                  aria-label="Next day"
+                  onClick={() => goToRelativeReportDate(1)}
+                  disabled={dateControlsDisabled}
+                >
+                  {pendingDateControl === "next" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </button>
+              ) : (
+                <span aria-hidden="true" />
+              )}
               <Input
+                ref={dateInputRef}
                 type="date"
                 value={reportDate}
+                max={maxReportDate}
                 onChange={(event) => void goToReportDate(event.target.value)}
-                className="absolute inset-0 h-full cursor-pointer border-0 bg-transparent opacity-0"
+                disabled={dateControlsDisabled}
+                className="pointer-events-none absolute left-1/2 top-1/2 h-px w-px -translate-x-1/2 -translate-y-1/2 border-0 p-0 opacity-0"
                 aria-label="Select report date"
               />
-            </label>
+            </div>
 
             <label className="flex min-h-10 w-full items-center gap-3 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]">
               <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
@@ -1246,10 +1352,11 @@ export function DailyReportApp({
                   ) : (
                     <Download className="mr-2 h-4 w-4" />
                   )}
-                  {importStatusLabel}
-                  {!isImporting ? (
-                    <ChevronDown className="ml-2 h-4 w-4" />
-                  ) : null}
+                  Import
+                  <ChevronDown
+                    className={cn("ml-2 h-4 w-4", isImporting && "opacity-0")}
+                    aria-hidden="true"
+                  />
                 </Button>
                 {importMenuOpen ? (
                   <div className="absolute right-0 top-12 z-30 w-64 rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">

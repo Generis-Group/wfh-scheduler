@@ -7,6 +7,34 @@ export function todayDateString(timezone = DEFAULT_TIMEZONE) {
   return formatInTimeZone(new Date(), timezone, "yyyy-MM-dd");
 }
 
+export function isFutureReportDateString(
+  value?: string | null,
+  timezone = DEFAULT_TIMEZONE,
+) {
+  return Boolean(
+    value &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    value > todayDateString(timezone),
+  );
+}
+
+export function clampReportDateToToday(
+  value?: string | null,
+  timezone = DEFAULT_TIMEZONE,
+) {
+  const today = todayDateString(timezone);
+
+  if (!value || isFutureReportDateString(value, timezone)) {
+    return today;
+  }
+
+  return value;
+}
+
+export function addReportDateDays(value: string, days: number) {
+  return inputDate(addDays(parseReportDate(value), days));
+}
+
 export function parseReportDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new Error("Expected date in YYYY-MM-DD format.");
@@ -46,7 +74,10 @@ export function zonedDayRange(dateString: string, timezone = DEFAULT_TIMEZONE) {
   return { start, end };
 }
 
-export function reportDayEnd(value: string | Date, timezone = DEFAULT_TIMEZONE) {
+export function reportDayEnd(
+  value: string | Date,
+  timezone = DEFAULT_TIMEZONE,
+) {
   return zonedDayRange(reportDateKey(value), timezone).end;
 }
 

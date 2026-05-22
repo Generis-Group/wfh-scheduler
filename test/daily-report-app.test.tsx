@@ -11,8 +11,9 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { mockRouterPush, mockSignIn } = vi.hoisted(() => ({
+const { mockRouterPush, mockRouterRefresh, mockSignIn } = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
+  mockRouterRefresh: vi.fn(),
   mockSignIn: vi.fn(),
 }));
 
@@ -20,6 +21,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: mockRouterPush,
     prefetch: vi.fn(),
+    refresh: mockRouterRefresh,
   }),
   usePathname: () => "/",
   useSearchParams: () => new URLSearchParams(),
@@ -384,6 +386,21 @@ describe("DailyReportApp auto-draft", () => {
     await flushReact();
     expect(screen.getByText("Save failed")).toBeTruthy();
     expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it("shows immediate feedback while date navigation is pending", async () => {
+    renderDailyReportApp(savedDraft);
+
+    const previousDayButton = screen.getByRole("button", {
+      name: "Previous day",
+    });
+    fireEvent.click(previousDayButton);
+
+    expect(previousDayButton.querySelector(".animate-spin")).toBeTruthy();
+
+    await waitFor(() => {
+      expect(mockRouterPush).toHaveBeenCalledWith("/?date=2026-05-19");
+    });
   });
 
   it("creates a draft before submitting a new report", async () => {
