@@ -86,6 +86,27 @@ type Row = {
   report: DashboardReport | null;
 };
 
+type EmployeeStatusFilter = "ALL" | "SUBMITTED" | "MISSING";
+type EmployeeRowStatus = DashboardReport["status"] | "MISSING";
+type EmployeeSortKey =
+  | "employee"
+  | "department"
+  | "status"
+  | "flags"
+  | "location"
+  | "submitted";
+type SortDirection = "asc" | "desc";
+type EmployeeSortState = {
+  key: EmployeeSortKey;
+  direction: SortDirection;
+};
+type EmployeeTableControls = {
+  search: string;
+  departmentFilter: string;
+  statusFilter: EmployeeStatusFilter;
+  sortState: EmployeeSortState;
+};
+
 type Metrics = {
   users: number;
   submitted: number;
@@ -359,6 +380,293 @@ function dashboardFlags(row: Row, date: string) {
   return flags;
 }
 
+function employeeLabel(row: Row) {
+  return row.user.name ?? row.user.email ?? "Employee";
+}
+
+function employeeStatusFilterValue(row: Row): EmployeeRowStatus {
+  if (!row.report) {
+    return "MISSING";
+  }
+
+  return row.report.status;
+}
+
+function submittedSortValue(row: Row) {
+  return toDate(row.report?.submittedAt)?.getTime() ?? null;
+}
+
+function attentionSortRank(row: Row) {
+  if (!row.report) {
+    return 0;
+  }
+
+  if (row.report.status === "DRAFT") {
+    return 1;
+  }
+
+  return 2;
+}
+
+function compareText(first: string, second: string, direction: SortDirection) {
+  const delta = first.localeCompare(second, undefined, {
+    sensitivity: "base",
+  });
+  return direction === "asc" ? delta : -delta;
+}
+
+function compareSubmittedRows(
+  first: Row,
+  second: Row,
+  direction: SortDirection,
+) {
+  const firstSubmitted = submittedSortValue(first);
+  const secondSubmitted = submittedSortValue(second);
+
+  if (firstSubmitted === null && secondSubmitted !== null) {
+    return 1;
+  }
+
+  if (firstSubmitted !== null && secondSubmitted === null) {
+    return -1;
+  }
+
+  if (firstSubmitted === null || secondSubmitted === null) {
+    return 0;
+  }
+
+  return direction === "asc"
+    ? firstSubmitted - secondSubmitted
+    : secondSubmitted - firstSubmitted;
+}
+
+function flagSortLabel(row: Row, date: string) {
+  return dashboardFlags(row, date)
+    .map((flag) => flag.label)
+    .join(", ");
+}
+
+function locationSortLabel(row: Row) {
+  return row.report ? titleCase(row.report.workLocation) : "";
+}
+
+function compareEmployeeRows(
+  first: Row,
+  second: Row,
+  date: string,
+  sortState: EmployeeSortState,
+) {
+  let delta = 0;
+
+  if (sortState.key === "employee") {
+    delta = compareText(
+      employeeLabel(first),
+      employeeLabel(second),
+      sortState.direction,
+    );
+  } else if (sortState.key === "department") {
+    delta = compareText(
+      userDepartmentLabel(first.user),
+      userDepartmentLabel(second.user),
+      sortState.direction,
+    );
+  } else if (sortState.key === "status") {
+    delta =
+      (attentionSortRank(first) - attentionSortRank(second)) *
+      (sortState.direction === "asc" ? 1 : -1);
+  } else if (sortState.key === "flags") {
+    delta = compareText(
+      flagSortLabel(first, date),
+      flagSortLabel(second, date),
+      sortState.direction,
+    );
+  } else if (sortState.key === "location") {
+    delta = compareText(
+      locationSortLabel(first),
+      locationSortLabel(second),
+      sortState.direction,
+    );
+  } else {
+    delta = compareSubmittedRows(first, second, sortState.direction);
+  }
+
+  return (
+    delta ||
+    employeeLabel(first).localeCompare(employeeLabel(second), undefined, {
+      sensitivity: "base",
+    }) ||
+    first.user.id.localeCompare(second.user.id)
+  );
+}
+
+const statusFilterOptions: Array<{
+  value: EmployeeStatusFilter;
+  label: string;
+}> = [
+  { value: "ALL", label: "All" },
+  { value: "SUBMITTED", label: "Submitted" },
+  { value: "MISSING", label: "Missing" },
+];
+
+const employeeSortKeys: EmployeeSortKey[] = [
+  "employee",
+  "department",
+  "status",
+  "flags",
+  "location",
+  "submitted",
+];
+const sortDirections: SortDirection[] = ["asc", "desc"];
+const employeeTableControlsStorageKey = "generis.reviewer.employeeReports";
+
+const defaultEmployeeSortState: EmployeeSortState = {
+  key: "employee",
+  direction: "asc",
+};
+
+function isEmployeeStatusFilter(value: unknown): value is EmployeeStatusFilter {
+  return (
+    typeof value === "string" &&
+    statusFilterOptions.some((option) => option.value === value)
+  );
+}
+
+function isEmployeeSortState(value: unknown): value is EmployeeSortState {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const sortState = value as Record<string, unknown>;
+  return (
+    typeof sortState.key === "string" &&
+    employeeSortKeys.includes(sortState.key as EmployeeSortKey) &&
+    typeof sortState.direction === "string" &&
+    sortDirections.includes(sortState.direction as SortDirection)
+  );
+}
+
+function isDefaultEmployeeTableControls(controls: EmployeeTableControls) {
+  return (
+    controls.search.trim().length === 0 &&
+    controls.departmentFilter === "ALL" &&
+    controls.statusFilter === "ALL" &&
+    controls.sortState.key === defaultEmployeeSortState.key &&
+    controls.sortState.direction === defaultEmployeeSortState.direction
+  );
+}
+
+function readEmployeeTableControls() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(
+      employeeTableControlsStorageKey,
+    );
+
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsedValue = JSON.parse(rawValue) as Record<string, unknown>;
+
+    if (!parsedValue || typeof parsedValue !== "object") {
+      return null;
+    }
+
+    return {
+      search: typeof parsedValue.search === "string" ? parsedValue.search : "",
+      departmentFilter:
+        typeof parsedValue.departmentFilter === "string"
+          ? parsedValue.departmentFilter
+          : "ALL",
+      statusFilter: isEmployeeStatusFilter(parsedValue.statusFilter)
+        ? parsedValue.statusFilter
+        : "ALL",
+      sortState: isEmployeeSortState(parsedValue.sortState)
+        ? parsedValue.sortState
+        : defaultEmployeeSortState,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeEmployeeTableControls(controls: EmployeeTableControls) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    if (isDefaultEmployeeTableControls(controls)) {
+      window.localStorage.removeItem(employeeTableControlsStorageKey);
+      return;
+    }
+
+    window.localStorage.setItem(
+      employeeTableControlsStorageKey,
+      JSON.stringify(controls),
+    );
+  } catch {
+    // Persistence should never block the dashboard controls.
+  }
+}
+
+function sortAriaValue(
+  sortState: EmployeeSortState,
+  sortKey: EmployeeSortKey,
+): "ascending" | "descending" | "none" {
+  if (sortState.key !== sortKey) {
+    return "none";
+  }
+
+  return sortState.direction === "asc" ? "ascending" : "descending";
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  sortState,
+  onSort,
+}: {
+  label: string;
+  sortKey: EmployeeSortKey;
+  sortState: EmployeeSortState;
+  onSort: (sortKey: EmployeeSortKey) => void;
+}) {
+  const active = sortState.key === sortKey;
+  const nextDirection = active
+    ? sortState.direction === "asc"
+      ? "descending"
+      : "ascending"
+    : sortKey === "submitted"
+      ? "descending"
+      : "ascending";
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        "-ml-1 inline-flex max-w-full items-center gap-1 rounded-[6px] px-1 py-0.5 text-left font-semibold uppercase tracking-[0.02em] text-inherit transition-colors hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:hover:text-foreground",
+        active && "text-[#1d4ed8] dark:text-[#93c5fd]",
+      )}
+      onClick={() => onSort(sortKey)}
+      aria-label={`Sort by ${label} ${nextDirection}`}
+    >
+      <span className="truncate">{label}</span>
+      <ChevronDown
+        className={cn(
+          "h-3 w-3 shrink-0 transition-[opacity,transform]",
+          active ? "opacity-100" : "opacity-0",
+          sortState.direction === "asc" && "rotate-180",
+        )}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
+
 export function ReviewerDashboard({
   rows,
   metrics: _metrics,
@@ -378,22 +686,53 @@ export function ReviewerDashboard({
   const [notice, setNotice] = useState<string | null>(null);
   const [isSendingDigest, setIsSendingDigest] = useState(false);
   const [search, setSearch] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState<EmployeeStatusFilter>("ALL");
+  const [sortState, setSortState] = useState<EmployeeSortState>(
+    defaultEmployeeSortState,
+  );
+  const [hasLoadedTableControls, setHasLoadedTableControls] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
   const pendingDateRef = useRef<string | null>(null);
 
+  const departmentOptions = useMemo(() => {
+    return [
+      ...new Set(
+        items
+          .filter((row) => row.user.role === "EMPLOYEE")
+          .map((row) => userDepartmentLabel(row.user)),
+      ),
+    ].sort((first, second) => first.localeCompare(second));
+  }, [items]);
+
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return items.filter((row) => {
-      const employee =
-        `${row.user.name ?? ""} ${row.user.email ?? ""}`.toLowerCase();
-      const matchesSearch = !query || employee.includes(query);
+    return items
+      .filter((row) => {
+        const employee =
+          `${row.user.name ?? ""} ${row.user.email ?? ""}`.toLowerCase();
+        const matchesSearch = !query || employee.includes(query);
+        const matchesDepartment =
+          departmentFilter === "ALL" ||
+          userDepartmentLabel(row.user) === departmentFilter;
+        const matchesStatus =
+          statusFilter === "ALL" ||
+          employeeStatusFilterValue(row) === statusFilter;
 
-      return matchesSearch && row.user.role === "EMPLOYEE";
-    });
-  }, [items, search]);
+        return (
+          row.user.role === "EMPLOYEE" &&
+          matchesSearch &&
+          matchesDepartment &&
+          matchesStatus
+        );
+      })
+      .sort((first, second) =>
+        compareEmployeeRows(first, second, date, sortState),
+      );
+  }, [date, departmentFilter, items, search, sortState, statusFilter]);
 
   const pageCount = Math.max(1, Math.ceil(filteredItems.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -427,6 +766,12 @@ export function ReviewerDashboard({
     (row) => editedAfterDate(row.report, date) || isLate(row.report, date),
   ).length;
   const coverage = total ? Math.round((submitted / total) * 100) : 0;
+  const hasActiveTableControls =
+    search.trim().length > 0 ||
+    departmentFilter !== "ALL" ||
+    statusFilter !== "ALL" ||
+    sortState.key !== defaultEmployeeSortState.key ||
+    sortState.direction !== defaultEmployeeSortState.direction;
 
   useEffect(() => {
     setItems(rows);
@@ -435,6 +780,51 @@ export function ReviewerDashboard({
     setPage(1);
     pendingDateRef.current = null;
   }, [date, rows]);
+
+  useEffect(() => {
+    const storedControls = readEmployeeTableControls();
+
+    if (storedControls) {
+      setSearch(storedControls.search);
+      setDepartmentFilter(storedControls.departmentFilter);
+      setStatusFilter(storedControls.statusFilter);
+      setSortState(storedControls.sortState);
+    }
+
+    setHasLoadedTableControls(true);
+  }, []);
+
+  useEffect(() => {
+    if (
+      departmentFilter !== "ALL" &&
+      !departmentOptions.includes(departmentFilter)
+    ) {
+      setDepartmentFilter("ALL");
+    }
+  }, [departmentFilter, departmentOptions]);
+
+  useEffect(() => {
+    if (!hasLoadedTableControls) {
+      return;
+    }
+
+    writeEmployeeTableControls({
+      search,
+      departmentFilter,
+      statusFilter,
+      sortState,
+    });
+  }, [
+    departmentFilter,
+    hasLoadedTableControls,
+    search,
+    sortState,
+    statusFilter,
+  ]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [departmentFilter, search, sortState, statusFilter]);
 
   function goToDate(nextDate: string) {
     if (!nextDate || nextDate === dateInputValue(date)) {
@@ -516,6 +906,29 @@ export function ReviewerDashboard({
 
       return [...new Set([...current, ...visibleReportIds])];
     });
+  }
+
+  function clearTableControls() {
+    setSearch("");
+    setDepartmentFilter("ALL");
+    setStatusFilter("ALL");
+    setSortState(defaultEmployeeSortState);
+    setPage(1);
+  }
+
+  function toggleEmployeeSort(sortKey: EmployeeSortKey) {
+    setSortState((current) => ({
+      key: sortKey,
+      direction:
+        current.key === sortKey
+          ? current.direction === "asc"
+            ? "desc"
+            : "asc"
+          : sortKey === "submitted"
+            ? "desc"
+            : "asc",
+    }));
+    setPage(1);
   }
 
   function openReport(row: Row) {
@@ -670,10 +1083,10 @@ export function ReviewerDashboard({
           <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="relative flex h-10 w-full min-w-[210px] cursor-pointer items-center gap-2 rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] min-[560px]:w-[230px] dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55]">
-                  <CalendarDays className="mr-2 h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
-                  <span className="min-w-0 truncate">
-                    {formatShortDate(date)}
-                  </span>
+                <CalendarDays className="mr-2 h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
+                <span className="min-w-0 truncate">
+                  {formatShortDate(date)}
+                </span>
                 <Input
                   type="date"
                   value={dateInputValue(date)}
@@ -739,16 +1152,8 @@ export function ReviewerDashboard({
 
               <div className="flex flex-wrap items-center gap-2">
                 <CompactMetric label="Unread" value={unread} tone="blue" />
-                <CompactMetric
-                  label="Blockers"
-                  value={blockers}
-                  tone="red"
-                />
-                <CompactMetric
-                  label="Late"
-                  value={lateEdits}
-                  tone="purple"
-                />
+                <CompactMetric label="Blockers" value={blockers} tone="red" />
+                <CompactMetric label="Late" value={lateEdits} tone="purple" />
               </div>
             </div>
           </section>
@@ -777,7 +1182,7 @@ export function ReviewerDashboard({
               </div>
 
               <div className="flex w-full flex-wrap items-center gap-2 min-[760px]:w-auto">
-                <label className="relative flex h-9 min-w-0 flex-1 items-center rounded-[7px] bg-white text-sm shadow-none ring-1 ring-[#dfe4ee] min-[560px]:w-[300px] min-[560px]:flex-none dark:bg-[#0b1523] dark:ring-[#263a55]">
+                <label className="relative flex h-9 min-w-0 flex-1 items-center rounded-[7px] bg-white text-sm shadow-none ring-1 ring-[#dfe4ee] min-[560px]:w-[260px] min-[560px]:flex-none dark:bg-[#0b1523] dark:ring-[#263a55]">
                   <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#667085]" />
                   <Input
                     value={search}
@@ -791,6 +1196,50 @@ export function ReviewerDashboard({
                   />
                 </label>
 
+                <Select
+                  value={departmentFilter}
+                  onChange={(event) => setDepartmentFilter(event.target.value)}
+                  className="h-9 w-full rounded-[7px] bg-white text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] min-[560px]:w-[180px] dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55]"
+                  aria-label="Filter by department"
+                >
+                  <option value="ALL">All departments</option>
+                  {departmentOptions.map((department) => (
+                    <option key={department} value={department}>
+                      {department}
+                    </option>
+                  ))}
+                </Select>
+
+                <div
+                  className="grid h-9 w-full grid-cols-3 rounded-[7px] bg-white p-0.5 ring-1 ring-[#dfe4ee] min-[560px]:w-auto dark:bg-[#0b1523] dark:ring-[#263a55]"
+                  aria-label="Filter by report status"
+                  role="group"
+                >
+                  {statusFilterOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn(
+                        "rounded-[6px] px-2 text-xs font-semibold text-[#64748b] transition-colors hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:text-foreground",
+                        statusFilter === option.value &&
+                          "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#93c5fd]",
+                      )}
+                      onClick={() => setStatusFilter(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+
+                {hasActiveTableControls ? (
+                  <button
+                    type="button"
+                    className="h-9 rounded-[7px] px-2 text-xs font-semibold text-[#64748b] transition-colors hover:bg-[#f1f5f9] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+                    onClick={clearTableControls}
+                  >
+                    Clear
+                  </button>
+                ) : null}
               </div>
             </div>
             <div className="overflow-x-auto px-3">
@@ -808,12 +1257,72 @@ export function ReviewerDashboard({
                         aria-label="Select visible reports"
                       />
                     </th>
-                    <th className="w-[22%] px-2 py-2">Employee</th>
-                    <th className="w-[14%] px-2 py-2">Department</th>
-                    <th className="w-[10%] px-2 py-2">Status</th>
-                    <th className="w-[18%] px-2 py-2">Flags</th>
-                    <th className="w-[10%] px-2 py-2">Location</th>
-                    <th className="w-[14%] px-2 py-2">Submitted</th>
+                    <th
+                      className="w-[22%] px-2 py-2"
+                      aria-sort={sortAriaValue(sortState, "employee")}
+                    >
+                      <SortableHeader
+                        label="Employee"
+                        sortKey="employee"
+                        sortState={sortState}
+                        onSort={toggleEmployeeSort}
+                      />
+                    </th>
+                    <th
+                      className="w-[14%] px-2 py-2"
+                      aria-sort={sortAriaValue(sortState, "department")}
+                    >
+                      <SortableHeader
+                        label="Department"
+                        sortKey="department"
+                        sortState={sortState}
+                        onSort={toggleEmployeeSort}
+                      />
+                    </th>
+                    <th
+                      className="w-[10%] px-2 py-2"
+                      aria-sort={sortAriaValue(sortState, "status")}
+                    >
+                      <SortableHeader
+                        label="Status"
+                        sortKey="status"
+                        sortState={sortState}
+                        onSort={toggleEmployeeSort}
+                      />
+                    </th>
+                    <th
+                      className="w-[18%] px-2 py-2"
+                      aria-sort={sortAriaValue(sortState, "flags")}
+                    >
+                      <SortableHeader
+                        label="Flags"
+                        sortKey="flags"
+                        sortState={sortState}
+                        onSort={toggleEmployeeSort}
+                      />
+                    </th>
+                    <th
+                      className="w-[10%] px-2 py-2"
+                      aria-sort={sortAriaValue(sortState, "location")}
+                    >
+                      <SortableHeader
+                        label="Location"
+                        sortKey="location"
+                        sortState={sortState}
+                        onSort={toggleEmployeeSort}
+                      />
+                    </th>
+                    <th
+                      className="w-[14%] px-2 py-2"
+                      aria-sort={sortAriaValue(sortState, "submitted")}
+                    >
+                      <SortableHeader
+                        label="Submitted"
+                        sortKey="submitted"
+                        sortState={sortState}
+                        onSort={toggleEmployeeSort}
+                      />
+                    </th>
                     <th className="w-[10%] px-2 py-2 text-center">Action</th>
                   </tr>
                 </thead>
