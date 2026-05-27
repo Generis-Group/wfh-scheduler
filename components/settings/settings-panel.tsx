@@ -22,6 +22,7 @@ import {
 } from "@/components/account/account-settings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FixedToast } from "@/components/ui/fixed-toast";
 import {
   Card,
@@ -365,276 +366,275 @@ export function SettingsPanel({
   return (
     <>
       <main className="reference-page">
-      <div className="mb-5">
-        <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
-          <span className="text-[#2563eb]">Settings</span>
-          <span className="text-[#98a2b3]">/</span>
-          <span className="text-[#475467] dark:text-muted-foreground">
-            {activeSectionConfig.label}
-          </span>
-        </div>
-        <h1 className="reference-title">Settings</h1>
-        <p className="reference-subtitle">
-          Manage your account, integrations, and reporting preferences.
-        </p>
-      </div>
-
-      <nav
-        className="mb-6 flex gap-6 overflow-x-auto border-b border-[#d9e1ec] dark:border-[#263a55]"
-        aria-label="Settings categories"
-      >
-        {settingsSections.map((section) => {
-          const Icon = section.icon;
-          const isActive = activeSection === section.id;
-
-          return (
-            <button
-              key={section.id}
-              type="button"
-              className={cn(
-                "flex shrink-0 items-center gap-2 border-b-2 px-2 pb-3 text-sm font-semibold transition-colors",
-                isActive
-                  ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#bfdbfe]"
-                  : "border-transparent text-[#475467] hover:text-[#111827] dark:text-muted-foreground dark:hover:text-foreground",
-              )}
-              aria-current={isActive ? "page" : undefined}
-              onClick={() => selectSection(section.id)}
-            >
-              <Icon className="h-[18px] w-[18px]" />
-              {section.label}
-            </button>
-          );
-        })}
-      </nav>
-
-      {activeSection === "account" ? (
-        <AccountSettings user={user} embedded />
-      ) : null}
-
-      {activeSection === "integrations" ? (
-        <section className="min-w-0 space-y-4">
-          <div className="grid min-w-0 gap-4 min-[980px]:grid-cols-2">
-            <ProviderCard
-              title="Atlassian Jira"
-              description="Issues, worklogs, and changelogs become report activity."
-              logo={<JiraLogo className="h-8 w-8" />}
-              connected={connectionState.atlassian}
-              configured={atlassianConfigured}
-              configMessage="Add ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET to enable Jira sign-in."
-              error={providerErrors?.atlassian}
-              connectLabel={
-                connectionState.atlassian ? "Reconnect Jira" : "Connect Jira"
-              }
-              isDisconnecting={disconnectingProvider === "atlassian"}
-              disabled={disconnectingProvider !== null}
-              onConnect={() => connect("atlassian")}
-              onDisconnect={() => disconnect("atlassian")}
-            >
-              <div className="min-w-0 space-y-2">
-                <Label>Jira cloud site</Label>
-                <Select
-                  value={settings.jiraCloudId ?? ""}
-                  onChange={(event) =>
-                    setSettings((current) => ({
-                      ...current,
-                      jiraCloudId: event.target.value || null,
-                    }))
-                  }
-                  disabled={
-                    !connectionState.atlassian ||
-                    metadataLoading.atlassian ||
-                    jiraResources.length === 0
-                  }
-                >
-                  <option value="">Auto-select first available site</option>
-                  {jiraResources.map((resource) => (
-                    <option key={resource.id} value={resource.id}>
-                      {resource.name}
-                    </option>
-                  ))}
-                </Select>
-                {metadataLoading.atlassian ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-3.5 w-48 rounded-[4px]" />
-                    <Skeleton className="h-3.5 w-32 rounded-[4px]" />
-                  </div>
-                ) : (
-                  <p className="text-xs text-[#64748b]">
-                    {selectedJiraSite
-                      ? `Selected site: ${selectedJiraSite.name}`
-                      : "Connect Jira to select a cloud site."}
-                  </p>
-                )}
-              </div>
-            </ProviderCard>
-
-            <ProviderCard
-              title="Google Workspace"
-              description="Calendar and Tasks activity can be imported into daily reports."
-              logo={<GoogleWorkspaceLogo className="h-8 w-8" />}
-              connected={connectionState.google}
-              configured={googleConfigured}
-              configMessage="Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable Google sign-in."
-              error={providerErrors?.google}
-              connectLabel={
-                connectionState.google ? "Reconnect Google" : "Connect Google"
-              }
-              isDisconnecting={disconnectingProvider === "google"}
-              disabled={disconnectingProvider !== null}
-              onConnect={() => connect("google")}
-              onDisconnect={() => disconnect("google")}
-            >
-              <div className="min-w-0 space-y-2">
-                <Label htmlFor="calendarId">Calendar ID</Label>
-                <Input
-                  id="calendarId"
-                  value={settings.googleCalendarId}
-                  onChange={(event) =>
-                    setSettings((current) => ({
-                      ...current,
-                      googleCalendarId: event.target.value || "primary",
-                    }))
-                  }
-                />
-                <p className="text-xs text-[#64748b]">
-                  Use `primary` unless a separate calendar should feed reports.
-                </p>
-              </div>
-            </ProviderCard>
+        <div className="mb-5">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
+            <span className="text-[#2563eb]">Settings</span>
+            <span className="text-[#98a2b3]">/</span>
+            <span className="text-[#475467] dark:text-muted-foreground">
+              {activeSectionConfig.label}
+            </span>
           </div>
+          <h1 className="reference-title">Settings</h1>
+          <p className="reference-subtitle">
+            Manage your account, integrations, and reporting preferences.
+          </p>
+        </div>
 
-          <Card
-            className={cn(
-              "overflow-hidden transition-opacity",
-              googleTasksDisabled && "opacity-55 grayscale",
-            )}
-            aria-disabled={googleTasksDisabled}
-          >
-            <CardContent className="p-5">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="flex min-w-0 items-start gap-4">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
-                    <GoogleTasksLogo className="h-8 w-8" />
+        <nav
+          className="mb-6 flex gap-6 overflow-x-auto border-b border-[#d9e1ec] dark:border-[#263a55]"
+          aria-label="Settings categories"
+        >
+          {settingsSections.map((section) => {
+            const Icon = section.icon;
+            const isActive = activeSection === section.id;
+
+            return (
+              <button
+                key={section.id}
+                type="button"
+                className={cn(
+                  "flex shrink-0 items-center gap-2 border-b-2 px-2 pb-3 text-sm font-semibold transition-colors",
+                  isActive
+                    ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#bfdbfe]"
+                    : "border-transparent text-[#475467] hover:text-[#111827] dark:text-muted-foreground dark:hover:text-foreground",
+                )}
+                aria-current={isActive ? "page" : undefined}
+                onClick={() => selectSection(section.id)}
+              >
+                <Icon className="h-[18px] w-[18px]" />
+                {section.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {activeSection === "account" ? (
+          <AccountSettings user={user} embedded />
+        ) : null}
+
+        {activeSection === "integrations" ? (
+          <section className="min-w-0 space-y-4">
+            <div className="grid min-w-0 gap-4 min-[980px]:grid-cols-2">
+              <ProviderCard
+                title="Atlassian Jira"
+                description="Issues, worklogs, and changelogs become report activity."
+                logo={<JiraLogo className="h-8 w-8" />}
+                connected={connectionState.atlassian}
+                configured={atlassianConfigured}
+                configMessage="Add ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET to enable Jira sign-in."
+                error={providerErrors?.atlassian}
+                connectLabel={
+                  connectionState.atlassian ? "Reconnect Jira" : "Connect Jira"
+                }
+                isDisconnecting={disconnectingProvider === "atlassian"}
+                disabled={disconnectingProvider !== null}
+                onConnect={() => connect("atlassian")}
+                onDisconnect={() => disconnect("atlassian")}
+              >
+                <div className="min-w-0 space-y-2">
+                  <Label>Jira cloud site</Label>
+                  <Select
+                    value={settings.jiraCloudId ?? ""}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        jiraCloudId: event.target.value || null,
+                      }))
+                    }
+                    disabled={
+                      !connectionState.atlassian ||
+                      metadataLoading.atlassian ||
+                      jiraResources.length === 0
+                    }
+                  >
+                    <option value="">Auto-select first available site</option>
+                    {jiraResources.map((resource) => (
+                      <option key={resource.id} value={resource.id}>
+                        {resource.name}
+                      </option>
+                    ))}
+                  </Select>
+                  {metadataLoading.atlassian ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-3.5 w-48 rounded-[4px]" />
+                      <Skeleton className="h-3.5 w-32 rounded-[4px]" />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[#64748b]">
+                      {selectedJiraSite
+                        ? `Selected site: ${selectedJiraSite.name}`
+                        : "Connect Jira to select a cloud site."}
+                    </p>
+                  )}
+                </div>
+              </ProviderCard>
+
+              <ProviderCard
+                title="Google Workspace"
+                description="Calendar and Tasks activity can be imported into daily reports."
+                logo={<GoogleWorkspaceLogo className="h-8 w-8" />}
+                connected={connectionState.google}
+                configured={googleConfigured}
+                configMessage="Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable Google sign-in."
+                error={providerErrors?.google}
+                connectLabel={
+                  connectionState.google ? "Reconnect Google" : "Connect Google"
+                }
+                isDisconnecting={disconnectingProvider === "google"}
+                disabled={disconnectingProvider !== null}
+                onConnect={() => connect("google")}
+                onDisconnect={() => disconnect("google")}
+              >
+                <div className="min-w-0 space-y-2">
+                  <Label htmlFor="calendarId">Calendar ID</Label>
+                  <Input
+                    id="calendarId"
+                    value={settings.googleCalendarId}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        googleCalendarId: event.target.value || "primary",
+                      }))
+                    }
+                  />
+                  <p className="text-xs text-[#64748b]">
+                    Use `primary` unless a separate calendar should feed
+                    reports.
+                  </p>
+                </div>
+              </ProviderCard>
+            </div>
+
+            <Card
+              className={cn(
+                "overflow-hidden transition-opacity",
+                googleTasksDisabled && "opacity-55 grayscale",
+              )}
+              aria-disabled={googleTasksDisabled}
+            >
+              <CardContent className="p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex min-w-0 items-start gap-4">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+                      <GoogleTasksLogo className="h-8 w-8" />
+                    </span>
+                    <div className="min-w-0">
+                      <CardTitle className="text-[18px]">
+                        Google Tasks import
+                      </CardTitle>
+                      <CardDescription>
+                        Choose which Google Tasks lists are eligible for daily
+                        reports.
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 bg-[#f4f7fb] text-[#475569]"
+                  >
+                    {settings.googleTaskListIds.length === 0
+                      ? "All lists"
+                      : `${settings.googleTaskListIds.length} selected`}
+                  </Badge>
+                </div>
+
+                <div className="mt-4 grid max-h-52 min-w-0 gap-2 overflow-y-auto rounded-[8px] border border-[#dfe7f2] bg-white p-2 dark:border-[#263a55] dark:bg-[#0b1523]">
+                  {metadataLoading.google ? (
+                    <>
+                      <Skeleton className="h-10 rounded-[6px]" />
+                      <Skeleton className="h-10 rounded-[6px]" />
+                      <Skeleton className="h-10 rounded-[6px]" />
+                      <Skeleton className="h-10 rounded-[6px]" />
+                    </>
+                  ) : taskLists.length === 0 ? (
+                    <p className="col-span-full px-2 py-3 text-sm text-[#64748b]">
+                      {providerErrors?.google
+                        ? "Reconnect Google to load task lists."
+                        : connectionState.google
+                          ? "No task lists found. Empty selection imports all lists."
+                          : "Connect Google to load task lists. Empty selection imports all lists."}
+                    </p>
+                  ) : (
+                    taskLists.map((list) => (
+                      <label
+                        key={list.id}
+                        className="flex h-11 items-center justify-between gap-3 rounded-[7px] bg-[#f8fafc] px-3 text-sm ring-1 ring-[#e6ebf3] transition-colors hover:bg-[#f3f8ff] dark:bg-white/[0.03] dark:ring-[#263a55] dark:hover:bg-white/[0.06]"
+                      >
+                        <span className="min-w-0 truncate font-medium text-[#334155]">
+                          {list.title}
+                        </span>
+                        <Checkbox
+                          className="h-4 w-4"
+                          checked={selectedTaskLists.has(list.id)}
+                          disabled={googleTasksDisabled}
+                          onChange={(event) =>
+                            toggleTaskList(list.id, event.target.checked)
+                          }
+                        />
+                      </label>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        ) : null}
+
+        {activeSection === "company" && canManageCompanySettings ? (
+          <section className="space-y-4">
+            <SectionHeading
+              icon={Users}
+              title="Company"
+              description="Shared rules used by reviewer/admin workflows."
+            />
+            <Card>
+              <CardHeader className="px-5 py-5">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+                    <Users className="h-5 w-5" />
                   </span>
-                  <div className="min-w-0">
+                  <div>
                     <CardTitle className="text-[18px]">
-                      Google Tasks import
+                      Company Controls
                     </CardTitle>
                     <CardDescription>
-                      Choose which Google Tasks lists are eligible for daily
-                      reports.
+                      Shared rules used by reviewer/admin workflows.
                     </CardDescription>
                   </div>
                 </div>
-                <Badge
-                  variant="outline"
-                  className="shrink-0 bg-[#f4f7fb] text-[#475569]"
-                >
-                  {settings.googleTaskListIds.length === 0
-                    ? "All lists"
-                    : `${settings.googleTaskListIds.length} selected`}
-                </Badge>
-              </div>
-
-              <div className="mt-4 grid max-h-52 min-w-0 gap-2 overflow-y-auto rounded-[8px] border border-[#dfe7f2] bg-white p-2 dark:border-[#263a55] dark:bg-[#0b1523]">
-                {metadataLoading.google ? (
-                  <>
-                    <Skeleton className="h-10 rounded-[6px]" />
-                    <Skeleton className="h-10 rounded-[6px]" />
-                    <Skeleton className="h-10 rounded-[6px]" />
-                    <Skeleton className="h-10 rounded-[6px]" />
-                  </>
-                ) : taskLists.length === 0 ? (
-                  <p className="col-span-full px-2 py-3 text-sm text-[#64748b]">
-                    {providerErrors?.google
-                      ? "Reconnect Google to load task lists."
-                      : connectionState.google
-                        ? "No task lists found. Empty selection imports all lists."
-                        : "Connect Google to load task lists. Empty selection imports all lists."}
-                  </p>
-                ) : (
-                  taskLists.map((list) => (
-                    <label
-                      key={list.id}
-                      className="flex h-11 items-center justify-between gap-3 rounded-[7px] bg-[#f8fafc] px-3 text-sm ring-1 ring-[#e6ebf3] transition-colors hover:bg-[#f3f8ff] dark:bg-white/[0.03] dark:ring-[#263a55] dark:hover:bg-white/[0.06]"
+              </CardHeader>
+              <CardContent className="px-5 pb-5">
+                <form className="space-y-4" onSubmit={saveCompanySettings}>
+                  <div className="space-y-2">
+                    <Label htmlFor="jira-projects">Jira project filters</Label>
+                    <Input
+                      id="jira-projects"
+                      value={jiraProjectsInput}
+                      onChange={(event) =>
+                        setJiraProjectsInput(event.target.value)
+                      }
+                      placeholder="GEN, OPS"
+                      disabled={!canManageCompanySettings}
+                    />
+                    <p className="text-xs text-[#64748b]">
+                      Leave empty to import matching Jira activity from every
+                      accessible project.
+                    </p>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      className="bg-[#2563eb] hover:bg-[#1d4ed8]"
+                      disabled={isSavingCompany}
                     >
-                      <span className="min-w-0 truncate font-medium text-[#334155]">
-                        {list.title}
-                      </span>
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 shrink-0 rounded border-[#cbd5e1] accent-[#2563eb]"
-                        checked={selectedTaskLists.has(list.id)}
-                        disabled={googleTasksDisabled}
-                        onChange={(event) =>
-                          toggleTaskList(list.id, event.target.checked)
-                        }
-                      />
-                    </label>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-        </section>
-      ) : null}
-
-      {activeSection === "company" && canManageCompanySettings ? (
-        <section className="space-y-4">
-          <SectionHeading
-            icon={Users}
-            title="Company"
-            description="Shared rules used by reviewer/admin workflows."
-          />
-          <Card>
-            <CardHeader className="px-5 py-5">
-              <div className="flex items-start gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
-                  <Users className="h-5 w-5" />
-                </span>
-                <div>
-                  <CardTitle className="text-[18px]">
-                    Company Controls
-                  </CardTitle>
-                  <CardDescription>
-                    Shared rules used by reviewer/admin workflows.
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="px-5 pb-5">
-              <form className="space-y-4" onSubmit={saveCompanySettings}>
-                <div className="space-y-2">
-                  <Label htmlFor="jira-projects">Jira project filters</Label>
-                  <Input
-                    id="jira-projects"
-                    value={jiraProjectsInput}
-                    onChange={(event) =>
-                      setJiraProjectsInput(event.target.value)
-                    }
-                    placeholder="GEN, OPS"
-                    disabled={!canManageCompanySettings}
-                  />
-                  <p className="text-xs text-[#64748b]">
-                    Leave empty to import matching Jira activity from every
-                    accessible project.
-                  </p>
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    className="bg-[#2563eb] hover:bg-[#1d4ed8]"
-                    disabled={isSavingCompany}
-                  >
-                    <Save className="mr-2 h-4 w-4" />
-                    {isSavingCompany ? "Saving..." : "Save company settings"}
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </section>
-      ) : null}
+                      <Save className="mr-2 h-4 w-4" />
+                      {isSavingCompany ? "Saving..." : "Save company settings"}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </section>
+        ) : null}
       </main>
       <FixedToast message={message} onDismiss={() => setMessage(null)} />
     </>

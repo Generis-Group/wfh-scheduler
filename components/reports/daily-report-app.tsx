@@ -14,27 +14,24 @@ import type { DragEvent, MouseEvent } from "react";
 import { flushSync } from "react-dom";
 import { signIn } from "next-auth/react";
 import {
-  CalendarDays,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronsRight,
   Copy,
   Download,
   Edit3,
   ExternalLink,
   Loader2,
   MoreHorizontal,
-  PenLine,
   Plus,
-  Search,
   Send,
   Trash2,
   X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
 import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
@@ -43,22 +40,31 @@ import {
   ReferenceBadge,
 } from "@/components/reports/reference-shell";
 import {
+  ReportDateSwitcher,
+  type ReportDateControl,
+} from "@/components/reports/report-date-switcher";
+import {
+  formatReportDuration,
+  reportActivitySourceLabel,
+  ReportActivitySourceIcon,
+  ReportPageHeader,
+  ReportSearchField,
+  ReportStatusBadge,
+  ReportSurface,
+} from "@/components/reports/report-ui";
+import {
   SummaryEditor,
   summaryActivityReferenceDragType,
   type SummaryActivityReferenceDragPayload,
   type SummaryEditorHandle,
   type SummarySnapshot,
 } from "@/components/reports/summary-editor";
-import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
+import { dateOnlyString } from "@/lib/date-only";
 import {
   markServerDataStale,
   refreshStaleServerData,
 } from "@/lib/client-cache-invalidation";
-import {
-  addReportDateDays,
-  clampReportDateToToday,
-  todayDateString,
-} from "@/lib/dates";
+import { clampReportDateToToday, todayDateString } from "@/lib/dates";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
 import {
@@ -111,20 +117,6 @@ type IntegrationStatus = {
   atlassian: boolean;
 };
 
-const sourceLabels: Record<ActivitySource, string> = {
-  JIRA: "Jira",
-  GOOGLE_CALENDAR: "Google Calendar",
-  GOOGLE_TASKS: "Google Tasks",
-  MANUAL: "Manual",
-};
-
-const sourceStyles: Record<ActivitySource, string> = {
-  JIRA: "bg-[#2563eb]",
-  GOOGLE_CALENDAR: "bg-[#facc15]",
-  GOOGLE_TASKS: "bg-white border border-[#2563eb] dark:bg-[#0b1523]",
-  MANUAL: "bg-white border border-[#2563eb] dark:bg-[#0b1523]",
-};
-
 const syncProviderLabels = {
   jira: "Jira",
   "google-calendar": "Calendar",
@@ -139,9 +131,6 @@ const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
   { value: "PTO", label: "PTO" },
   { value: "OUT_OF_OFFICE", label: "Out of office" },
 ];
-
-const dateNavButtonClassName =
-  "flex h-8 w-8 items-center justify-center rounded-[6px] text-[#667085] transition-colors hover:bg-[#eef2f7] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#667085] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground dark:disabled:hover:bg-transparent dark:disabled:hover:text-muted-foreground";
 
 const activityPageSize = 5;
 const autoSaveDelayMs = 600;
@@ -182,7 +171,6 @@ type AutoDraftSnapshot = {
   hasMeaningfulContent: boolean;
 };
 
-type PendingDateControl = "previous" | "next" | "picker" | "today";
 type GoogleTaskSuggestion = {
   taskId: string;
   taskListId: string;
@@ -251,97 +239,11 @@ function dateInputValue(value: string | Date) {
   return dateOnlyString(value);
 }
 
-function formatReportDate(value: string | Date) {
-  const date = dateOnlyDisplayDate(value);
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
-}
-
-function twoDigit(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function dateStringFromParts(year: number, monthIndex: number, day: number) {
-  return `${year}-${twoDigit(monthIndex + 1)}-${twoDigit(day)}`;
-}
-
-function monthKeyFromDate(value: string | Date) {
-  return dateInputValue(value).slice(0, 7);
-}
-
-function monthDateFromKey(monthKey: string) {
-  return new Date(`${monthKey}-01T12:00:00`);
-}
-
-function addCalendarMonths(monthKey: string, offset: number) {
-  const monthDate = monthDateFromKey(monthKey);
-  const nextMonth = new Date(
-    monthDate.getFullYear(),
-    monthDate.getMonth() + offset,
-    1,
-    12,
-  );
-
-  return dateStringFromParts(
-    nextMonth.getFullYear(),
-    nextMonth.getMonth(),
-    1,
-  ).slice(0, 7);
-}
-
-function calendarDaysForMonth(monthKey: string) {
-  const monthDate = monthDateFromKey(monthKey);
-  const year = monthDate.getFullYear();
-  const monthIndex = monthDate.getMonth();
-  const firstWeekday = new Date(year, monthIndex, 1, 12).getDay();
-  const gridStart = new Date(year, monthIndex, 1 - firstWeekday, 12);
-
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(gridStart);
-    date.setDate(gridStart.getDate() + index);
-
-    return {
-      value: dateStringFromParts(
-        date.getFullYear(),
-        date.getMonth(),
-        date.getDate(),
-      ),
-      day: date.getDate(),
-      inCurrentMonth: date.getMonth() === monthIndex,
-    };
-  });
-}
-
-function formatMonthLabel(monthKey: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    year: "numeric",
-  }).format(monthDateFromKey(monthKey));
-}
-
 function workLocationLabel(value: WorkLocation) {
   return (
     workLocationOptions.find((option) => option.value === value)?.label ??
     "Unspecified"
   );
-}
-
-function formatDuration(minutes?: number | null) {
-  if (!minutes) {
-    return "-";
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const remaining = minutes % 60;
-
-  if (!hours) {
-    return `${remaining}m`;
-  }
-
-  return remaining ? `${hours}h ${remaining}m` : `${hours}h`;
 }
 
 async function responseErrorMessage(response: Response, fallback: string) {
@@ -393,22 +295,6 @@ function setTransparentDragImage(dataTransfer: DataTransfer) {
   canvas.width = 1;
   canvas.height = 1;
   dataTransfer.setDragImage(canvas, 0, 0);
-}
-
-function sourceIcon(source: ActivitySource) {
-  if (source === "GOOGLE_CALENDAR") {
-    return <CalendarDays className="h-3.5 w-3.5 text-[#2563eb]" />;
-  }
-
-  if (source === "GOOGLE_TASKS") {
-    return <CheckCircle2 className="h-3.5 w-3.5 text-[#2563eb]" />;
-  }
-
-  if (source === "MANUAL") {
-    return <PenLine className="h-3.5 w-3.5 text-[#2563eb]" />;
-  }
-
-  return <div className="h-2.5 w-2.5 rotate-45 rounded-[2px] bg-white" />;
 }
 
 function editorSummaryForReport(report: Report) {
@@ -516,15 +402,11 @@ export function DailyReportApp({
   const [message, setMessage] = useState<string | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>("saved");
   const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
-  const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const [datePickerMonth, setDatePickerMonth] = useState(() =>
-    monthKeyFromDate(reportDate),
-  );
   const [locationMenuOpen, setLocationMenuOpen] = useState(false);
   const [importingProvider, setImportingProvider] =
     useState<SyncProviderKey | null>(null);
   const [pendingDateControl, setPendingDateControl] =
-    useState<PendingDateControl | null>(null);
+    useState<ReportDateControl | null>(null);
   const [activityPage, setActivityPage] = useState(1);
   const [activitySearch, setActivitySearch] = useState("");
   const [googleTaskFinderOpen, setGoogleTaskFinderOpen] = useState(false);
@@ -540,12 +422,10 @@ export function DailyReportApp({
   const [activityDragPreview, setActivityDragPreview] =
     useState<ActivityDragPreview | null>(null);
   const summaryEditorRef = useRef<SummaryEditorHandle>(null);
-  const datePickerRef = useRef<HTMLDivElement | null>(null);
   const locationMenuRef = useRef<HTMLDivElement | null>(null);
   const importMenuRef = useRef<HTMLDivElement | null>(null);
   const activityMenuRef = useRef<HTMLDivElement | null>(null);
   const googleTaskSearchAbortRef = useRef<AbortController | null>(null);
-  const dateInputRef = useRef<HTMLInputElement | null>(null);
   const autoSaveTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef<Promise<Report | null> | null>(null);
   const saveGenerationRef = useRef(0);
@@ -563,12 +443,6 @@ export function DailyReportApp({
     open: importMenuOpen,
     refs: [importMenuRef],
     onDismiss: () => setImportMenuOpen(false),
-  });
-
-  useDismissableLayer({
-    open: datePickerOpen,
-    refs: [datePickerRef],
-    onDismiss: () => setDatePickerOpen(false),
   });
 
   useDismissableLayer({
@@ -626,8 +500,6 @@ export function DailyReportApp({
     setOpenActivityMenu(null);
     setRenamingActivity(null);
     setImportMenuOpen(false);
-    setDatePickerOpen(false);
-    setDatePickerMonth(monthKeyFromDate(reportDate));
     setLocationMenuOpen(false);
     setMessage(null);
     setAutoSaveStatus("saved");
@@ -797,27 +669,27 @@ export function DailyReportApp({
     );
   }, []);
 
-  const draftSnapshotFor = useCallback((
-    summaryValue: string,
-    blockersValue: string,
-  ): AutoDraftSnapshot => {
-    const payload = buildReportPayload(
-      summaryValue,
-      blockersValue,
-      workLocation,
-      activities,
-      deletedActivityIds,
-    );
-    const signature = draftPayloadSignature(reportDate, payload);
+  const draftSnapshotFor = useCallback(
+    (summaryValue: string, blockersValue: string): AutoDraftSnapshot => {
+      const payload = buildReportPayload(
+        summaryValue,
+        blockersValue,
+        workLocation,
+        activities,
+        deletedActivityIds,
+      );
+      const signature = draftPayloadSignature(reportDate, payload);
 
-    return {
-      reportId: reportRef.current.id,
-      reportDate,
-      payload,
-      signature,
-      hasMeaningfulContent: hasMeaningfulDraftPayload(payload),
-    };
-  }, [activities, deletedActivityIds, reportDate, workLocation]);
+      return {
+        reportId: reportRef.current.id,
+        reportDate,
+        payload,
+        signature,
+        hasMeaningfulContent: hasMeaningfulDraftPayload(payload),
+      };
+    },
+    [activities, deletedActivityIds, reportDate, workLocation],
+  );
 
   const scheduleAutoDraftSave = useCallback(() => {
     clearAutoDraftTimer();
@@ -946,26 +818,27 @@ export function DailyReportApp({
     };
   }, [openActivityMenu]);
 
-  const captureCurrentDraftSnapshot = useCallback(({
-    syncState = true,
-  }: { syncState?: boolean } = {}) => {
-    const editorSnapshot = summaryEditorRef.current?.getSnapshot();
-    const currentSummary = editorSnapshot?.summary ?? summary;
-    const currentBlockers = editorSnapshot?.blockers ?? blockers;
-    const snapshot = draftSnapshotFor(currentSummary, currentBlockers);
+  const captureCurrentDraftSnapshot = useCallback(
+    ({ syncState = true }: { syncState?: boolean } = {}) => {
+      const editorSnapshot = summaryEditorRef.current?.getSnapshot();
+      const currentSummary = editorSnapshot?.summary ?? summary;
+      const currentBlockers = editorSnapshot?.blockers ?? blockers;
+      const snapshot = draftSnapshotFor(currentSummary, currentBlockers);
 
-    if (
-      syncState &&
-      editorSnapshot &&
-      (currentSummary !== summary || currentBlockers !== blockers)
-    ) {
-      setSummary(currentSummary);
-      setBlockers(currentBlockers);
-    }
+      if (
+        syncState &&
+        editorSnapshot &&
+        (currentSummary !== summary || currentBlockers !== blockers)
+      ) {
+        setSummary(currentSummary);
+        setBlockers(currentBlockers);
+      }
 
-    latestDraftRef.current = snapshot;
-    return snapshot;
-  }, [blockers, draftSnapshotFor, summary]);
+      latestDraftRef.current = snapshot;
+      return snapshot;
+    },
+    [blockers, draftSnapshotFor, summary],
+  );
 
   function applySavedReport(
     nextReport: Report,
@@ -1032,28 +905,33 @@ export function DailyReportApp({
     });
   }
 
-  const draftSaveRequest = useCallback((snapshot: AutoDraftSnapshot): {
-    url: string;
-    init: RequestInit;
-  } => {
-    const reportId = snapshot.reportId || reportRef.current.id;
+  const draftSaveRequest = useCallback(
+    (
+      snapshot: AutoDraftSnapshot,
+    ): {
+      url: string;
+      init: RequestInit;
+    } => {
+      const reportId = snapshot.reportId || reportRef.current.id;
 
-    return {
-      url: reportId ? `/api/reports/${reportId}` : "/api/reports",
-      init: {
-        method: reportId ? "PUT" : "POST",
-        headers: {
-          "Content-Type": "application/json",
-          [autoSaveRequestHeader]: "1",
+      return {
+        url: reportId ? `/api/reports/${reportId}` : "/api/reports",
+        init: {
+          method: reportId ? "PUT" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+            [autoSaveRequestHeader]: "1",
+          },
+          body: JSON.stringify(
+            reportId
+              ? snapshot.payload
+              : { ...snapshot.payload, date: snapshot.reportDate },
+          ),
         },
-        body: JSON.stringify(
-          reportId
-            ? snapshot.payload
-            : { ...snapshot.payload, date: snapshot.reportDate },
-        ),
-      },
-    };
-  }, []);
+      };
+    },
+    [],
+  );
 
   function startAutoDraftSave(
     snapshot: AutoDraftSnapshot,
@@ -1235,7 +1113,9 @@ export function DailyReportApp({
         wasPublished ? "Resubmitted for review." : "Submitted for review.",
       );
     } catch {
-      setMessage("Unable to submit report. Check your connection and try again.");
+      setMessage(
+        "Unable to submit report. Check your connection and try again.",
+      );
     } finally {
       setBusyAction(null);
     }
@@ -1309,7 +1189,9 @@ export function DailyReportApp({
       setAutoSaveStatus("saved");
       setMessage("Draft deleted.");
     } catch {
-      setMessage("Unable to delete draft. Check your connection and try again.");
+      setMessage(
+        "Unable to delete draft. Check your connection and try again.",
+      );
     } finally {
       setBusyAction(null);
     }
@@ -1420,7 +1302,9 @@ export function DailyReportApp({
       setGoogleTaskSearchStatus("idle");
       setMessage("Google Task added to this report.");
     } catch {
-      setMessage("Unable to add Google Task. Check your connection and try again.");
+      setMessage(
+        "Unable to add Google Task. Check your connection and try again.",
+      );
     } finally {
       setAddingGoogleTaskKey(null);
     }
@@ -1506,19 +1390,20 @@ export function DailyReportApp({
     setActivityDragPreview(null);
   }
 
-  const includeDroppedActivityReference = useCallback((
-    payload: SummaryActivityReferenceDragPayload,
-  ) => {
-    if (!payload.activityId) {
-      return;
-    }
+  const includeDroppedActivityReference = useCallback(
+    (payload: SummaryActivityReferenceDragPayload) => {
+      if (!payload.activityId) {
+        return;
+      }
 
-    setActivities((items) =>
-      items.map((item) =>
-        item.id === payload.activityId ? { ...item, selected: true } : item,
-      ),
-    );
-  }, []);
+      setActivities((items) =>
+        items.map((item) =>
+          item.id === payload.activityId ? { ...item, selected: true } : item,
+        ),
+      );
+    },
+    [],
+  );
 
   function openActivitySource(activity: Activity) {
     if (!activity.sourceUrl || activity.sourceUrl === "#") {
@@ -1545,16 +1430,13 @@ export function DailyReportApp({
     ? "Resubmitting..."
     : "Submitting...";
   const statusIndicatorLabel = isPublishedReport ? "Published" : "Draft";
-  const StatusIndicatorIcon = isPublishedReport ? CheckCircle2 : PenLine;
   const dateNavigationPending = pendingDateControl !== null;
   const isBusy =
     busyAction !== null ||
     isImporting ||
     dateNavigationPending ||
     isAddingGoogleTask;
-  const dateControlsDisabled = isBusy;
   const maxReportDate = todayDateString();
-  const canGoToNextReportDate = reportDate < maxReportDate;
   const visibleActivities = useMemo(
     () => activities.filter((activity) => activity.selected),
     [activities],
@@ -1588,8 +1470,8 @@ export function DailyReportApp({
           activity.title,
           activity.description,
           activity.status,
-          sourceLabels[activity.source],
-          formatDuration(activity.durationMinutes),
+          reportActivitySourceLabel(activity.source),
+          formatReportDuration(activity.durationMinutes),
         ]
           .filter(Boolean)
           .join(" ")
@@ -1614,9 +1496,6 @@ export function DailyReportApp({
     (currentActivityPage - 1) * activityPageSize,
     currentActivityPage * activityPageSize,
   );
-  const calendarDays = calendarDaysForMonth(datePickerMonth);
-  const canGoToNextCalendarMonth =
-    addCalendarMonths(datePickerMonth, 1) <= monthKeyFromDate(maxReportDate);
   const selectedWorkLocationLabel = workLocationLabel(workLocation);
   const activityReferences = useMemo(
     () =>
@@ -1669,7 +1548,7 @@ export function DailyReportApp({
 
   async function goToReportDate(
     nextDate: string,
-    control: PendingDateControl = "picker",
+    control: ReportDateControl = "picker",
   ) {
     if (!nextDate) {
       return;
@@ -1705,20 +1584,6 @@ export function DailyReportApp({
     router.push(`/?date=${targetDate}`);
   }
 
-  function openReportDatePicker() {
-    if (dateControlsDisabled) {
-      return;
-    }
-
-    setDatePickerMonth(monthKeyFromDate(reportDate));
-    setDatePickerOpen((open) => !open);
-  }
-
-  function selectReportDate(nextDate: string) {
-    setDatePickerOpen(false);
-    void goToReportDate(nextDate, "picker");
-  }
-
   function selectWorkLocation(nextLocation: WorkLocation) {
     setWorkLocation(nextLocation);
     setLocationMenuOpen(false);
@@ -1732,17 +1597,6 @@ export function DailyReportApp({
     setLocationMenuOpen((open) => !open);
   }
 
-  function goToRelativeReportDate(days: number) {
-    void goToReportDate(
-      addReportDateDays(reportDate, days),
-      days < 0 ? "previous" : "next",
-    );
-  }
-
-  function goToTodayReportDate() {
-    void goToReportDate(maxReportDate, "today");
-  }
-
   const menuActivity = openActivityMenu
     ? activities.find((activity) => activity.id === openActivityMenu.id)
     : null;
@@ -1752,197 +1606,53 @@ export function DailyReportApp({
   return (
     <>
       <main className="reference-page">
-        <div className="mb-3 flex flex-col gap-3 min-[900px]:flex-row min-[900px]:items-center min-[900px]:justify-between">
-          <div>
-            <h1 className="text-[24px] font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">
-              Daily Update
-            </h1>
-            <p className="mt-0.5 text-sm text-[#667085] dark:text-muted-foreground">
-              Share what you worked on today.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {report.id && report.status === "DRAFT" ? (
+        <ReportPageHeader
+          title="Daily Update"
+          description="Share what you worked on today."
+          actions={
+            <>
+              {report.id && report.status === "DRAFT" ? (
+                <Button
+                  variant="outline"
+                  className="h-10 rounded-[8px] bg-white px-4 text-sm font-medium text-[#b42318] shadow-none ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
+                  disabled={isBusy}
+                  onClick={deleteDraft}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
+                  {isDeleting ? "Deleting..." : "Delete draft"}
+                </Button>
+              ) : null}
               <Button
-                variant="outline"
-                className="h-10 rounded-[8px] bg-white px-4 text-sm font-medium text-[#b42318] shadow-none ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
+                className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,0.2)] hover:bg-[#1d4ed8]"
                 disabled={isBusy}
-                onClick={deleteDraft}
+                onClick={submitReport}
               >
-                {isDeleting ? (
+                {isSubmitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <Trash2 className="mr-2 h-4 w-4" />
+                  <Send className="mr-2 h-4 w-4" />
                 )}
-                {isDeleting ? "Deleting..." : "Delete draft"}
+                {isSubmitting ? submitProgressText : submitButtonText}
               </Button>
-            ) : null}
-            <Button
-              className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,0.2)] hover:bg-[#1d4ed8]"
-              disabled={isBusy}
-              onClick={submitReport}
-            >
-              {isSubmitting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="mr-2 h-4 w-4" />
-              )}
-              {isSubmitting ? submitProgressText : submitButtonText}
-            </Button>
-          </div>
-        </div>
+            </>
+          }
+        />
 
-        <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
+        <ReportSurface className="mb-3">
           <div className="flex flex-wrap items-center gap-2">
-            <div
-              ref={datePickerRef}
-              className="relative grid h-10 w-full min-w-0 grid-cols-[2rem_minmax(0,1fr)_2rem_2rem] items-center gap-0.5 rounded-[8px] bg-white p-1 shadow-none ring-1 ring-[#dfe4ee] min-[520px]:w-[300px] dark:bg-[#101d2e] dark:ring-[#263a55]"
-            >
-              <button
-                type="button"
-                className={dateNavButtonClassName}
-                aria-label="Previous day"
-                title="Previous day"
-                onClick={() => goToRelativeReportDate(-1)}
-                disabled={dateControlsDisabled}
-              >
-                {pendingDateControl === "previous" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ChevronLeft className="h-4 w-4" />
-                )}
-              </button>
-              <button
-                type="button"
-                className="flex h-8 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-[6px] px-2 text-sm font-semibold text-[#111827] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-70 dark:text-foreground dark:hover:bg-white/5"
-                onClick={openReportDatePicker}
-                aria-label="Open report date picker"
-                disabled={dateControlsDisabled}
-              >
-                {pendingDateControl === "picker" ? (
-                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#475467] dark:text-muted-foreground" />
-                ) : (
-                  <CalendarDays className="h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
-                )}
-                <span className="truncate">{formatReportDate(date)}</span>
-              </button>
-              {canGoToNextReportDate ? (
-                <button
-                  type="button"
-                  className={dateNavButtonClassName}
-                  aria-label="Next day"
-                  title="Next day"
-                  onClick={() => goToRelativeReportDate(1)}
-                  disabled={dateControlsDisabled}
-                >
-                  {pendingDateControl === "next" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                </button>
-              ) : (
-                <span aria-hidden="true" />
-              )}
-              {canGoToNextReportDate ? (
-                <button
-                  type="button"
-                  className={dateNavButtonClassName}
-                  aria-label="Jump to today"
-                  title="Jump to today"
-                  onClick={goToTodayReportDate}
-                  disabled={dateControlsDisabled}
-                >
-                  {pendingDateControl === "today" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ChevronsRight className="h-4 w-4" />
-                  )}
-                </button>
-              ) : (
-                <span aria-hidden="true" />
-              )}
-              <Input
-                ref={dateInputRef}
-                type="date"
-                value={reportDate}
-                max={maxReportDate}
-                onChange={(event) => void goToReportDate(event.target.value)}
-                disabled={dateControlsDisabled}
-                className="pointer-events-none absolute left-1/2 top-1/2 h-px w-px -translate-x-1/2 -translate-y-1/2 border-0 p-0 opacity-0"
-                aria-label="Select report date"
-              />
-              {datePickerOpen ? (
-                <div className="absolute left-0 top-11 z-30 w-full min-w-[300px] rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      className="reference-menu-button"
-                      aria-label="Previous month"
-                      onClick={() =>
-                        setDatePickerMonth((month) =>
-                          addCalendarMonths(month, -1),
-                        )
-                      }
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <div className="text-sm font-semibold text-[#111827] dark:text-foreground">
-                      {formatMonthLabel(datePickerMonth)}
-                    </div>
-                    <button
-                      type="button"
-                      className="reference-menu-button"
-                      aria-label="Next month"
-                      disabled={!canGoToNextCalendarMonth}
-                      onClick={() =>
-                        setDatePickerMonth((month) =>
-                          addCalendarMonths(month, 1),
-                        )
-                      }
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-7 gap-1 px-1 pb-1 text-center text-[11px] font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
-                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-                      (weekday) => (
-                        <span key={weekday}>{weekday}</span>
-                      ),
-                    )}
-                  </div>
-                  <div className="grid grid-cols-7 gap-1">
-                    {calendarDays.map((calendarDay) => {
-                      const isSelected = calendarDay.value === reportDate;
-                      const isFuture = calendarDay.value > maxReportDate;
-
-                      return (
-                        <button
-                          key={calendarDay.value}
-                          type="button"
-                          className={cn(
-                            "flex h-9 items-center justify-center rounded-[7px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]",
-                            calendarDay.inCurrentMonth
-                              ? "text-[#111827] hover:bg-[#eff6ff] dark:text-foreground dark:hover:bg-white/10"
-                              : "text-[#98a2b3] hover:bg-[#f8fafc] dark:text-muted-foreground/70 dark:hover:bg-white/5",
-                            isSelected &&
-                              "bg-[#2563eb] text-white hover:bg-[#1d4ed8] dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400",
-                            isFuture &&
-                              "cursor-not-allowed opacity-35 hover:bg-transparent dark:hover:bg-transparent",
-                          )}
-                          aria-label={`Select ${formatReportDate(calendarDay.value)}`}
-                          aria-current={isSelected ? "date" : undefined}
-                          disabled={isFuture || dateControlsDisabled}
-                          onClick={() => selectReportDate(calendarDay.value)}
-                        >
-                          {calendarDay.day}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
-            </div>
+            <ReportDateSwitcher
+              value={reportDate}
+              maxDate={maxReportDate}
+              pendingControl={pendingDateControl}
+              disabled={isBusy}
+              onChange={(nextDate, control) =>
+                void goToReportDate(nextDate, control)
+              }
+            />
 
             <div
               ref={locationMenuRef}
@@ -2013,17 +1723,7 @@ export function DailyReportApp({
               <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
                 Status
               </span>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-                  isPublishedReport
-                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300"
-                    : "bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300",
-                )}
-              >
-                <StatusIndicatorIcon className="h-3.5 w-3.5" />
-                {statusIndicatorLabel}
-              </span>
+              <ReportStatusBadge status={statusIndicatorLabel} showIcon />
               {autoSaveStatus === "saving" ? (
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#667085] dark:text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2036,10 +1736,10 @@ export function DailyReportApp({
               ) : null}
             </div>
           </div>
-        </section>
+        </ReportSurface>
 
         <div className="grid gap-3 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
-          <section className="flex min-h-[560px] flex-col rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#101d2e] dark:ring-[#263a55]">
+          <ReportSurface className="flex min-h-[560px] flex-col">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -2144,18 +1844,13 @@ export function DailyReportApp({
             {googleTaskFinderOpen ? (
               <div className="mt-3 rounded-[8px] bg-[#f8fafc] p-2 ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]">
                 <div className="flex items-center gap-2">
-                  <label className="relative block min-w-0 flex-1">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98a2b3]" />
-                    <Input
-                      value={googleTaskQuery}
-                      onChange={(event) =>
-                        setGoogleTaskQuery(event.target.value)
-                      }
-                      placeholder="Find unfinished Google Tasks"
-                      className="h-9 rounded-[7px] bg-white pl-9 text-sm shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#101d2e] dark:ring-[#3a506d]"
-                      aria-label="Find unfinished Google Tasks"
-                    />
-                  </label>
+                  <ReportSearchField
+                    value={googleTaskQuery}
+                    onValueChange={setGoogleTaskQuery}
+                    placeholder="Find unfinished Google Tasks"
+                    className="flex-1 dark:bg-[#101d2e] dark:ring-[#3a506d]"
+                    aria-label="Find unfinished Google Tasks"
+                  />
                   <button
                     type="button"
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[7px] text-[#667085] transition-colors hover:bg-[#eef2f7] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
@@ -2219,19 +1914,16 @@ export function DailyReportApp({
               </div>
             ) : null}
 
-            <label className="relative mt-3 block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98a2b3]" />
-              <Input
-                value={activitySearch}
-                onChange={(event) => {
-                  setActivitySearch(event.target.value);
-                  setActivityPage(1);
-                }}
-                placeholder="Search work items"
-                className="h-9 rounded-[7px] bg-white pl-9 text-sm shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#0f1b2a] dark:ring-[#263a55]"
-                aria-label="Search work items"
-              />
-            </label>
+            <ReportSearchField
+              value={activitySearch}
+              onValueChange={(value) => {
+                setActivitySearch(value);
+                setActivityPage(1);
+              }}
+              placeholder="Search work items"
+              className="mt-3 dark:bg-[#0f1b2a]"
+              aria-label="Search work items"
+            />
 
             <div className="mt-3 h-[390px] space-y-2 overflow-y-auto p-1">
               {workItemCount === 0 ? (
@@ -2262,80 +1954,71 @@ export function DailyReportApp({
                       onDrag={moveActivityReferenceDrag}
                       onDragEnd={endActivityReferenceDrag}
                     >
-                    <input
-                      type="checkbox"
-                      className="h-5 w-5 rounded border-[#cbd5e1] accent-[#4f46e5]"
-                      checked={activity.selected}
-                      onChange={(event) => {
-                        if (event.target.checked) {
-                          setActivity(activity.id, { selected: true });
-                          return;
-                        }
+                      <Checkbox
+                        checked={activity.selected}
+                        onChange={(event) => {
+                          if (event.target.checked) {
+                            setActivity(activity.id, { selected: true });
+                            return;
+                          }
 
-                        removeActivity(activity);
-                      }}
-                      aria-label={`Remove ${activity.title}`}
-                    />
-                    <div
-                      className={cn(
-                        "flex h-8 w-8 items-center justify-center rounded-[7px]",
-                        sourceStyles[activity.source],
+                          removeActivity(activity);
+                        }}
+                        aria-label={`Remove ${activity.title}`}
+                      />
+                      <ReportActivitySourceIcon source={activity.source} />
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-[#111827] dark:text-foreground">
+                          {activity.sourceUrl && activity.sourceUrl !== "#" ? (
+                            <a
+                              href={activity.sourceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              draggable={false}
+                              className="hover:text-[#2563eb]"
+                            >
+                              {activity.title || "Untitled activity"}
+                            </a>
+                          ) : (
+                            activity.title || "Untitled activity"
+                          )}
+                        </div>
+                        <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-[#667085] dark:text-muted-foreground">
+                          <span className="shrink-0">
+                            {reportActivitySourceLabel(activity.source)}
+                          </span>
+                          {activity.description ? (
+                            <>
+                              <span className="text-[#98a2b3]">•</span>
+                              <span className="truncate">
+                                {activity.description}
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+                      {statusLabel ? (
+                        <ReferenceBadge
+                          tone={statusTone(activity.status)}
+                          className="justify-self-start px-2.5 py-1 text-xs"
+                        >
+                          {statusLabel}
+                        </ReferenceBadge>
+                      ) : (
+                        <span aria-hidden="true" />
                       )}
-                    >
-                      {sourceIcon(activity.source)}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-[#111827] dark:text-foreground">
-                        {activity.sourceUrl && activity.sourceUrl !== "#" ? (
-                          <a
-                            href={activity.sourceUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            draggable={false}
-                            className="hover:text-[#2563eb]"
-                          >
-                            {activity.title || "Untitled activity"}
-                          </a>
-                        ) : (
-                          activity.title || "Untitled activity"
-                        )}
+                      <div className="text-sm font-medium text-[#111827] dark:text-foreground">
+                        {formatReportDuration(activity.durationMinutes)}
                       </div>
-                      <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-[#667085] dark:text-muted-foreground">
-                        <span className="shrink-0">
-                          {sourceLabels[activity.source]}
-                        </span>
-                        {activity.description ? (
-                          <>
-                            <span className="text-[#98a2b3]">•</span>
-                            <span className="truncate">
-                              {activity.description}
-                            </span>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                    {statusLabel ? (
-                      <ReferenceBadge
-                        tone={statusTone(activity.status)}
-                        className="justify-self-start px-2.5 py-1 text-xs"
+                      <button
+                        className="reference-menu-button"
+                        aria-label={`More actions for ${activity.title}`}
+                        onClick={(event) =>
+                          toggleActivityMenu(activity.id, event)
+                        }
                       >
-                        {statusLabel}
-                      </ReferenceBadge>
-                    ) : (
-                      <span aria-hidden="true" />
-                    )}
-                    <div className="text-sm font-medium text-[#111827] dark:text-foreground">
-                      {formatDuration(activity.durationMinutes)}
-                    </div>
-                    <button
-                      className="reference-menu-button"
-                      aria-label={`More actions for ${activity.title}`}
-                      onClick={(event) =>
-                        toggleActivityMenu(activity.id, event)
-                      }
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </button>
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
                     </article>
                   );
                 })
@@ -2395,9 +2078,9 @@ export function DailyReportApp({
                 </div>
               </div>
             </div>
-          </section>
+          </ReportSurface>
 
-          <aside className="min-h-[560px] rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#101d2e] dark:ring-[#263a55]">
+          <ReportSurface as="aside" className="min-h-[560px]">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
                 Summary
@@ -2412,7 +2095,7 @@ export function DailyReportApp({
               onChange={handleSummaryChange}
               onActivityReferenceDrop={includeDroppedActivityReference}
             />
-          </aside>
+          </ReportSurface>
         </div>
       </main>
       {menuActivity && openActivityMenu ? (
@@ -2515,20 +2198,16 @@ export function DailyReportApp({
           }}
           aria-hidden="true"
         >
-          <span
-            className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px]",
-              sourceStyles[activityDragPreview.source],
-            )}
-          >
-            {sourceIcon(activityDragPreview.source)}
-          </span>
+          <ReportActivitySourceIcon
+            source={activityDragPreview.source}
+            className="rounded-[8px]"
+          />
           <span className="min-w-0">
             <span className="block truncate font-semibold">
               {activityDragPreview.title}
             </span>
             <span className="block truncate text-xs text-[#667085] dark:text-muted-foreground">
-              {sourceLabels[activityDragPreview.source]}
+              {reportActivitySourceLabel(activityDragPreview.source)}
             </span>
           </span>
         </div>

@@ -4,8 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  CalendarDays,
-  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -18,23 +16,33 @@ import {
   Loader2,
   Lock,
   Mail,
-  MessageSquare,
-  Search,
   TriangleAlert,
 } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 
 import { EmptyReferenceState } from "@/components/reports/reference-shell";
+import {
+  ReportDateSwitcher,
+  type ReportDateControl,
+} from "@/components/reports/report-date-switcher";
+import {
+  formatReportDuration,
+  reportActivitySourceLabel,
+  ReportActivitySourceIcon,
+  ReportPageHeader,
+  ReportSearchField,
+  ReportStatusBadge,
+  ReportSurface,
+} from "@/components/reports/report-ui";
 import { SummaryRenderer } from "@/components/reports/summary-renderer";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FixedToast } from "@/components/ui/fixed-toast";
-import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
 import {
-  addReportDateDays,
   clampReportDateToToday,
   reportDayEnd,
   todayDateString,
@@ -96,7 +104,6 @@ type Row = {
 
 type EmployeeStatusFilter = "ALL" | "SUBMITTED" | "MISSING";
 type EmployeeRowStatus = DashboardReport["status"] | "MISSING";
-type PendingDateControl = "previous" | "next" | "picker" | "today";
 type EmployeeSortKey =
   | "employee"
   | "department"
@@ -228,50 +235,12 @@ function reportStatus(row: Row, date: string) {
   return "Submitted";
 }
 
-function statusClass(status: string) {
-  if (status === "Submitted") {
-    return "bg-[#e7f8ee] text-[#15803d] dark:bg-emerald-400/15 dark:text-emerald-200";
-  }
-
-  if (status === "Draft") {
-    return "bg-[#fff3db] text-[#b45309] dark:bg-amber-400/15 dark:text-amber-200";
-  }
-
-  return "bg-[#fdecee] text-[#dc2626] dark:bg-red-400/15 dark:text-red-200";
-}
-
-function sourceLabel(source: string) {
-  if (source === "GOOGLE_CALENDAR") {
-    return "Calendar";
-  }
-
-  if (source === "GOOGLE_TASKS") {
-    return "Tasks";
-  }
-
-  return titleCase(source);
-}
-
 function userDepartmentLabel(user: DashboardUser) {
   const departments =
     user.departments
       ?.map((membership) => membership.department?.name)
       .filter(Boolean) ?? [];
   return departments.length ? departments.join(", ") : "No department";
-}
-
-function formatDuration(minutes?: number | null) {
-  if (!minutes) {
-    return "-";
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const remaining = minutes % 60;
-  return hours
-    ? remaining
-      ? `${hours}h ${remaining}m`
-      : `${hours}h`
-    : `${remaining}m`;
 }
 
 function reportReadReceipt(
@@ -309,24 +278,6 @@ function isUnreadForReviewer(
   }
 
   return Boolean(changedAt && readAt < changedAt);
-}
-
-function sourceIcon(source: string) {
-  const baseClass = "h-4 w-4";
-
-  if (source === "JIRA") {
-    return <FileText className={cn(baseClass, "text-[#2563eb]")} />;
-  }
-
-  if (source === "GOOGLE_CALENDAR") {
-    return <CalendarDays className={cn(baseClass, "text-[#16a34a]")} />;
-  }
-
-  if (source === "GOOGLE_TASKS") {
-    return <CheckCircle2 className={cn(baseClass, "text-[#2563eb]")} />;
-  }
-
-  return <MessageSquare className={cn(baseClass, "text-[#8b5cf6]")} />;
 }
 
 function reportSubtitle(row: Row | null, reviewerId?: string | null) {
@@ -712,13 +663,11 @@ export function ReviewerDashboard({
     null,
   );
   const [pendingDateControl, setPendingDateControl] =
-    useState<PendingDateControl | null>(null);
+    useState<ReportDateControl | null>(null);
   const pendingDateRef = useRef<string | null>(null);
   const blockedOpenTimerRef = useRef<number | null>(null);
-  const dateInputRef = useRef<HTMLInputElement | null>(null);
   const maxReportDate = todayDateString();
   const currentReviewDate = dateInputValue(date);
-  const canGoToNextReviewDate = currentReviewDate < maxReportDate;
   const dateNavigationPending = pendingDateControl !== null;
 
   const departmentOptions = useMemo(() => {
@@ -784,10 +733,11 @@ export function ReviewerDashboard({
     (row) => row.report?.status === "SUBMITTED",
   ).length;
   const unread = filteredItems.filter(
-    (row) => canReviewReport(row) && isUnreadForReviewer(row.report, reviewerId),
+    (row) =>
+      canReviewReport(row) && isUnreadForReviewer(row.report, reviewerId),
   ).length;
-  const blockers = filteredItems.filter((row) =>
-    canReviewReport(row) && hasBlockers(row.report),
+  const blockers = filteredItems.filter(
+    (row) => canReviewReport(row) && hasBlockers(row.report),
   ).length;
   const lateEdits = filteredItems.filter(
     (row) =>
@@ -880,10 +830,7 @@ export function ReviewerDashboard({
     setPage(1);
   }, [departmentFilter, search, sortState, statusFilter]);
 
-  function goToDate(
-    nextDate: string,
-    control: PendingDateControl = "picker",
-  ) {
+  function goToDate(nextDate: string, control: ReportDateControl = "picker") {
     if (!nextDate) {
       return;
     }
@@ -903,37 +850,6 @@ export function ReviewerDashboard({
     router.push(`/review?date=${targetDate}`);
   }
 
-  function openReviewDatePicker() {
-    const input = dateInputRef.current;
-
-    if (!input) {
-      return;
-    }
-
-    if (typeof input.showPicker === "function") {
-      try {
-        input.showPicker();
-        return;
-      } catch {
-        // Fall through to the focus/click fallback.
-      }
-    }
-
-    input.focus();
-    input.click();
-  }
-
-  function goToRelativeReviewDate(days: number) {
-    goToDate(
-      addReportDateDays(currentReviewDate, days),
-      days < 0 ? "previous" : "next",
-    );
-  }
-
-  function goToTodayReviewDate() {
-    goToDate(maxReportDate, "today");
-  }
-
   function downloadCsv() {
     const exportRows = filteredItems.map((row) => ({
       employee: row.user.name ?? row.user.email ?? "Unassigned employee",
@@ -949,8 +865,7 @@ export function ReviewerDashboard({
       lastEdited: canReviewReport(row)
         ? formatTimestamp(row.report?.updatedAt)
         : "",
-      blockers:
-        canReviewReport(row) && hasBlockers(row.report) ? "Yes" : "No",
+      blockers: canReviewReport(row) && hasBlockers(row.report) ? "Yes" : "No",
       activities: canReviewReport(row)
         ? includedActivities(row.report).length
         : 0,
@@ -1187,93 +1102,20 @@ export function ReviewerDashboard({
         />
       ) : (
         <main className="reference-page">
-          <div className="mb-3">
-            <h1 className="text-[24px] font-semibold leading-tight tracking-normal text-[#101828] dark:text-foreground">
-              Review Dashboard
-            </h1>
-            <p className="mt-0.5 text-sm text-[#667085] dark:text-muted-foreground">
-              Track report coverage, blockers, and submissions across the team.
-            </p>
-          </div>
+          <ReportPageHeader
+            title="Review Dashboard"
+            description="Track report coverage, blockers, and submissions across the team."
+          />
 
-          <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+          <ReportSurface className="mb-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="relative grid h-10 w-full min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem_2.5rem] gap-1 min-[560px]:w-[300px]">
-                <button
-                  type="button"
-                  className="flex h-10 w-10 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#0b1523] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:hover:text-foreground"
-                  aria-label="Previous day"
-                  onClick={() => goToRelativeReviewDate(-1)}
-                  disabled={dateNavigationPending}
-                >
-                  {pendingDateControl === "previous" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ChevronLeft className="h-4 w-4" />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="flex h-10 min-w-0 cursor-pointer items-center gap-2 rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-70 dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55] dark:hover:bg-white/5"
-                  onClick={openReviewDatePicker}
-                  aria-label="Open review date picker"
-                  disabled={dateNavigationPending}
-                >
-                  {pendingDateControl === "picker" ? (
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#475467] dark:text-muted-foreground" />
-                  ) : (
-                    <CalendarDays className="h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
-                  )}
-                  <span className="min-w-0 truncate">
-                    {formatShortDate(date)}
-                  </span>
-                </button>
-                {canGoToNextReviewDate ? (
-                  <button
-                    type="button"
-                    className="flex h-10 w-10 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#0b1523] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:hover:text-foreground"
-                    aria-label="Next day"
-                    onClick={() => goToRelativeReviewDate(1)}
-                    disabled={dateNavigationPending}
-                  >
-                    {pendingDateControl === "next" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                  </button>
-                ) : (
-                  <span aria-hidden="true" />
-                )}
-                {canGoToNextReviewDate ? (
-                  <button
-                    type="button"
-                    className="flex h-10 w-10 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#0b1523] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:hover:text-foreground"
-                    aria-label="Jump to today"
-                    title="Jump to today"
-                    onClick={goToTodayReviewDate}
-                    disabled={dateNavigationPending}
-                  >
-                    {pendingDateControl === "today" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <ChevronsRight className="h-4 w-4" />
-                    )}
-                  </button>
-                ) : (
-                  <span aria-hidden="true" />
-                )}
-                <Input
-                  ref={dateInputRef}
-                  type="date"
-                  value={currentReviewDate}
-                  max={maxReportDate}
-                  className="pointer-events-none absolute left-1/2 top-1/2 h-px w-px -translate-x-1/2 -translate-y-1/2 border-0 p-0 opacity-0"
-                  onChange={(event) => goToDate(event.target.value)}
-                  disabled={dateNavigationPending}
-                  aria-label="Select report date"
-                />
-              </div>
+              <ReportDateSwitcher
+                value={currentReviewDate}
+                maxDate={maxReportDate}
+                pendingControl={pendingDateControl}
+                disabled={dateNavigationPending}
+                onChange={goToDate}
+              />
 
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -1294,9 +1136,9 @@ export function ReviewerDashboard({
                 </Button>
               </div>
             </div>
-          </section>
+          </ReportSurface>
 
-          <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+          <ReportSurface className="mb-3">
             <div className="flex flex-wrap items-center gap-4">
               <div className="min-w-[240px] flex-1">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -1326,9 +1168,9 @@ export function ReviewerDashboard({
                 <CompactMetric label="Late" value={lateEdits} tone="purple" />
               </div>
             </div>
-          </section>
+          </ReportSurface>
 
-          <section className="rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+          <ReportSurface padded={false}>
             <div className="flex flex-wrap items-center justify-between gap-3 p-3">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <h2 className="text-lg font-semibold text-[#101828] dark:text-foreground">
@@ -1352,19 +1194,16 @@ export function ReviewerDashboard({
               </div>
 
               <div className="flex w-full flex-wrap items-center gap-2 min-[760px]:w-auto">
-                <label className="relative flex h-9 min-w-0 flex-1 items-center rounded-[7px] bg-white text-sm shadow-none ring-1 ring-[#dfe4ee] min-[560px]:w-[260px] min-[560px]:flex-none dark:bg-[#0b1523] dark:ring-[#263a55]">
-                  <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#667085]" />
-                  <Input
-                    value={search}
-                    onChange={(event) => {
-                      setSearch(event.target.value);
-                      setPage(1);
-                    }}
-                    className="h-8 min-w-0 border-0 bg-transparent pl-9 pr-3 text-sm font-medium text-[#111827] shadow-none placeholder:text-[#98a2b3] focus-visible:ring-0 dark:bg-transparent dark:text-foreground"
-                    placeholder="Search employees"
-                    aria-label="Search employees"
-                  />
-                </label>
+                <ReportSearchField
+                  value={search}
+                  onValueChange={(value) => {
+                    setSearch(value);
+                    setPage(1);
+                  }}
+                  className="flex-1 min-[560px]:w-[260px] min-[560px]:flex-none"
+                  placeholder="Search employees"
+                  aria-label="Search employees"
+                />
 
                 <Select
                   value={departmentFilter}
@@ -1417,8 +1256,7 @@ export function ReviewerDashboard({
                 <thead>
                   <tr className="border-b border-[#e5eaf2] text-left text-[10px] font-semibold uppercase tracking-[0.02em] text-[#64748b] dark:border-[#263a55] dark:text-muted-foreground">
                     <th className="w-[36px] px-2 py-2">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={allVisibleReportsSelected}
                         disabled={visibleReportIds.length === 0}
                         onChange={(event) =>
@@ -1544,8 +1382,7 @@ export function ReviewerDashboard({
                         >
                           <td className="px-2 py-2.5">
                             {canReview && row.report ? (
-                              <input
-                                type="checkbox"
+                              <Checkbox
                                 checked={selectedReportIds.includes(
                                   row.report.id,
                                 )}
@@ -1556,9 +1393,7 @@ export function ReviewerDashboard({
                                   )
                                 }
                                 onClick={(event) => event.stopPropagation()}
-                                onKeyDown={(event) =>
-                                  event.stopPropagation()
-                                }
+                                onKeyDown={(event) => event.stopPropagation()}
                                 aria-label={`Select ${row.user.name ?? row.user.email ?? "report"}`}
                               />
                             ) : null}
@@ -1581,14 +1416,10 @@ export function ReviewerDashboard({
                             {userDepartmentLabel(row.user)}
                           </td>
                           <td className="px-2 py-2.5">
-                            <span
-                              className={cn(
-                                "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                                statusClass(status),
-                              )}
-                            >
-                              {status}
-                            </span>
+                            <ReportStatusBadge
+                              status={status}
+                              className="px-2.5 py-1 text-[11px] font-semibold"
+                            />
                           </td>
                           <td className="px-2 py-2.5">
                             <div className="flex min-w-[120px] flex-wrap items-center gap-1.5">
@@ -1634,9 +1465,7 @@ export function ReviewerDashboard({
                                   event.stopPropagation();
                                   openReport(row);
                                 }}
-                                onKeyDown={(event) =>
-                                  event.stopPropagation()
-                                }
+                                onKeyDown={(event) => event.stopPropagation()}
                               >
                                 Review
                               </Button>
@@ -1733,7 +1562,7 @@ export function ReviewerDashboard({
                 </div>
               </div>
             </div>
-          </section>
+          </ReportSurface>
         </main>
       )}
       <FixedToast message={notice} onDismiss={() => setNotice(null)} />
@@ -1906,14 +1735,10 @@ function ReportReviewPage({
               />
               {reportSubtitle(row, reviewerId)}
             </span>
-            <span
-              className={cn(
-                "inline-flex rounded-full px-4 py-1.5 text-sm font-semibold",
-                statusClass(report ? reportStatus(row, date) : "Missing"),
-              )}
-            >
-              {report ? reportStatus(row, date) : "Missing"}
-            </span>
+            <ReportStatusBadge
+              status={report ? reportStatus(row, date) : "Missing"}
+              className="px-4 py-1.5 text-sm font-semibold"
+            />
           </div>
         </div>
         <div className="report-pdf-actions flex gap-3">
@@ -1992,17 +1817,17 @@ function ReportReviewPage({
                     >
                       <td className="py-2 pr-4">
                         <div className="flex min-w-0 items-center gap-3">
-                          {sourceIcon(activity.source)}
+                          <ReportActivitySourceIcon source={activity.source} />
                           <span className="truncate font-medium text-[#101828] dark:text-foreground">
                             {activity.title || "Untitled activity"}
                           </span>
                         </div>
                       </td>
                       <td className="py-2 pr-4 text-[#344054] dark:text-muted-foreground">
-                        {sourceLabel(activity.source)}
+                        {reportActivitySourceLabel(activity.source)}
                       </td>
                       <td className="py-2 text-[#101828] dark:text-foreground">
-                        {formatDuration(activity.durationMinutes)}
+                        {formatReportDuration(activity.durationMinutes)}
                       </td>
                     </tr>
                   ))
