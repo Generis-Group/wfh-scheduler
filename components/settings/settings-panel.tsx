@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Cable,
   CheckCircle2,
+  Loader2,
   RefreshCw,
   Save,
   UserRound,
@@ -21,6 +22,7 @@ import {
 } from "@/components/account/account-settings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FixedToast } from "@/components/ui/fixed-toast";
 import {
   Card,
   CardContent,
@@ -99,6 +101,9 @@ export function SettingsPanel({
   });
   const [message, setMessage] = useState<string | null>(null);
   const [isSavingCompany, setIsSavingCompany] = useState(false);
+  const [disconnectingProvider, setDisconnectingProvider] = useState<
+    "google" | "atlassian" | null
+  >(null);
   const [jiraProjectsInput, setJiraProjectsInput] = useState(
     (companySettings?.jiraProjectKeys ?? []).join(", "),
   );
@@ -299,17 +304,35 @@ export function SettingsPanel({
   }
 
   async function disconnect(provider: "google" | "atlassian") {
-    const response = await fetch(`/api/settings/providers/${provider}`, {
-      method: "DELETE",
-    });
-
-    if (response.ok) {
-      markServerDataStale();
-      window.location.reload();
+    if (disconnectingProvider) {
       return;
     }
 
-    setMessage(`Unable to disconnect ${provider}.`);
+    setDisconnectingProvider(provider);
+    let shouldResetDisconnecting = true;
+
+    try {
+      const response = await fetch(`/api/settings/providers/${provider}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        shouldResetDisconnecting = false;
+        markServerDataStale();
+        window.location.reload();
+        return;
+      }
+
+      setMessage(`Unable to disconnect ${provider}.`);
+    } catch {
+      setMessage(
+        `Unable to disconnect ${provider}. Check your connection and try again.`,
+      );
+    } finally {
+      if (shouldResetDisconnecting) {
+        setDisconnectingProvider(null);
+      }
+    }
   }
 
   function connect(provider: "google" | "atlassian") {
@@ -340,7 +363,8 @@ export function SettingsPanel({
     settingsSections[0];
 
   return (
-    <main className="reference-page">
+    <>
+      <main className="reference-page">
       <div className="mb-5">
         <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
           <span className="text-[#2563eb]">Settings</span>
@@ -354,12 +378,6 @@ export function SettingsPanel({
           Manage your account, integrations, and reporting preferences.
         </p>
       </div>
-
-      {message ? (
-        <div className="mb-4 rounded-[8px] border border-[#dfe7f2] bg-white px-4 py-3 text-sm text-[#475569] shadow-[0_8px_24px_rgba(15,23,42,0.04)] dark:border-[#263a55] dark:bg-[#0f1b2a] dark:text-muted-foreground">
-          {message}
-        </div>
-      ) : null}
 
       <nav
         className="mb-6 flex gap-6 overflow-x-auto border-b border-[#d9e1ec] dark:border-[#263a55]"
@@ -407,6 +425,8 @@ export function SettingsPanel({
               connectLabel={
                 connectionState.atlassian ? "Reconnect Jira" : "Connect Jira"
               }
+              isDisconnecting={disconnectingProvider === "atlassian"}
+              disabled={disconnectingProvider !== null}
               onConnect={() => connect("atlassian")}
               onDisconnect={() => disconnect("atlassian")}
             >
@@ -459,6 +479,8 @@ export function SettingsPanel({
               connectLabel={
                 connectionState.google ? "Reconnect Google" : "Connect Google"
               }
+              isDisconnecting={disconnectingProvider === "google"}
+              disabled={disconnectingProvider !== null}
               onConnect={() => connect("google")}
               onDisconnect={() => disconnect("google")}
             >
@@ -613,7 +635,9 @@ export function SettingsPanel({
           </Card>
         </section>
       ) : null}
-    </main>
+      </main>
+      <FixedToast message={message} onDismiss={() => setMessage(null)} />
+    </>
   );
 }
 
@@ -720,6 +744,8 @@ function ProviderCard({
   configMessage,
   error,
   connectLabel,
+  isDisconnecting = false,
+  disabled = false,
   onConnect,
   onDisconnect,
   children,
@@ -732,6 +758,8 @@ function ProviderCard({
   configMessage: string;
   error?: string;
   connectLabel: string;
+  isDisconnecting?: boolean;
+  disabled?: boolean;
   onConnect: () => void;
   onDisconnect: () => void;
   children: ReactNode;
@@ -758,7 +786,7 @@ function ProviderCard({
             variant="outline"
             size="sm"
             className="border border-[#dfe7f2] bg-white text-[#2563eb] hover:bg-[#eff6ff] dark:border-[#263a55] dark:bg-white/[0.04]"
-            disabled={!configured}
+            disabled={!configured || disabled}
             title={configured ? connectLabel : configMessage}
             onClick={onConnect}
           >
@@ -770,10 +798,15 @@ function ProviderCard({
               variant="outline"
               size="sm"
               className="border border-[#dfe7f2] bg-white text-[#111827] hover:bg-[#f8fafc] dark:border-[#263a55] dark:bg-white/[0.04]"
+              disabled={disabled}
               onClick={onDisconnect}
             >
-              <X className="mr-2 h-4 w-4" />
-              Disconnect
+              {isDisconnecting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <X className="mr-2 h-4 w-4" />
+              )}
+              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
             </Button>
           ) : null}
         </div>

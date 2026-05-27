@@ -4,8 +4,14 @@ import type { NormalizedActivity } from "@/lib/normalizers";
 
 const {
   mockAppSettingFindUnique,
+  mockActivityItemFindUnique,
+  mockActivityItemUpsert,
+  mockDailyReportFindUnique,
+  mockDailyReportUpdate,
+  mockDailyReportUpsert,
   mockGetGoogleServices,
   mockGetJiraConnection,
+  mockReportRevisionCreate,
   mockSyncRunCreate,
   mockSyncRunUpdate,
   mockUpsertImportedActivities,
@@ -13,8 +19,14 @@ const {
   mockUserIntegrationSettingsUpsert
 } = vi.hoisted(() => ({
   mockAppSettingFindUnique: vi.fn(),
+  mockActivityItemFindUnique: vi.fn(),
+  mockActivityItemUpsert: vi.fn(),
+  mockDailyReportFindUnique: vi.fn(),
+  mockDailyReportUpdate: vi.fn(),
+  mockDailyReportUpsert: vi.fn(),
   mockGetGoogleServices: vi.fn(),
   mockGetJiraConnection: vi.fn(),
+  mockReportRevisionCreate: vi.fn(),
   mockSyncRunCreate: vi.fn(),
   mockSyncRunUpdate: vi.fn(),
   mockUpsertImportedActivities: vi.fn(),
@@ -39,6 +51,18 @@ vi.mock("@/lib/prisma", () => ({
     appSetting: {
       findUnique: mockAppSettingFindUnique
     },
+    activityItem: {
+      findUnique: mockActivityItemFindUnique,
+      upsert: mockActivityItemUpsert
+    },
+    dailyReport: {
+      findUnique: mockDailyReportFindUnique,
+      update: mockDailyReportUpdate,
+      upsert: mockDailyReportUpsert
+    },
+    reportRevision: {
+      create: mockReportRevisionCreate
+    },
     syncRun: {
       create: mockSyncRunCreate,
       update: mockSyncRunUpdate
@@ -58,6 +82,15 @@ describe("sync service pagination", () => {
     mockAppSettingFindUnique.mockResolvedValue(null);
     mockSyncRunCreate.mockResolvedValue({ id: "sync-run-1" });
     mockSyncRunUpdate.mockResolvedValue({});
+    mockActivityItemFindUnique.mockResolvedValue(null);
+    mockActivityItemUpsert.mockResolvedValue({});
+    mockDailyReportFindUnique.mockResolvedValue(null);
+    mockDailyReportUpdate.mockResolvedValue({});
+    mockDailyReportUpsert.mockResolvedValue({
+      id: "report-1",
+      status: "DRAFT"
+    });
+    mockReportRevisionCreate.mockResolvedValue({});
     mockUpsertImportedActivities.mockResolvedValue({ importedCount: 1, skippedCount: 0, staleCount: 0 });
     mockUserFindUnique.mockResolvedValue({ email: "employee@generisgp.com" });
     mockUserIntegrationSettingsUpsert.mockResolvedValue({
@@ -757,6 +790,179 @@ describe("sync service pagination", () => {
     );
   });
 
+  it("records a revision when adding an unfinished Google Task to a submitted report", async () => {
+    const tasklistsList = vi.fn(async () => ({
+      data: { items: [{ id: "list-1", title: "Primary tasks" }] }
+    }));
+    const tasksGet = vi.fn(async () => ({
+      data: {
+        id: "task-1",
+        title: "Draft rollout plan",
+        status: "needsAction",
+        updated: "2026-05-14T15:00:00.000Z",
+        notes: "Please update the agenda PDF",
+        webViewLink: "https://tasks.google.com/task/1"
+      }
+    }));
+    const submittedReport = {
+      id: "report-1",
+      userId: "user-1",
+      reportDate: new Date("2026-05-14T00:00:00.000Z"),
+      workLocation: "OFFICE",
+      summary: "Submitted summary",
+      blockers: "",
+      status: "SUBMITTED",
+      submittedAt: new Date("2026-05-14T20:00:00.000Z"),
+      activities: [{ id: "activity-old", selected: true, employeeNote: null }]
+    };
+
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: {},
+      tasks: {
+        tasklists: { list: tasklistsList },
+        tasks: { get: tasksGet }
+      }
+    });
+    mockUserIntegrationSettingsUpsert.mockResolvedValue({
+      jiraCloudId: "cloud-1",
+      jiraAccountId: "jira-user-1",
+      googleCalendarId: "primary",
+      googleTaskListIds: ["list-1"]
+    });
+    mockDailyReportUpsert.mockResolvedValue({
+      id: "report-1",
+      userId: "user-1",
+      reportDate: new Date("2026-05-14T00:00:00.000Z"),
+      status: "SUBMITTED"
+    });
+    mockDailyReportFindUnique
+      .mockResolvedValueOnce(submittedReport)
+      .mockResolvedValueOnce({ ...submittedReport, revisions: [], comments: [], readReceipts: [] });
+
+    const { addGoogleTaskReference } = await import("@/lib/services/sync");
+    await addGoogleTaskReference("user-1", "2026-05-14", "list-1", "task-1");
+
+    expect(mockReportRevisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reportId: "report-1",
+          editedById: "user-1"
+        })
+      })
+    );
+    expect(mockActivityItemUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          dailyReportId: "report-1",
+          selected: true,
+          status: "in progress"
+        }),
+        create: expect.objectContaining({
+          dailyReportId: "report-1",
+          selected: true,
+          status: "in progress"
+        })
+      })
+    );
+    expect(mockDailyReportUpdate).toHaveBeenCalledWith({
+      where: { id: "report-1" },
+      data: { updatedAt: expect.any(Date) }
+    });
+  });
+
+  it("preserves a local title override when manually adding the same unfinished Google Task", async () => {
+    const tasklistsList = vi.fn(async () => ({
+      data: { items: [{ id: "list-1", title: "Primary tasks" }] }
+    }));
+    const tasksGet = vi.fn(async () => ({
+      data: {
+        id: "task-1",
+        title: "Remote rollout plan",
+        status: "needsAction",
+        updated: "2026-05-14T15:00:00.000Z",
+        notes: "Please update the agenda PDF",
+        webViewLink: "https://tasks.google.com/task/1"
+      }
+    }));
+
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: {},
+      tasks: {
+        tasklists: { list: tasklistsList },
+        tasks: { get: tasksGet }
+      }
+    });
+    mockUserIntegrationSettingsUpsert.mockResolvedValue({
+      jiraCloudId: "cloud-1",
+      jiraAccountId: "jira-user-1",
+      googleCalendarId: "primary",
+      googleTaskListIds: ["list-1"]
+    });
+    mockDailyReportUpsert.mockResolvedValue({
+      id: "report-1",
+      userId: "user-1",
+      reportDate: new Date("2026-05-14T00:00:00.000Z"),
+      status: "DRAFT"
+    });
+    mockDailyReportFindUnique
+      .mockResolvedValueOnce({
+        id: "report-1",
+        status: "DRAFT"
+      })
+      .mockResolvedValueOnce({
+        id: "report-1",
+        status: "DRAFT",
+        activities: []
+      });
+    mockActivityItemFindUnique.mockResolvedValue({
+      title: "Local rollout title",
+      metadata: {
+        generisLocalTitleOverride: true,
+        generisRemoteTitle: "Old remote title"
+      }
+    });
+
+    const { addGoogleTaskReference } = await import("@/lib/services/sync");
+    await addGoogleTaskReference("user-1", "2026-05-14", "list-1", "task-1");
+
+    expect(mockActivityItemFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId_reportDate_source_sourceId: {
+            userId: "user-1",
+            reportDate: new Date("2026-05-14T00:00:00.000Z"),
+            source: "GOOGLE_TASKS",
+            sourceId: "task-1"
+          }
+        },
+        select: {
+          title: true,
+          metadata: true
+        }
+      })
+    );
+    expect(mockActivityItemUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          title: "Local rollout title",
+          metadata: expect.objectContaining({
+            generisLocalTitleOverride: true,
+            generisRemoteTitle: "Remote rollout plan",
+            manuallyAdded: true
+          })
+        }),
+        create: expect.objectContaining({
+          title: "Local rollout title",
+          metadata: expect.objectContaining({
+            generisLocalTitleOverride: true,
+            generisRemoteTitle: "Remote rollout plan",
+            manuallyAdded: true
+          })
+        })
+      })
+    );
+  });
+
   it("paginates Google Task lists and tasks", async () => {
     const tasklistsList = vi.fn(async (params) =>
       params.pageToken
@@ -797,13 +1003,20 @@ describe("sync service pagination", () => {
     expect(tasklistsList).toHaveBeenCalledWith(expect.objectContaining({ pageToken: "task-list-page-2" }));
     expect(tasksList).toHaveBeenCalledWith(expect.objectContaining({ pageToken: "task-page-2" }));
     expect(tasksList).toHaveBeenCalledWith(expect.objectContaining({ showAssigned: true, showCompleted: true, showHidden: true }));
+    expect(tasksList.mock.calls.map(([params]) => params)).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ dueMin: expect.any(String) }),
+        expect.objectContaining({ updatedMin: expect.any(String) }),
+        expect.objectContaining({ showCompleted: false })
+      ])
+    );
     expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
       "GOOGLE_TASKS",
       "user-1",
       "2026-05-14",
       expect.arrayContaining([
-        expect.objectContaining({ sourceId: "task-1" }),
-        expect.objectContaining({ sourceId: "task-2" })
+        expect.objectContaining({ sourceId: "task-1", status: null }),
+        expect.objectContaining({ sourceId: "task-2", status: null })
       ])
     );
   });

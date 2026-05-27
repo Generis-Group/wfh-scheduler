@@ -1,9 +1,13 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import type { ReactNode } from "react";
 
+import { AppShellLoadingFallback } from "@/components/reports/app-shell-loading-fallback";
 import { ReferenceAppShell } from "@/components/reports/reference-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
 
 function roleLabel(role?: string | null) {
   if (role === "ADMIN") {
@@ -17,7 +21,15 @@ function roleLabel(role?: string | null) {
   return "Employee";
 }
 
-export default async function AppLayout({ children }: { children: ReactNode }) {
+export default function AppLayout({ children }: { children: ReactNode }) {
+  return (
+    <Suspense fallback={<AppShellLoadingFallback />}>
+      <AuthenticatedAppShell>{children}</AuthenticatedAppShell>
+    </Suspense>
+  );
+}
+
+async function AuthenticatedAppShell({ children }: { children: ReactNode }) {
   const session = await auth();
 
   if (!session?.user) {

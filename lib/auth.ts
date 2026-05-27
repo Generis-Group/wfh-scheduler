@@ -23,6 +23,16 @@ function imageSafeForSessionCookie(image?: string | null) {
   return image;
 }
 
+function profileEmail(profile: unknown) {
+  if (!profile || typeof profile !== "object" || !("email" in profile)) {
+    return "";
+  }
+
+  const email = (profile as { email?: unknown }).email;
+
+  return typeof email === "string" ? normalizeEmail(email) : "";
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: encryptedPrismaAdapter(prisma),
   session: {
@@ -107,9 +117,15 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   callbacks: {
-    async signIn({ account, user }) {
+    async signIn({ account, user, profile }) {
       if (account?.provider === "credentials") {
         return true;
+      }
+
+      const oauthEmail = profileEmail(profile);
+
+      if (!isGenerisEmail(oauthEmail)) {
+        return false;
       }
 
       if (account?.provider && account.providerAccountId) {
@@ -122,25 +138,24 @@ export const authOptions: NextAuthOptions = {
           },
           select: {
             user: {
-              select: { status: true }
+              select: { email: true, status: true }
             }
           }
         });
 
         if (linkedAccount) {
-          return linkedAccount.user.status !== "DISABLED" && isGenerisEmail(user.email);
+          const linkedEmail = normalizeEmail(linkedAccount.user.email);
+
+          return linkedAccount.user.status !== "DISABLED" && linkedEmail === oauthEmail && isGenerisEmail(linkedEmail);
         }
       }
 
-      if (!isGenerisEmail(user.email)) {
-        return false;
-      }
-
       const invitedUser = await prisma.user.findUnique({
-        where: { email: normalizeEmail(user.email) }
+        where: { email: oauthEmail },
+        select: { email: true, status: true }
       });
 
-      return Boolean(invitedUser && invitedUser.status !== "DISABLED");
+      return Boolean(invitedUser && invitedUser.status !== "DISABLED" && normalizeEmail(invitedUser.email) === oauthEmail);
     },
     async jwt({ token, user }) {
       const userId = user?.id ?? token.userId;

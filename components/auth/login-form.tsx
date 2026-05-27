@@ -1,15 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, KanbanSquare, LogIn } from "lucide-react";
+import type { ReactNode } from "react";
+import { LogIn } from "lucide-react";
 import { signIn } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { generisEmailMessage, isGenerisEmail } from "@/lib/auth-domain";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
+
+const oauthButtonClassName =
+  "flex h-10 w-full items-center justify-center gap-3 rounded-[4px] border border-[#dadce0] bg-[#ffffff] px-3 text-[14px] font-medium text-[#3c4043] shadow-none transition-colors hover:bg-[#f8fafd] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a73e8] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#263a55] dark:bg-[#0b1523] dark:text-[#e2e8f0] dark:hover:bg-white/[0.06]";
 
 export function LoginForm({
   oauthConfig
@@ -50,69 +55,144 @@ export function LoginForm({
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Welcome back</CardTitle>
-        <CardDescription>Sign in with your @generisgp.com account to review activity and submit reports.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <form className="space-y-4" onSubmit={submit}>
+    <>
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl">Welcome back</CardTitle>
+          <CardDescription>Sign in with your @generisgp.com account to review activity and submit reports.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form className="space-y-4" onSubmit={submit}>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                placeholder="name@generisgp.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className="ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#3a506d]"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#3a506d]"
+                required
+              />
+            </div>
+            <Button className="w-full" disabled={isSubmitting}>
+              <LogIn className="mr-2 h-4 w-4" />
+              {isSubmitting ? "Signing in..." : "Sign in"}
+            </Button>
+          </form>
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="name@generisgp.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
+            <OAuthSignInButton
+              disabled={!oauthConfig.google}
+              icon={<GoogleLogo className="h-[18px] w-[18px] shrink-0" />}
+              label="Sign in with Google"
+              provider="google"
+              unavailableLabel="Google OAuth is not configured"
+            />
+            <OAuthSignInButton
+              disabled={!oauthConfig.atlassian}
+              icon={<AtlassianLogo className="h-[18px] w-[18px] shrink-0" />}
+              label="Sign in with Atlassian"
+              provider="atlassian"
+              unavailableLabel="Atlassian OAuth is not configured"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
-          </div>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <Button className="w-full" disabled={isSubmitting}>
-            <LogIn className="mr-2 h-4 w-4" />
-            {isSubmitting ? "Signing in..." : "Sign in"}
-          </Button>
-        </form>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Button
-            variant="outline"
-            disabled={!oauthConfig.google}
-            title={oauthConfig.google ? "Sign in with Google" : "Google OAuth is not configured"}
-            onClick={() => signIn("google", { callbackUrl: "/" })}
-          >
-            <CalendarDays className="mr-2 h-4 w-4" />
-            Google
-          </Button>
-          <Button
-            variant="outline"
-            disabled={!oauthConfig.atlassian}
-            title={oauthConfig.atlassian ? "Sign in with Atlassian" : "Atlassian OAuth is not configured"}
-            onClick={() => signIn("atlassian", { callbackUrl: "/" })}
-          >
-            <KanbanSquare className="mr-2 h-4 w-4" />
-            Atlassian
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">Only @generisgp.com accounts can sign in.</p>
-        {!oauthConfig.google || !oauthConfig.atlassian ? (
-          <p className="text-xs text-muted-foreground">
-            OAuth buttons are enabled after client IDs and secrets are added to `.env.local`.
-          </p>
-        ) : null}
-      </CardContent>
-    </Card>
+          <p className="text-xs text-muted-foreground">Only @generisgp.com accounts can sign in.</p>
+          {!oauthConfig.google || !oauthConfig.atlassian ? (
+            <p className="text-xs text-muted-foreground">
+              OAuth sign-in buttons are enabled after client IDs and secrets are added to `.env.local`.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+      <FixedToast message={error} onDismiss={() => setError(null)} />
+    </>
+  );
+}
+
+function OAuthSignInButton({
+  disabled,
+  icon,
+  label,
+  provider,
+  unavailableLabel
+}: {
+  disabled: boolean;
+  icon: ReactNode;
+  label: string;
+  provider: "google" | "atlassian";
+  unavailableLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      className={oauthButtonClassName}
+      disabled={disabled}
+      title={disabled ? unavailableLabel : label}
+      onClick={() => signIn(provider, { callbackUrl: "/" })}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function GoogleLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      viewBox="0 0 18 18"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fill="#4285F4"
+        d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"
+      />
+      <path
+        fill="#34A853"
+        d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M3.97 10.72A5.41 5.41 0 0 1 3.69 9c0-.6.1-1.18.28-1.72V4.95H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.05l3.01-2.33z"
+      />
+      <path
+        fill="#EA4335"
+        d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A8.62 8.62 0 0 0 9 0 9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"
+      />
+    </svg>
+  );
+}
+
+function AtlassianLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fill="#2684FF"
+        d="M6.94 10.85a.77.77 0 0 0-1.32.14L.09 22.05A.77.77 0 0 0 .78 23.16h7.7a.74.74 0 0 0 .69-.43c1.66-3.42.65-8.63-2.23-11.88z"
+      />
+      <path
+        fill="#0052CC"
+        d="M11.67 1.28a13.28 13.28 0 0 0 .78 13.11l3.72 7.43a.77.77 0 0 0 .69.43h7.7a.77.77 0 0 0 .69-1.11L13.01 1.27a.77.77 0 0 0-1.34.01z"
+      />
+    </svg>
   );
 }

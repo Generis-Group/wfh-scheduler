@@ -16,6 +16,7 @@ import {
   Edit3,
   FileText,
   Loader2,
+  Lock,
   Mail,
   MessageSquare,
   Search,
@@ -26,6 +27,7 @@ import type { FormEvent, ReactNode } from "react";
 import { EmptyReferenceState } from "@/components/reports/reference-shell";
 import { SummaryRenderer } from "@/components/reports/summary-renderer";
 import { Button } from "@/components/ui/button";
+import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -94,7 +96,7 @@ type Row = {
 
 type EmployeeStatusFilter = "ALL" | "SUBMITTED" | "MISSING";
 type EmployeeRowStatus = DashboardReport["status"] | "MISSING";
-type PendingDateControl = "previous" | "next" | "picker";
+type PendingDateControl = "previous" | "next" | "picker" | "today";
 type EmployeeSortKey =
   | "employee"
   | "department"
@@ -397,6 +399,10 @@ function employeeStatusFilterValue(row: Row): EmployeeRowStatus {
   }
 
   return row.report.status;
+}
+
+function canReviewReport(row: Row) {
+  return row.report?.status === "SUBMITTED";
 }
 
 function submittedSortValue(row: Row) {
@@ -702,9 +708,13 @@ export function ReviewerDashboard({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
+  const [blockedOpenUserId, setBlockedOpenUserId] = useState<string | null>(
+    null,
+  );
   const [pendingDateControl, setPendingDateControl] =
     useState<PendingDateControl | null>(null);
   const pendingDateRef = useRef<string | null>(null);
+  const blockedOpenTimerRef = useRef<number | null>(null);
   const dateInputRef = useRef<HTMLInputElement | null>(null);
   const maxReportDate = todayDateString();
   const currentReviewDate = dateInputValue(date);
@@ -755,10 +765,13 @@ export function ReviewerDashboard({
     currentPage * pageSize,
   );
   const visibleReportIds = pageItems.flatMap((row) =>
-    row.report ? [row.report.id] : [],
+    canReviewReport(row) && row.report ? [row.report.id] : [],
   );
   const selectedRows = items.filter(
-    (row) => row.report && selectedReportIds.includes(row.report.id),
+    (row) =>
+      canReviewReport(row) &&
+      row.report &&
+      selectedReportIds.includes(row.report.id),
   );
   const allVisibleReportsSelected =
     visibleReportIds.length > 0 &&
@@ -770,14 +783,16 @@ export function ReviewerDashboard({
   const submitted = filteredItems.filter(
     (row) => row.report?.status === "SUBMITTED",
   ).length;
-  const unread = filteredItems.filter((row) =>
-    isUnreadForReviewer(row.report, reviewerId),
+  const unread = filteredItems.filter(
+    (row) => canReviewReport(row) && isUnreadForReviewer(row.report, reviewerId),
   ).length;
   const blockers = filteredItems.filter((row) =>
-    hasBlockers(row.report),
+    canReviewReport(row) && hasBlockers(row.report),
   ).length;
   const lateEdits = filteredItems.filter(
-    (row) => editedAfterDate(row.report, date) || isLate(row.report, date),
+    (row) =>
+      canReviewReport(row) &&
+      (editedAfterDate(row.report, date) || isLate(row.report, date)),
   ).length;
   const coverage = total ? Math.round((submitted / total) * 100) : 0;
   const hasActiveTableControls =
@@ -791,10 +806,19 @@ export function ReviewerDashboard({
     setItems(rows);
     setActiveReportUserId(null);
     setSelectedReportIds([]);
+    setBlockedOpenUserId(null);
     setPage(1);
     pendingDateRef.current = null;
     setPendingDateControl(null);
   }, [date, rows]);
+
+  useEffect(() => {
+    return () => {
+      if (blockedOpenTimerRef.current) {
+        window.clearTimeout(blockedOpenTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!pendingDateControl) {
@@ -906,6 +930,10 @@ export function ReviewerDashboard({
     );
   }
 
+  function goToTodayReviewDate() {
+    goToDate(maxReportDate, "today");
+  }
+
   function downloadCsv() {
     const exportRows = filteredItems.map((row) => ({
       employee: row.user.name ?? row.user.email ?? "Unassigned employee",
@@ -913,11 +941,19 @@ export function ReviewerDashboard({
       department: userDepartmentLabel(row.user),
       date: formatShortDate(row.report?.reportDate ?? date),
       status: reportStatus(row, date),
-      workLocation: row.report ? titleCase(row.report.workLocation) : "",
+      workLocation:
+        canReviewReport(row) && row.report
+          ? titleCase(row.report.workLocation)
+          : "",
       submittedAt: formatTimestamp(row.report?.submittedAt),
-      lastEdited: formatTimestamp(row.report?.updatedAt),
-      blockers: hasBlockers(row.report) ? "Yes" : "No",
-      activities: includedActivities(row.report).length,
+      lastEdited: canReviewReport(row)
+        ? formatTimestamp(row.report?.updatedAt)
+        : "",
+      blockers:
+        canReviewReport(row) && hasBlockers(row.report) ? "Yes" : "No",
+      activities: canReviewReport(row)
+        ? includedActivities(row.report).length
+        : 0,
     }));
     const headers = [
       "employee",
@@ -999,11 +1035,25 @@ export function ReviewerDashboard({
   }
 
   function openReport(row: Row) {
-    if (row.report) {
-      void setReadState(row, true);
+    if (!canReviewReport(row)) {
+      return;
     }
 
+    void setReadState(row, true);
     setActiveReportUserId(row.user.id);
+  }
+
+  function nudgeUnavailableReport(row: Row) {
+    setBlockedOpenUserId(row.user.id);
+
+    if (blockedOpenTimerRef.current) {
+      window.clearTimeout(blockedOpenTimerRef.current);
+    }
+
+    blockedOpenTimerRef.current = window.setTimeout(() => {
+      setBlockedOpenUserId(null);
+      blockedOpenTimerRef.current = null;
+    }, 650);
   }
 
   async function markSelectedUnread() {
@@ -1126,7 +1176,6 @@ export function ReviewerDashboard({
           row={activeRow}
           date={date}
           reviewerId={reviewerId}
-          notice={notice}
           onBack={() => setActiveReportUserId(null)}
           onAddComment={(body) => addComment(activeRow, body)}
           onPrint={() => {
@@ -1149,7 +1198,7 @@ export function ReviewerDashboard({
 
           <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="relative grid h-10 w-full min-w-[210px] grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] gap-1 min-[560px]:w-[270px]">
+              <div className="relative grid h-10 w-full min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem_2.5rem] gap-1 min-[560px]:w-[300px]">
                 <button
                   type="button"
                   className="flex h-10 w-10 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#0b1523] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:hover:text-foreground"
@@ -1196,6 +1245,24 @@ export function ReviewerDashboard({
                 ) : (
                   <span aria-hidden="true" />
                 )}
+                {canGoToNextReviewDate ? (
+                  <button
+                    type="button"
+                    className="flex h-10 w-10 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#0b1523] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:hover:text-foreground"
+                    aria-label="Jump to today"
+                    title="Jump to today"
+                    onClick={goToTodayReviewDate}
+                    disabled={dateNavigationPending}
+                  >
+                    {pendingDateControl === "today" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ChevronsRight className="h-4 w-4" />
+                    )}
+                  </button>
+                ) : (
+                  <span aria-hidden="true" />
+                )}
                 <Input
                   ref={dateInputRef}
                   type="date"
@@ -1228,12 +1295,6 @@ export function ReviewerDashboard({
               </div>
             </div>
           </section>
-
-          {notice ? (
-            <div className="mb-4 rounded-[10px] bg-[#eef5ff] px-4 py-3 text-sm text-[#1d4ed8] ring-1 ring-[#bfdbfe] dark:bg-blue-400/10 dark:text-blue-100 dark:ring-blue-300/20">
-              {notice}
-            </div>
-          ) : null}
 
           <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
             <div className="flex flex-wrap items-center gap-4">
@@ -1447,22 +1508,42 @@ export function ReviewerDashboard({
                   ) : (
                     pageItems.map((row) => {
                       const status = reportStatus(row, date);
-                      const flags = dashboardFlags(row, date);
-                      const unread = isUnreadForReviewer(
-                        row.report,
-                        reviewerId,
-                      );
+                      const canReview = canReviewReport(row);
+                      const blockedReason =
+                        row.report?.status === "DRAFT"
+                          ? "Drafts are private until submitted"
+                          : "No report has been submitted yet";
+                      const unavailablePulse =
+                        blockedOpenUserId === row.user.id;
+                      const flags = canReview ? dashboardFlags(row, date) : [];
+                      const unread =
+                        canReview &&
+                        isUnreadForReviewer(row.report, reviewerId);
 
                       return (
                         <tr
                           key={row.user.id}
+                          title={
+                            canReview
+                              ? `Open report for ${row.user.name ?? row.user.email ?? "employee"}`
+                              : blockedReason
+                          }
                           className={cn(
-                            "border-b border-[#e5eaf2] text-[#344054] transition-colors last:border-b-0 hover:bg-[#f8fbff] dark:border-[#263a55] dark:text-muted-foreground dark:hover:bg-white/[0.04]",
+                            "border-b border-[#e5eaf2] text-[#344054] transition-colors last:border-b-0 hover:bg-[#f8fbff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563eb] dark:border-[#263a55] dark:text-muted-foreground dark:hover:bg-white/[0.04]",
+                            canReview && "cursor-pointer",
                             unread && "bg-[#f4f8ff] dark:bg-blue-400/10",
                           )}
+                          onClick={() => {
+                            if (canReview) {
+                              openReport(row);
+                              return;
+                            }
+
+                            nudgeUnavailableReport(row);
+                          }}
                         >
                           <td className="px-2 py-2.5">
-                            {row.report ? (
+                            {canReview && row.report ? (
                               <input
                                 type="checkbox"
                                 checked={selectedReportIds.includes(
@@ -1473,6 +1554,10 @@ export function ReviewerDashboard({
                                     row.report!.id,
                                     event.target.checked,
                                   )
+                                }
+                                onClick={(event) => event.stopPropagation()}
+                                onKeyDown={(event) =>
+                                  event.stopPropagation()
                                 }
                                 aria-label={`Select ${row.user.name ?? row.user.email ?? "report"}`}
                               />
@@ -1533,7 +1618,7 @@ export function ReviewerDashboard({
                             </div>
                           </td>
                           <td className="px-2 py-2.5 text-xs">
-                            {row.report
+                            {canReview && row.report
                               ? titleCase(row.report.workLocation)
                               : "-"}
                           </td>
@@ -1541,23 +1626,43 @@ export function ReviewerDashboard({
                             {formatTimestamp(row.report?.submittedAt)}
                           </td>
                           <td className="px-2 py-2.5 text-center">
-                            {row.report ? (
+                            {canReview ? (
                               <Button
                                 variant="outline"
                                 className="h-8 rounded-[7px] px-3 text-xs text-[#2563eb]"
-                                onClick={() => openReport(row)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openReport(row);
+                                }}
+                                onKeyDown={(event) =>
+                                  event.stopPropagation()
+                                }
                               >
                                 Review
                               </Button>
                             ) : (
-                              <Button
-                                variant="outline"
-                                className="h-8 rounded-[7px] px-3 text-xs text-[#64748b]"
-                                disabled
-                                title="Reminder emails are coming soon"
-                              >
-                                Remind (coming soon)
-                              </Button>
+                              <div className="inline-flex items-center justify-center gap-1.5">
+                                <span
+                                  className={cn(
+                                    "inline-flex h-6 w-6 items-center justify-center rounded-full text-[#64748b] opacity-0 transition-opacity dark:text-muted-foreground",
+                                    unavailablePulse &&
+                                      "reference-lock-nudge bg-[#eef2f7] opacity-100 dark:bg-white/10",
+                                  )}
+                                  aria-hidden="true"
+                                >
+                                  <Lock className="h-3.5 w-3.5" />
+                                </span>
+                                <Button
+                                  variant="outline"
+                                  className="h-8 rounded-[7px] px-3 text-xs text-[#64748b]"
+                                  disabled
+                                  title={blockedReason}
+                                >
+                                  {row.report?.status === "DRAFT"
+                                    ? "Draft"
+                                    : "Remind (coming soon)"}
+                                </Button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -1631,6 +1736,7 @@ export function ReviewerDashboard({
           </section>
         </main>
       )}
+      <FixedToast message={notice} onDismiss={() => setNotice(null)} />
     </>
   );
 }
@@ -1711,7 +1817,6 @@ function ReportReviewPage({
   row,
   date,
   reviewerId,
-  notice,
   onBack,
   onAddComment,
   onPrint,
@@ -1719,13 +1824,26 @@ function ReportReviewPage({
   row: Row;
   date: string;
   reviewerId?: string | null;
-  notice: string | null;
   onBack: () => void;
   onAddComment: (body: string) => Promise<boolean>;
   onPrint: () => void;
 }) {
   const report = row.report;
   const activities = includedActivities(report);
+  const activityReferences = useMemo(
+    () =>
+      Object.fromEntries(
+        (report?.activities ?? []).map((activity) => [
+          activity.id,
+          {
+            href: activity.sourceUrl,
+            source: activity.source,
+            title: activity.title,
+          },
+        ]),
+      ),
+    [report?.activities],
+  );
   const blockers = blockerItems(report);
   const unread = isUnreadForReviewer(report, reviewerId);
   const comments = visibleReviewComments(report);
@@ -1760,17 +1878,20 @@ function ReportReviewPage({
   }
 
   return (
-    <main className="reference-page">
+    <main className="reference-page report-pdf-page report-pdf-document mx-auto max-w-[1120px]">
       <button
-        className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+        className="report-pdf-back mb-5 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
         onClick={onBack}
       >
         <ArrowLeft className="h-4 w-4" />
         Back to review dashboard
       </button>
 
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+      <div className="report-pdf-header mb-5 flex flex-wrap items-start justify-between gap-4">
         <div>
+          <p className="report-pdf-print-only text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">
+            Generis Employee Report
+          </p>
           <h1 className="text-[30px] font-semibold leading-tight tracking-normal text-[#101828] dark:text-foreground">
             {row.user.name ?? row.user.email ?? "Employee"} -{" "}
             {formatShortDate(report?.reportDate ?? date)} Report
@@ -1795,7 +1916,7 @@ function ReportReviewPage({
             </span>
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="report-pdf-actions flex gap-3">
           <Button
             className="h-12 rounded-[8px] bg-[#2563eb] px-6 text-white hover:bg-[#1d4ed8]"
             onClick={onPrint}
@@ -1807,13 +1928,7 @@ function ReportReviewPage({
         </div>
       </div>
 
-      {notice ? (
-        <div className="mb-4 rounded-[10px] bg-[#eef5ff] px-4 py-3 text-sm text-[#1d4ed8] ring-1 ring-[#bfdbfe] dark:bg-blue-400/10 dark:text-blue-100 dark:ring-blue-300/20">
-          {notice}
-        </div>
-      ) : null}
-
-      <section className="mb-4 grid gap-0 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55] md:grid-cols-4 md:divide-x md:divide-[#d8dee8] md:dark:divide-[#263a55]">
+      <section className="report-pdf-card mb-4 grid gap-0 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55] md:grid-cols-4 md:divide-x md:divide-[#d8dee8] md:dark:divide-[#263a55]">
         <ReportMetric
           label="Submitted"
           value={formatTimestamp(report?.submittedAt)}
@@ -1832,25 +1947,26 @@ function ReportReviewPage({
         />
       </section>
 
-      <section className="mb-4 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+      <section className="report-pdf-card mb-4 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
         <h2 className="mb-3 text-xl font-semibold text-[#101828] dark:text-foreground">
           Summary
         </h2>
-        <div className="max-h-[190px] overflow-y-auto rounded-[8px] border border-[#d8dee8] bg-white px-4 py-4 text-sm leading-6 text-[#101828] dark:border-[#263a55] dark:bg-[#0b1523] dark:text-foreground">
+        <div className="report-pdf-scroll max-h-[190px] overflow-y-auto rounded-[8px] border border-[#d8dee8] bg-white px-4 py-4 text-sm leading-6 text-[#101828] dark:border-[#263a55] dark:bg-[#0b1523] dark:text-foreground">
           <SummaryRenderer
             value={report?.summary}
             blockers={report?.blockers}
+            activityReferences={activityReferences}
             emptyText="No summary recorded."
           />
         </div>
       </section>
 
       <div className="mb-4 grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
-        <section className="rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+        <section className="report-pdf-card rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
           <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">
             Included activities ({activities.length})
           </h2>
-          <div className="mt-2 max-h-[250px] overflow-y-auto">
+          <div className="report-pdf-scroll mt-2 max-h-[250px] overflow-y-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#e5eaf2] text-left text-xs font-semibold text-[#64748b] dark:border-[#263a55] dark:text-muted-foreground">
@@ -1896,11 +2012,11 @@ function ReportReviewPage({
           </div>
         </section>
 
-        <section className="rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+        <section className="report-pdf-card rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
           <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">
             Blockers ({blockers.length})
           </h2>
-          <div className="mt-4 max-h-[250px] overflow-y-auto">
+          <div className="report-pdf-scroll mt-4 max-h-[250px] overflow-y-auto">
             {blockers.length === 0 ? (
               <EmptyReferenceState>No blockers recorded.</EmptyReferenceState>
             ) : (
@@ -1927,7 +2043,7 @@ function ReportReviewPage({
         </section>
       </div>
 
-      <section className="mb-4 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+      <section className="report-pdf-card mb-4 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">
             Review comments
@@ -1937,29 +2053,23 @@ function ReportReviewPage({
           </span>
         </div>
 
-        <div className="mt-4 space-y-3">
+        <div className="report-pdf-screen-only mt-4 space-y-3">
           {comments.length ? (
-            pagedComments.map((comment) => (
-              <div
-                key={comment.id}
-                className="rounded-[10px] bg-[#f6f9fd] px-4 py-3 ring-1 ring-[#e5eaf2] dark:bg-[#0b1523] dark:ring-[#263a55]"
-              >
-                <p className="whitespace-pre-wrap text-sm leading-6 text-[#101828] dark:text-foreground">
-                  {comment.body}
-                </p>
-                <p className="mt-2 text-xs font-medium text-[#667085] dark:text-muted-foreground">
-                  {formatTimestamp(comment.createdAt)} by{" "}
-                  {comment.author.name ?? comment.author.email ?? "Review team"}
-                </p>
-              </div>
-            ))
+            <ReviewCommentCards comments={pagedComments} />
+          ) : (
+            <EmptyReferenceState>No review comments yet.</EmptyReferenceState>
+          )}
+        </div>
+        <div className="report-pdf-print-only mt-4 space-y-3">
+          {comments.length ? (
+            <ReviewCommentCards comments={comments} />
           ) : (
             <EmptyReferenceState>No review comments yet.</EmptyReferenceState>
           )}
         </div>
 
         {comments.length > commentPageSize ? (
-          <div className="mt-4 flex items-center justify-between border-t border-[#e5eaf2] pt-3 text-sm text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">
+          <div className="report-pdf-hide mt-4 flex items-center justify-between border-t border-[#e5eaf2] pt-3 text-sm text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">
             <span>
               Page {currentCommentPage} of {commentPageCount}
             </span>
@@ -1992,7 +2102,7 @@ function ReportReviewPage({
           </div>
         ) : null}
 
-        <form className="mt-4" onSubmit={handleCommentSubmit}>
+        <form className="report-pdf-hide mt-4" onSubmit={handleCommentSubmit}>
           <Textarea
             value={commentBody}
             onChange={(event) => setCommentBody(event.target.value)}
@@ -2011,7 +2121,7 @@ function ReportReviewPage({
         </form>
       </section>
 
-      <section className="rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
+      <section className="report-pdf-card rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
         <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">
           Revision history
         </h2>
@@ -2045,9 +2155,30 @@ function ReportReviewPage({
   );
 }
 
+function ReviewCommentCards({ comments }: { comments: DashboardComment[] }) {
+  return (
+    <>
+      {comments.map((comment) => (
+        <div
+          key={comment.id}
+          className="rounded-[10px] bg-[#f6f9fd] px-4 py-3 ring-1 ring-[#e5eaf2] dark:bg-[#0b1523] dark:ring-[#263a55]"
+        >
+          <p className="whitespace-pre-wrap text-sm leading-6 text-[#101828] dark:text-foreground">
+            {comment.body}
+          </p>
+          <p className="mt-2 text-xs font-medium text-[#667085] dark:text-muted-foreground">
+            {formatTimestamp(comment.createdAt)} by{" "}
+            {comment.author.name ?? comment.author.email ?? "Review team"}
+          </p>
+        </div>
+      ))}
+    </>
+  );
+}
+
 function ReportMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="px-2 py-3 md:px-6 md:first:pl-0">
+    <div className="report-pdf-metric px-2 py-3 md:px-6 md:first:pl-0">
       <div className="text-sm font-semibold text-[#475467] dark:text-muted-foreground">
         {label}
       </div>

@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import type { Prisma } from "@prisma/client";
 
+import { activityMetadataWithLocalTitleState } from "@/lib/activity-title-overrides";
 import { parseReportDate } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
@@ -9,6 +10,19 @@ import type { updateReportSchema } from "@/lib/validation";
 import type { z } from "zod";
 
 type UpdateReportInput = z.infer<typeof updateReportSchema>;
+type ActivityUpdateInput = NonNullable<UpdateReportInput["activityUpdates"]>[number];
+type ExistingActivityUpdate = {
+  id: string;
+  dailyReportId: string | null;
+  title: string;
+  selected: boolean;
+  employeeNote: string | null;
+  metadata: Prisma.JsonValue | null;
+};
+type ChangedActivityUpdate = {
+  input: ActivityUpdateInput;
+  existing: ExistingActivityUpdate;
+};
 
 function extractBlockerLines(value: string) {
   return value
@@ -220,7 +234,7 @@ export async function getReportById(reportId: string) {
   return report;
 }
 
-async function createRevision(reportId: string, editedById: string) {
+export async function createReportRevision(reportId: string, editedById: string) {
   const report = await prisma.dailyReport.findUnique({
     where: { id: reportId },
     include: { activities: { where: { staleAt: null } } }
@@ -252,28 +266,123 @@ async function createRevision(reportId: string, editedById: string) {
   });
 }
 
+function reportBlockersInput(input: UpdateReportInput) {
+  if (input.blockers !== undefined) {
+    return input.blockers;
+  }
+
+  return input.summary === undefined ? undefined : extractBlockerLines(input.summary);
+}
+
+function reportFieldChanges(report: Awaited<ReturnType<typeof getReportById>>, input: UpdateReportInput) {
+  const blockers = reportBlockersInput(input);
+
+  return {
+    summary: input.summary !== undefined && input.summary !== report.summary,
+    blockers: blockers !== undefined && blockers !== report.blockers,
+    workLocation: input.workLocation !== undefined && input.workLocation !== report.workLocation
+  };
+}
+
+async function changedActivityUpdates(
+  report: Awaited<ReturnType<typeof getReportById>>,
+  activityUpdates: ActivityUpdateInput[]
+): Promise<ChangedActivityUpdate[]> {
+  if (activityUpdates.length === 0) {
+    return [];
+  }
+
+  const existingActivities = await prisma.activityItem.findMany({
+    where: {
+      id: { in: activityUpdates.map((activity) => activity.id) },
+      userId: report.userId,
+      reportDate: report.reportDate,
+      staleAt: null
+    },
+    select: {
+      id: true,
+      dailyReportId: true,
+      title: true,
+      selected: true,
+      employeeNote: true,
+      metadata: true
+    }
+  });
+  const existingById = new Map(existingActivities.map((activity) => [activity.id, activity]));
+
+  return activityUpdates.flatMap((activity) => {
+    const existing = existingById.get(activity.id);
+
+    if (!existing) {
+      return [];
+    }
+
+    const changed =
+      existing.dailyReportId !== report.id ||
+      (activity.title !== undefined && activity.title !== existing.title) ||
+      (activity.selected !== undefined && activity.selected !== existing.selected) ||
+      (activity.employeeNote !== undefined && activity.employeeNote !== existing.employeeNote);
+
+    return changed ? [{ input: activity, existing }] : [];
+  });
+}
+
 export async function updateReport(reportId: string, editedById: string, input: UpdateReportInput) {
   const report = await getReportById(reportId);
+  const activityUpdates = await changedActivityUpdates(report, input.activityUpdates ?? []);
+  const fieldChanges = reportFieldChanges(report, input);
+  const hasFieldChanges = Object.values(fieldChanges).some(Boolean);
+  const hasActivityChanges = activityUpdates.length > 0;
+  const hasDeletedActivities = Boolean(input.deletedActivityIds?.length);
+  const hasManualActivities = Boolean(input.manualActivities?.length);
 
-  await createRevision(report.id, editedById);
+  if (!hasFieldChanges && !hasActivityChanges && !hasDeletedActivities && !hasManualActivities) {
+    return report;
+  }
+
+  await createReportRevision(report.id, editedById);
 
   await prisma.$transaction(async (tx) => {
+    const reportData: Prisma.DailyReportUpdateInput = {};
+    const blockers = reportBlockersInput(input);
+
+    if (fieldChanges.summary) {
+      reportData.summary = input.summary;
+    }
+
+    if (fieldChanges.blockers) {
+      reportData.blockers = blockers;
+    }
+
+    if (fieldChanges.workLocation) {
+      reportData.workLocation = input.workLocation;
+    }
+
+    if (!hasFieldChanges) {
+      reportData.updatedAt = new Date();
+    }
+
     await tx.dailyReport.update({
       where: { id: report.id },
-      data: {
-        summary: input.summary,
-        blockers: input.blockers !== undefined ? input.blockers : input.summary === undefined ? undefined : extractBlockerLines(input.summary),
-        workLocation: input.workLocation
-      }
+      data: reportData
     });
 
-    for (const activity of input.activityUpdates ?? []) {
+    for (const { input: activity, existing } of activityUpdates) {
+      const titleChanged = activity.title !== undefined && activity.title !== existing.title;
+
       await tx.activityItem.updateMany({
         where: { id: activity.id, userId: report.userId, reportDate: report.reportDate, staleAt: null },
         data: {
           dailyReportId: report.id,
+          title: titleChanged ? activity.title : undefined,
           selected: activity.selected,
-          employeeNote: activity.employeeNote === undefined ? undefined : activity.employeeNote
+          employeeNote: activity.employeeNote === undefined ? undefined : activity.employeeNote,
+          metadata: titleChanged
+            ? activityMetadataWithLocalTitleState(
+                existing.metadata,
+                activity.title!
+              )
+            : undefined
         }
       });
     }
@@ -326,7 +435,7 @@ export async function submitReport(reportId: string, editedById: string) {
     return getReportById(reportId);
   }
 
-  await createRevision(report.id, editedById);
+  await createReportRevision(report.id, editedById);
 
   await prisma.dailyReport.update({
     where: { id: report.id },

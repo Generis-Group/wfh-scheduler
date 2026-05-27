@@ -3,11 +3,45 @@ export type TextSegment = {
   blocker: boolean;
 };
 
+export type SummaryLinkMatch = {
+  label: string;
+  href: string;
+  length: number;
+  external: boolean;
+};
+
+export type SummaryActivitySource =
+  | "JIRA"
+  | "GOOGLE_CALENDAR"
+  | "GOOGLE_TASKS"
+  | "MANUAL"
+  | "UNKNOWN";
+
+export type SummaryActivityReferenceMeta = {
+  title?: string | null;
+  href?: string | null;
+  source?: string | null;
+};
+
+export type SummaryActivityReferenceMap = Record<
+  string,
+  SummaryActivityReferenceMeta | null | undefined
+>;
+
 type MarkdownListLine = {
   content: string;
   level: number;
   ordered: boolean;
 };
+
+const summaryActivityReferenceHrefPrefix = "https://generis.local/activity/";
+const summaryActivitySources = new Set<SummaryActivitySource>([
+  "JIRA",
+  "GOOGLE_CALENDAR",
+  "GOOGLE_TASKS",
+  "MANUAL",
+  "UNKNOWN",
+]);
 
 export function extractBlockerLines(value: string) {
   return value
@@ -42,8 +76,261 @@ export function lineItems(value?: string | null) {
     .filter(Boolean);
 }
 
+export function normalizeSummaryLinkHref(value?: string | null) {
+  const trimmed = value?.trim();
+
+  if (!trimmed || trimmed === "#") {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmed);
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function normalizeSummaryActivitySource(
+  value?: string | null,
+): SummaryActivitySource {
+  const normalized = value?.trim().toUpperCase().replace(/[-\s]+/g, "_");
+
+  return normalized && summaryActivitySources.has(normalized as SummaryActivitySource)
+    ? (normalized as SummaryActivitySource)
+    : "UNKNOWN";
+}
+
+export function summaryActivityReferenceHref(
+  activityId?: string | null,
+  source?: string | null,
+) {
+  const trimmed = activityId?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalizedSource = normalizeSummaryActivitySource(source);
+  const sourceQuery =
+    normalizedSource === "UNKNOWN"
+      ? ""
+      : `?source=${encodeURIComponent(normalizedSource)}`;
+
+  return `${summaryActivityReferenceHrefPrefix}${encodeURIComponent(trimmed)}${sourceQuery}`;
+}
+
+export function isSummaryActivityReferenceHref(value?: string | null) {
+  const trimmed = value?.trim();
+
+  return Boolean(
+    trimmed?.startsWith(summaryActivityReferenceHrefPrefix) &&
+      trimmed.length > summaryActivityReferenceHrefPrefix.length,
+  );
+}
+
+export function summaryActivityReferenceIdFromHref(value?: string | null) {
+  const trimmed = value?.trim();
+
+  if (!isSummaryActivityReferenceHref(trimmed)) {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmed!);
+    const activityId = url.pathname.replace(/^\/activity\//, "");
+
+    return activityId ? decodeURIComponent(activityId) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function summaryActivityReferenceSource(
+  href?: string | null,
+  label?: string | null,
+): SummaryActivitySource {
+  const trimmedHref = href?.trim();
+  const trimmedLabel = label?.trim() ?? "";
+
+  if (isSummaryActivityReferenceHref(trimmedHref)) {
+    try {
+      const url = new URL(trimmedHref!);
+      const source = normalizeSummaryActivitySource(url.searchParams.get("source"));
+
+      if (source !== "UNKNOWN") {
+        return source;
+      }
+    } catch {
+      // Fall through to the lightweight inference below.
+    }
+  }
+
+  const lowerHref = trimmedHref?.toLowerCase() ?? "";
+
+  if (
+    lowerHref.includes("atlassian") ||
+    lowerHref.includes("jira") ||
+    /^[A-Z][A-Z0-9]+-\d+\b/.test(trimmedLabel)
+  ) {
+    return "JIRA";
+  }
+
+  if (
+    lowerHref.includes("calendar.google") ||
+    lowerHref.includes("google.com/calendar")
+  ) {
+    return "GOOGLE_CALENDAR";
+  }
+
+  if (
+    lowerHref.includes("tasks.google") ||
+    lowerHref.includes("google.com/tasks")
+  ) {
+    return "GOOGLE_TASKS";
+  }
+
+  return "UNKNOWN";
+}
+
+function normalizeSummaryReferenceHref(value?: string | null) {
+  const trimmed = value?.trim();
+
+  if (isSummaryActivityReferenceHref(trimmed)) {
+    return { href: trimmed!, external: false };
+  }
+
+  const externalHref = normalizeSummaryLinkHref(value);
+
+  return externalHref ? { href: externalHref, external: true } : null;
+}
+
+function markdownLinkLabel(value: string) {
+  return value
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[\[\]]/g, "")
+    .trim();
+}
+
+function markdownLinkHref(value: string) {
+  return value.replace(/\)/g, "%29");
+}
+
+export function summaryActivityReferenceMarkdown(
+  title: string,
+  href?: string | null,
+) {
+  const label = markdownLinkLabel(title) || "Untitled activity";
+  const normalizedHref = normalizeSummaryReferenceHref(href);
+
+  return normalizedHref
+    ? `[${label}](${markdownLinkHref(normalizedHref.href)})`
+    : label;
+}
+
+export function summaryLinkAt(value: string, index: number): SummaryLinkMatch | null {
+  const match = value.slice(index).match(/^\[([^\]\n]+)\]\(([^)\n]+)\)/);
+
+  if (!match) {
+    return null;
+  }
+
+  const reference = normalizeSummaryReferenceHref(match[2]);
+
+  if (!reference) {
+    return null;
+  }
+
+  return {
+    label: match[1],
+    href: reference.href,
+    external: reference.external,
+    length: match[0].length
+  };
+}
+
+function cleanupRemovedActivityReferences(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/[ \t]+([,.;:!?])/g, "$1")
+        .replace(/^[ \t]+(?=\S)/, "")
+        .trimEnd(),
+    )
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function removeSummaryActivityReferences(
+  value: string,
+  activityIds: string | string[],
+) {
+  const ids = new Set(
+    (Array.isArray(activityIds) ? activityIds : [activityIds])
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
+
+  if (!value || ids.size === 0) {
+    return value;
+  }
+
+  let next = "";
+  let index = 0;
+  let removed = false;
+
+  while (index < value.length) {
+    const link = summaryLinkAt(value, index);
+    const activityId = link
+      ? summaryActivityReferenceIdFromHref(link.href)
+      : null;
+
+    if (link && activityId && ids.has(activityId)) {
+      index += link.length;
+      removed = true;
+      continue;
+    }
+
+    next += value[index];
+    index += 1;
+  }
+
+  return removed ? cleanupRemovedActivityReferences(next) : value;
+}
+
+function nextSummaryLinkIndex(value: string, startIndex: number) {
+  let index = value.indexOf("[", startIndex);
+
+  while (index !== -1) {
+    if (summaryLinkAt(value, index)) {
+      return index;
+    }
+
+    index = value.indexOf("[", index + 1);
+  }
+
+  return -1;
+}
+
+function stripSummaryLinks(value: string) {
+  return value.replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/g, (match, label, href) =>
+    normalizeSummaryReferenceHref(href) ? label : match,
+  );
+}
+
 export function stripInlineFormatMarkers(value: string) {
-  return value.replace(/\*\*(.*?)\*\*/g, "$1").replace(/_(.*?)_/g, "$1");
+  return stripSummaryLinks(value)
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/_(.*?)_/g, "$1");
 }
 
 function stripBlockMarkers(value: string) {
@@ -124,16 +411,66 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-function renderInlineSummaryHtml(text: string, blockerItems: string[]): string {
+function activityReferenceMetaFromMap(
+  href: string,
+  activityReferences?: SummaryActivityReferenceMap,
+) {
+  const activityId = summaryActivityReferenceIdFromHref(href);
+
+  return activityId ? activityReferences?.[activityId] ?? null : null;
+}
+
+function activityReferenceLabelFromMeta(
+  fallbackLabel: string,
+  meta?: SummaryActivityReferenceMeta | null,
+) {
+  return markdownLinkLabel(meta?.title ?? fallbackLabel) || "Untitled activity";
+}
+
+function renderInlineSummaryHtml(
+  text: string,
+  blockerItems: string[],
+  activityReferences?: SummaryActivityReferenceMap,
+): string {
   const nodes: string[] = [];
   let index = 0;
 
   while (index < text.length) {
+    const link = summaryLinkAt(text, index);
+
+    if (link) {
+      const activityMeta = activityReferenceMetaFromMap(
+        link.href,
+        activityReferences,
+      );
+      const label = activityReferenceLabelFromMeta(link.label, activityMeta);
+      const metaSource = normalizeSummaryActivitySource(activityMeta?.source);
+      const source =
+        metaSource !== "UNKNOWN"
+          ? metaSource
+          : summaryActivityReferenceSource(link.href, label);
+      const activityId = summaryActivityReferenceIdFromHref(link.href);
+      const activityIdAttribute = activityId
+        ? ` data-activity-id="${escapeHtml(activityId)}"`
+        : "";
+      nodes.push(
+        `<span class="summary-activity-reference-node" data-summary-activity-reference="true" data-source="${escapeHtml(source)}" data-href="${escapeHtml(link.href)}"${activityIdAttribute}>${escapeHtml(label)}</span>`,
+      );
+      index += link.length;
+      continue;
+    }
+
     if (text.startsWith("**", index)) {
       const close = text.indexOf("**", index + 2);
 
       if (close !== -1) {
-        nodes.push(`<strong>${renderInlineSummaryHtml(text.slice(index + 2, close), blockerItems)}</strong>`);
+        nodes.push(
+          `<strong>${renderInlineSummaryHtml(
+            text.slice(index + 2, close),
+            blockerItems,
+            activityReferences,
+          )}</strong>`,
+        );
         index = close + 2;
         continue;
       }
@@ -143,7 +480,13 @@ function renderInlineSummaryHtml(text: string, blockerItems: string[]): string {
       const close = text.indexOf("_", index + 1);
 
       if (close !== -1) {
-        nodes.push(`<em>${renderInlineSummaryHtml(text.slice(index + 1, close), blockerItems)}</em>`);
+        nodes.push(
+          `<em>${renderInlineSummaryHtml(
+            text.slice(index + 1, close),
+            blockerItems,
+            activityReferences,
+          )}</em>`,
+        );
         index = close + 1;
         continue;
       }
@@ -151,7 +494,8 @@ function renderInlineSummaryHtml(text: string, blockerItems: string[]): string {
 
     const nextBold = text.indexOf("**", index);
     const nextItalic = text.indexOf("_", index);
-    let nextMarker = [nextBold, nextItalic].filter((position) => position !== -1).sort((left, right) => left - right)[0] ?? text.length;
+    const nextLink = nextSummaryLinkIndex(text, index);
+    let nextMarker = [nextLink, nextBold, nextItalic].filter((position) => position !== -1).sort((left, right) => left - right)[0] ?? text.length;
 
     if (nextMarker === index) {
       nextMarker = index + 1;
@@ -161,7 +505,7 @@ function renderInlineSummaryHtml(text: string, blockerItems: string[]): string {
 
     splitBlockerText(plainText, blockerItems).forEach((segment) => {
       const escapedText = escapeHtml(segment.text);
-      nodes.push(segment.blocker ? `<mark class="summary-blocker-highlight">${escapedText}</mark>` : escapedText);
+      nodes.push(segment.blocker ? `<mark class="summary-blocker-mark">${escapedText}</mark>` : escapedText);
     });
     index = nextMarker;
   }
@@ -174,7 +518,14 @@ function markdownListLevel(whitespace: string) {
   return Math.floor(columns / 2);
 }
 
-function renderMarkdownList(lines: MarkdownListLine[], startIndex: number, level: number, ordered: boolean, blockerItems: string[]) {
+function renderMarkdownList(
+  lines: MarkdownListLine[],
+  startIndex: number,
+  level: number,
+  ordered: boolean,
+  blockerItems: string[],
+  activityReferences?: SummaryActivityReferenceMap,
+) {
   const tagName = ordered ? "ol" : "ul";
   let html = `<${tagName}>`;
   let index = startIndex;
@@ -186,11 +537,22 @@ function renderMarkdownList(lines: MarkdownListLine[], startIndex: number, level
       break;
     }
 
-    html += `<li>${renderInlineSummaryHtml(line.content, blockerItems)}`;
+    html += `<li>${renderInlineSummaryHtml(
+      line.content,
+      blockerItems,
+      activityReferences,
+    )}`;
     index += 1;
 
     while (index < lines.length && lines[index].level > level) {
-      const nested = renderMarkdownList(lines, index, lines[index].level, lines[index].ordered, blockerItems);
+      const nested = renderMarkdownList(
+        lines,
+        index,
+        lines[index].level,
+        lines[index].ordered,
+        blockerItems,
+        activityReferences,
+      );
       html += nested.html;
       index = nested.index;
     }
@@ -203,7 +565,12 @@ function renderMarkdownList(lines: MarkdownListLine[], startIndex: number, level
   return { html, index };
 }
 
-function renderMarkdownListBlock(lines: string[], startIndex: number, blockerItems: string[]) {
+function renderMarkdownListBlock(
+  lines: string[],
+  startIndex: number,
+  blockerItems: string[],
+  activityReferences?: SummaryActivityReferenceMap,
+) {
   const listLines: MarkdownListLine[] = [];
   let index = startIndex;
 
@@ -226,7 +593,14 @@ function renderMarkdownListBlock(lines: string[], startIndex: number, blockerIte
   let listIndex = 0;
 
   while (listIndex < listLines.length) {
-    const rendered = renderMarkdownList(listLines, listIndex, listLines[listIndex].level, listLines[listIndex].ordered, blockerItems);
+    const rendered = renderMarkdownList(
+      listLines,
+      listIndex,
+      listLines[listIndex].level,
+      listLines[listIndex].ordered,
+      blockerItems,
+      activityReferences,
+    );
     html += rendered.html;
     listIndex = rendered.index;
   }
@@ -234,7 +608,11 @@ function renderMarkdownListBlock(lines: string[], startIndex: number, blockerIte
   return { html, index };
 }
 
-export function markdownToSummaryHtml(value: string, blockerItems: string[]) {
+export function markdownToSummaryHtml(
+  value: string,
+  blockerItems: string[],
+  activityReferences?: SummaryActivityReferenceMap,
+) {
   if (!value) {
     return "";
   }
@@ -247,7 +625,12 @@ export function markdownToSummaryHtml(value: string, blockerItems: string[]) {
     const line = lines[index];
 
     if (/^\s*(-|\d+\.)\s+/.test(line)) {
-      const rendered = renderMarkdownListBlock(lines, index, blockerItems);
+      const rendered = renderMarkdownListBlock(
+        lines,
+        index,
+        blockerItems,
+        activityReferences,
+      );
       html.push(rendered.html);
       index = rendered.index;
       continue;
@@ -255,7 +638,13 @@ export function markdownToSummaryHtml(value: string, blockerItems: string[]) {
 
     const heading = line.match(/^##\s+(.*)$/);
     if (heading) {
-      html.push(`<h2>${renderInlineSummaryHtml(heading[1], blockerItems)}</h2>`);
+      html.push(
+        `<h2>${renderInlineSummaryHtml(
+          heading[1],
+          blockerItems,
+          activityReferences,
+        )}</h2>`,
+      );
       index += 1;
       continue;
     }
@@ -268,14 +657,28 @@ export function markdownToSummaryHtml(value: string, blockerItems: string[]) {
         if (!nextQuote) {
           break;
         }
-        quoteLines.push(renderInlineSummaryHtml(nextQuote[1], blockerItems));
+        quoteLines.push(
+          renderInlineSummaryHtml(
+            nextQuote[1],
+            blockerItems,
+            activityReferences,
+          ),
+        );
         index += 1;
       }
       html.push(`<blockquote>${quoteLines.join("<br>")}</blockquote>`);
       continue;
     }
 
-    html.push(line ? `<p>${renderInlineSummaryHtml(line, blockerItems)}</p>` : "<p></p>");
+    html.push(
+      line
+        ? `<p>${renderInlineSummaryHtml(
+            line,
+            blockerItems,
+            activityReferences,
+          )}</p>`
+        : "<p></p>",
+    );
     index += 1;
   }
 

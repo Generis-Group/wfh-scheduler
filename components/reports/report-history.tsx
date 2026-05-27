@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
+import { flushSync } from "react-dom";
 import {
   ArrowLeft,
   ArrowUpDown,
@@ -14,6 +15,7 @@ import {
   ExternalLink,
   FileText,
   ListChecks,
+  Loader2,
   MessageCircle,
   MoreVertical,
   Plus,
@@ -24,6 +26,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
@@ -79,6 +82,11 @@ type HistoryReport = {
     createdAt: string | Date;
     editedBy?: { name?: string | null; email?: string | null } | null;
   }>;
+};
+
+type PendingReportAction = {
+  id: string;
+  type: "submit" | "delete";
 };
 
 function toDate(value?: string | Date | null) {
@@ -230,6 +238,17 @@ function activityStatusTone(
   return "neutral";
 }
 
+function activityStatusLabel(activity: HistoryActivity) {
+  if (
+    activity.source === "GOOGLE_TASKS" &&
+    activity.status?.toLowerCase() === "completed"
+  ) {
+    return null;
+  }
+
+  return activity.status || "No status";
+}
+
 function sourceIcon(source?: string | null) {
   if (source === "GOOGLE_CALENDAR") {
     return <CalendarDays className="h-4 w-4" />;
@@ -266,8 +285,12 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
     left: number;
   } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingReportAction, setPendingReportAction] =
+    useState<PendingReportAction | null>(null);
   const [page, setPage] = useState(1);
+  const [pendingPrintReportId, setPendingPrintReportId] = useState<
+    string | null
+  >(null);
   const datePickerRef = useRef<HTMLDivElement | null>(null);
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
   const maxReportDate = todayDateString();
@@ -339,6 +362,27 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
   }, [page, pageCount]);
 
   useEffect(() => {
+    if (!pendingPrintReportId || openedReport?.id !== pendingPrintReportId) {
+      return;
+    }
+
+    let firstFrame = 0;
+    let secondFrame = 0;
+
+    firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        window.print();
+        setPendingPrintReportId(null);
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [openedReport, pendingPrintReportId]);
+
+  useEffect(() => {
     function closeMenus() {
       setRowMenu(null);
     }
@@ -387,35 +431,49 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
   }
 
   async function submitDraft(report: HistoryReport) {
+    if (pendingReportAction) {
+      return;
+    }
+
     if (report.status === "SUBMITTED") {
       openReport(report);
       return;
     }
 
-    setIsSubmitting(true);
-    setMessage(null);
-
-    const response = await fetch(`/api/reports/${report.id}/submit`, {
-      method: "POST",
+    flushSync(() => {
+      setPendingReportAction({ id: report.id, type: "submit" });
+      setMessage(null);
     });
-    if (!response.ok) {
-      setMessage((await response.json()).error ?? "Unable to submit draft.");
-      setIsSubmitting(false);
-      return;
-    }
 
-    const { report: submitted } = (await response.json()) as {
-      report: HistoryReport;
-    };
-    setItems((current) =>
-      current.map((item) => (item.id === submitted.id ? submitted : item)),
-    );
-    markServerDataStale();
-    setMessage("Draft submitted for review.");
-    setIsSubmitting(false);
+    try {
+      const response = await fetch(`/api/reports/${report.id}/submit`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        setMessage((await response.json()).error ?? "Unable to submit draft.");
+        return;
+      }
+
+      const { report: submitted } = (await response.json()) as {
+        report: HistoryReport;
+      };
+      setItems((current) =>
+        current.map((item) => (item.id === submitted.id ? submitted : item)),
+      );
+      markServerDataStale();
+      setMessage("Draft submitted for review.");
+    } catch {
+      setMessage("Unable to submit draft. Check your connection and try again.");
+    } finally {
+      setPendingReportAction(null);
+    }
   }
 
   async function deleteDraft(report: HistoryReport) {
+    if (pendingReportAction) {
+      return;
+    }
+
     if (report.status !== "DRAFT") {
       openReport(report);
       return;
@@ -426,26 +484,32 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
       return;
     }
 
-    setIsSubmitting(true);
-    setMessage(null);
-
-    const response = await fetch(`/api/reports/${report.id}`, {
-      method: "DELETE",
+    flushSync(() => {
+      setPendingReportAction({ id: report.id, type: "delete" });
+      setMessage(null);
     });
-    if (!response.ok) {
-      setMessage((await response.json()).error ?? "Unable to delete draft.");
-      setIsSubmitting(false);
-      return;
-    }
 
-    setItems((current) => current.filter((item) => item.id !== report.id));
-    if (openedReportId === report.id) {
-      backToReports();
+    try {
+      const response = await fetch(`/api/reports/${report.id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        setMessage((await response.json()).error ?? "Unable to delete draft.");
+        return;
+      }
+
+      setItems((current) => current.filter((item) => item.id !== report.id));
+      if (openedReportId === report.id) {
+        backToReports();
+      }
+      setRowMenu(null);
+      markServerDataStale();
+      setMessage("Draft deleted.");
+    } catch {
+      setMessage("Unable to delete draft. Check your connection and try again.");
+    } finally {
+      setPendingReportAction(null);
     }
-    setRowMenu(null);
-    markServerDataStale();
-    setMessage("Draft deleted.");
-    setIsSubmitting(false);
   }
 
   function toggleRowMenu(
@@ -485,9 +549,9 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
   function downloadPdf(report?: HistoryReport) {
     if (report) {
       setOpenedReportId(report.id);
+      setPendingPrintReportId(report.id);
       setRowMenu(null);
       updateReportParam(report.id);
-      window.setTimeout(() => window.print(), 100);
       return;
     }
 
@@ -497,13 +561,17 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
   const menuReport = rowMenu
     ? items.find((report) => report.id === rowMenu.id)
     : null;
+  const menuReportPending =
+    menuReport && pendingReportAction?.id === menuReport.id
+      ? pendingReportAction
+      : null;
 
   return (
     <>
       {openedReport ? (
         <OpenedReportView
           report={openedReport}
-          isSubmitting={isSubmitting}
+          pendingAction={pendingReportAction}
           onBack={backToReports}
           onEdit={() => editReport(openedReport)}
           onSubmit={() => submitDraft(openedReport)}
@@ -615,11 +683,6 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
                 New Report
               </Button>
             </div>
-            {message ? (
-              <div className="mt-3 text-sm text-[#475569] dark:text-muted-foreground">
-                {message}
-              </div>
-            ) : null}
           </section>
 
           <section className="overflow-hidden rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
@@ -749,19 +812,37 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
                 </MenuButton>
                 {menuReport.status === "DRAFT" ? (
                   <MenuButton
-                    icon={<Send className="h-4 w-4" />}
+                    icon={
+                      menuReportPending?.type === "submit" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )
+                    }
+                    disabled={Boolean(pendingReportAction)}
                     onClick={() => submitDraft(menuReport)}
                   >
-                    Submit draft
+                    {menuReportPending?.type === "submit"
+                      ? "Submitting..."
+                      : "Submit draft"}
                   </MenuButton>
                 ) : null}
                 {menuReport.status === "DRAFT" ? (
                   <MenuButton
-                    icon={<Trash2 className="h-4 w-4" />}
+                    icon={
+                      menuReportPending?.type === "delete" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )
+                    }
                     destructive
+                    disabled={Boolean(pendingReportAction)}
                     onClick={() => deleteDraft(menuReport)}
                   >
-                    Delete draft
+                    {menuReportPending?.type === "delete"
+                      ? "Deleting..."
+                      : "Delete draft"}
                   </MenuButton>
                 ) : null}
                 <MenuButton
@@ -781,13 +862,14 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
           ) : null}
         </main>
       )}
+      <FixedToast message={message} onDismiss={() => setMessage(null)} />
     </>
   );
 }
 
 function OpenedReportView({
   report,
-  isSubmitting,
+  pendingAction,
   onBack,
   onEdit,
   onSubmit,
@@ -795,30 +877,52 @@ function OpenedReportView({
   onDownload,
 }: {
   report: HistoryReport;
-  isSubmitting: boolean;
+  pendingAction: PendingReportAction | null;
   onBack: () => void;
   onEdit: () => void;
   onSubmit: () => void;
   onDelete: () => void;
   onDownload: () => void;
 }) {
+  const isSubmitting =
+    pendingAction?.id === report.id && pendingAction.type === "submit";
+  const isDeleting =
+    pendingAction?.id === report.id && pendingAction.type === "delete";
+  const isPending = pendingAction !== null;
   const includedActivities = report.activities;
+  const activityReferences = useMemo(
+    () =>
+      Object.fromEntries(
+        report.activities.map((activity) => [
+          activity.id,
+          {
+            href: activity.sourceUrl,
+            source: activity.source,
+            title: activity.title,
+          },
+        ]),
+      ),
+    [report.activities],
+  );
   const departmentLabel = reportDepartmentLabel(report);
   const comments = visibleReviewComments(report);
 
   return (
-    <main className="reference-page !pb-4 !pt-3">
-      <div className="mx-auto max-w-[1120px]">
+    <main className="reference-page report-pdf-page !pb-4 !pt-3">
+      <div className="report-pdf-document mx-auto max-w-[1120px]">
         <button
-          className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+          className="report-pdf-back mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
           onClick={onBack}
         >
           <ArrowLeft className="h-4 w-4" />
           Back to reports
         </button>
 
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+        <div className="report-pdf-header mb-4 flex flex-wrap items-start justify-between gap-4">
           <div>
+            <p className="report-pdf-print-only text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">
+              Generis Daily Report
+            </p>
             <h1 className="text-[26px] font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">
               {formatReportTitle(report.reportDate)}
             </h1>
@@ -831,10 +935,11 @@ function OpenedReportView({
               </StatusPill>
             </div>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="report-pdf-actions flex flex-wrap gap-3">
             <Button
               variant="outline"
               className="h-10 rounded-[8px] bg-white px-5 text-sm font-medium ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
+              disabled={isPending}
               onClick={onEdit}
             >
               <Edit3 className="mr-2 h-4 w-4" />
@@ -844,25 +949,34 @@ function OpenedReportView({
               <Button
                 variant="outline"
                 className="h-10 rounded-[8px] bg-white px-5 text-sm font-semibold text-[#b42318] ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
-                disabled={isSubmitting}
+                disabled={isPending}
                 onClick={onDelete}
               >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete draft
+                {isDeleting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-2 h-4 w-4" />
+                )}
+                {isDeleting ? "Deleting..." : "Delete draft"}
               </Button>
             ) : null}
             {report.status === "DRAFT" ? (
               <Button
                 className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold hover:bg-[#1d4ed8]"
-                disabled={isSubmitting}
+                disabled={isPending}
                 onClick={onSubmit}
               >
-                <Send className="mr-2 h-4 w-4" />
+                {isSubmitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
+                )}
                 {isSubmitting ? "Submitting..." : "Submit draft"}
               </Button>
             ) : null}
             <Button
               className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold hover:bg-[#1d4ed8]"
+              disabled={isPending}
               onClick={onDownload}
             >
               <Download className="mr-2 h-4 w-4" />
@@ -871,7 +985,7 @@ function OpenedReportView({
           </div>
         </div>
 
-        <section className="mb-3 grid rounded-[10px] bg-white ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[900px]:grid-cols-4">
+        <section className="report-pdf-card mb-3 grid rounded-[10px] bg-white ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[900px]:grid-cols-4">
           <Metric
             icon={<CalendarDays className="h-4 w-4" />}
             label="Submitted"
@@ -895,7 +1009,11 @@ function OpenedReportView({
         </section>
 
         <ReportSection title="1. Summary">
-          <SummaryRenderer value={report.summary} blockers={report.blockers} />
+          <SummaryRenderer
+            value={report.summary}
+            blockers={report.blockers}
+            activityReferences={activityReferences}
+          />
         </ReportSection>
 
         <ReportSection
@@ -907,33 +1025,41 @@ function OpenedReportView({
             </p>
           ) : (
             <div className="overflow-hidden rounded-[8px] ring-1 ring-[#e1e6ef] dark:ring-[#263a55]">
-              {includedActivities.map((activity) => (
-                <div
-                  key={activity.id}
-                  className="grid gap-3 border-b border-[#e8ecf3] bg-white px-3 py-2.5 last:border-b-0 dark:border-[#263a55] dark:bg-[#101d2e] min-[820px]:grid-cols-[40px_minmax(0,1fr)_180px_150px_80px] min-[820px]:items-center"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#f4f7fb] text-[#475467] dark:bg-white/[0.05] dark:text-muted-foreground">
-                    {sourceIcon(activity.source)}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-[#111827] dark:text-foreground">
-                      {activity.title || "Untitled activity"}
+              {includedActivities.map((activity) => {
+                const statusLabel = activityStatusLabel(activity);
+
+                return (
+                  <div
+                    key={activity.id}
+                    className="grid gap-3 border-b border-[#e8ecf3] bg-white px-3 py-2.5 last:border-b-0 dark:border-[#263a55] dark:bg-[#101d2e] min-[820px]:grid-cols-[40px_minmax(0,1fr)_180px_150px_80px] min-[820px]:items-center"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#f4f7fb] text-[#475467] dark:bg-white/[0.05] dark:text-muted-foreground">
+                      {sourceIcon(activity.source)}
                     </div>
-                    <div className="mt-1 truncate text-xs text-[#667085] dark:text-muted-foreground">
-                      {activity.employeeNote || "No note added."}
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-[#111827] dark:text-foreground">
+                        {activity.title || "Untitled activity"}
+                      </div>
+                      <div className="mt-1 truncate text-xs text-[#667085] dark:text-muted-foreground">
+                        {activity.employeeNote || "No note added."}
+                      </div>
+                    </div>
+                    <div className="text-xs text-[#667085] dark:text-muted-foreground">
+                      Source: {sourceLabel(activity.source)}
+                    </div>
+                    {statusLabel ? (
+                      <StatusPill tone={activityStatusTone(activity.status)}>
+                        {statusLabel}
+                      </StatusPill>
+                    ) : (
+                      <span aria-hidden="true" />
+                    )}
+                    <div className="text-right text-sm text-[#475467] dark:text-muted-foreground">
+                      {formatDuration(activity.durationMinutes)}
                     </div>
                   </div>
-                  <div className="text-xs text-[#667085] dark:text-muted-foreground">
-                    Source: {sourceLabel(activity.source)}
-                  </div>
-                  <StatusPill tone={activityStatusTone(activity.status)}>
-                    {activity.status || "No status"}
-                  </StatusPill>
-                  <div className="text-right text-sm text-[#475467] dark:text-muted-foreground">
-                    {formatDuration(activity.durationMinutes)}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </ReportSection>
@@ -1039,20 +1165,23 @@ function MenuButton({
   children,
   onClick,
   destructive = false,
+  disabled = false,
 }: {
   icon: ReactNode;
   children: ReactNode;
   onClick: () => void;
   destructive?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       className={cn(
-        "flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left hover:bg-[#f8fafc] dark:hover:bg-white/5",
+        "flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-white/5",
         destructive
           ? "text-[#b42318] dark:text-red-300"
           : "text-[#334155] dark:text-foreground",
       )}
+      disabled={disabled}
       onClick={onClick}
     >
       {icon}
@@ -1071,7 +1200,7 @@ function Metric({
   value: string;
 }) {
   return (
-    <div className="flex min-h-[64px] items-center gap-3 border-b border-[#e8ecf3] px-5 py-3 last:border-b-0 dark:border-[#263a55] min-[900px]:border-b-0 min-[900px]:border-r min-[900px]:last:border-r-0">
+    <div className="report-pdf-metric flex min-h-[64px] items-center gap-3 border-b border-[#e8ecf3] px-5 py-3 last:border-b-0 dark:border-[#263a55] min-[900px]:border-b-0 min-[900px]:border-r min-[900px]:last:border-r-0">
       <span className="text-[#40516c] dark:text-muted-foreground">{icon}</span>
       <div className="min-w-0">
         <div className="text-sm font-semibold text-[#40516c] dark:text-muted-foreground">
@@ -1093,7 +1222,7 @@ function ReportSection({
   children: ReactNode;
 }) {
   return (
-    <section className="mb-2.5 rounded-[10px] bg-white p-4 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+    <section className="report-pdf-card mb-2.5 rounded-[10px] bg-white p-4 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
       <h2 className="mb-2.5 text-base font-semibold text-[#111827] dark:text-foreground">
         {title}
       </h2>

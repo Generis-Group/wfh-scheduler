@@ -5,6 +5,7 @@ import { KeyRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
@@ -44,55 +45,57 @@ export function ChangePasswordForm() {
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Change temporary password</CardTitle>
-        <CardDescription>Set a permanent password before continuing to the reporting app.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="space-y-4" onSubmit={submit}>
-          <div className="space-y-2">
-            <Label htmlFor="currentPassword">Temporary password</Label>
-            <Input
-              id="currentPassword"
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="newPassword">New password</Label>
-            <Input
-              id="newPassword"
-              type="password"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-              minLength={8}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm new password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              minLength={8}
-              required
-            />
-          </div>
-          {message ? <p className="text-sm text-destructive">{message}</p> : null}
-          <Button className="w-full" disabled={isSubmitting}>
-            <KeyRound className="mr-2 h-4 w-4" />
-            {isSubmitting ? "Saving..." : "Save password"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <>
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl">Change temporary password</CardTitle>
+          <CardDescription>Set a permanent password before continuing to the reporting app.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-4" onSubmit={submit}>
+            <div className="space-y-2">
+              <Label htmlFor="currentPassword">Temporary password</Label>
+              <Input
+                id="currentPassword"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New password</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                minLength={8}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm new password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                minLength={8}
+                required
+              />
+            </div>
+            <Button className="w-full" disabled={isSubmitting}>
+              <KeyRound className="mr-2 h-4 w-4" />
+              {isSubmitting ? "Saving..." : "Save password"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+      <FixedToast message={message} onDismiss={() => setMessage(null)} />
+    </>
   );
 }

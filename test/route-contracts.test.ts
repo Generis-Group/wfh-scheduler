@@ -51,7 +51,9 @@ vi.mock("@/lib/services/activity", () => ({
 vi.mock("@/lib/services/sync", () => ({
   syncJira: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0, activities: [] })),
   syncGoogleCalendar: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0, activities: [] })),
-  syncGoogleTasks: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0, activities: [] }))
+  syncGoogleTasks: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0, activities: [] })),
+  searchIncompleteGoogleTasks: vi.fn(async () => []),
+  addGoogleTaskReference: vi.fn(async () => ({ id: "report-1", userId: "user-1" }))
 }));
 
 vi.mock("@/lib/services/admin", () => ({
@@ -251,6 +253,24 @@ describe("route contracts", () => {
       expect.objectContaining({ user: expect.objectContaining({ id: "user-1" }) }),
       expect.objectContaining({ id: "report-1", userId: "user-1" })
     );
+  });
+
+  it("skips route revalidation for autosave report updates", async () => {
+    const cache = await import("next/cache");
+    const { PUT } = await import("@/app/api/reports/[id]/route");
+    vi.mocked(cache.revalidatePath).mockClear();
+
+    const response = await PUT(
+      new Request("http://localhost/api/reports/report-1", {
+        method: "PUT",
+        headers: { "x-generis-autosave": "1" },
+        body: JSON.stringify({ summary: "Autosaved summary" })
+      }),
+      { params: { id: "report-1" } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(cache.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("requires owner mutation access when submitting a report", async () => {

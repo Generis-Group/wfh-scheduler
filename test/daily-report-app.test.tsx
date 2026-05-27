@@ -68,6 +68,8 @@ vi.mock("@/components/reports/summary-editor", async () => {
   type Snapshot = { summary: string; blockers: string };
 
   return {
+    summaryActivityReferenceDragType:
+      "application/x-generis-activity-reference",
     SummaryEditor: ReactModule.forwardRef(function MockSummaryEditor(
       {
         initialSummary,
@@ -124,6 +126,7 @@ vi.mock("@/components/reports/summary-editor", async () => {
 });
 
 import { DailyReportApp } from "@/components/reports/daily-report-app";
+import { todayDateString } from "@/lib/dates";
 
 type DailyReportProps = React.ComponentProps<typeof DailyReportApp>;
 
@@ -165,13 +168,40 @@ const importedTask: DailyReportProps["initialReport"]["activities"][number] = {
   employeeNote: null,
 };
 
+const manualGoogleTask: DailyReportProps["initialReport"]["activities"][number] = {
+  id: "task-manual",
+  source: "GOOGLE_TASKS" as const,
+  title: "Draft rollout plan",
+  description: null,
+  status: "in progress",
+  sourceUrl: "#",
+  startedAt: "2026-05-20T12:00:00.000Z",
+  durationMinutes: null,
+  selected: true,
+  employeeNote: null,
+};
+
+const linkedJiraTask: DailyReportProps["initialReport"]["activities"][number] = {
+  id: "jira-linked",
+  source: "JIRA" as const,
+  title: "IT-3027: Improve website loading speed and performance",
+  description: null,
+  status: "In Progress",
+  sourceUrl: "https://generisgp.atlassian.net/browse/IT-3027",
+  startedAt: "2026-05-20T13:00:00.000Z",
+  durationMinutes: 60,
+  selected: true,
+  employeeNote: null,
+};
+
 function renderDailyReportApp(
   initialReport: DailyReportProps["initialReport"] = emptyReport,
+  date = "2026-05-20",
 ) {
   return render(
     <DailyReportApp
       initialReport={initialReport}
-      date="2026-05-20"
+      date={date}
       integrationStatus={{ google: true, atlassian: false }}
       oauthConfig={{ google: true, atlassian: false }}
     />,
@@ -209,7 +239,8 @@ afterEach(() => {
 describe("DailyReportApp auto-draft", () => {
   it("auto-creates a draft after editing summary", async () => {
     vi.useFakeTimers();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, _init?: RequestInit) => {
       if (String(input) === "/api/reports") {
         return Response.json(
           { report: { ...savedDraft, summary: "Finished the rollout note" } },
@@ -218,7 +249,8 @@ describe("DailyReportApp auto-draft", () => {
       }
 
       return Response.json({ error: "Unexpected request." }, { status: 500 });
-    });
+      },
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     renderDailyReportApp();
@@ -289,6 +321,78 @@ describe("DailyReportApp auto-draft", () => {
     ).toBe(false);
   });
 
+  it("adds an unfinished Google Task manually", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.includes("/api/google-tasks/search")) {
+        return Response.json({
+          tasks: [
+            {
+              taskId: "task-manual",
+              taskListId: "list-1",
+              taskListTitle: "Primary tasks",
+              title: "Draft rollout plan",
+              notes: null,
+              status: "needsAction",
+              due: null,
+              updated: "2026-05-20T12:00:00.000Z",
+              sourceUrl: "#",
+            },
+          ],
+        });
+      }
+
+      if (url === "/api/reports/google-task") {
+        expect(init).toEqual(
+          expect.objectContaining({
+            method: "POST",
+            body: expect.stringContaining("task-manual"),
+          }),
+        );
+
+        return Response.json({
+          report: { ...savedDraft, activities: [manualGoogleTask] },
+        });
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp(savedDraft);
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(screen.getByRole("button", { name: "Find unfinished task" }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Find unfinished Google Tasks" }),
+      { target: { value: "rollout" } },
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    await flushReact();
+
+    const taskButton = screen.getByRole("button", {
+      name: /Draft rollout plan/i,
+    });
+    fireEvent.click(taskButton);
+
+    await flushReact();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/reports/google-task",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    expect(screen.getAllByText("Draft rollout plan")).toHaveLength(1);
+  });
+
   it("coalesces rapid edits into one debounced save", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn(
@@ -314,6 +418,39 @@ describe("DailyReportApp auto-draft", () => {
     expect(fetchMock.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({ body: expect.stringContaining("Second edit") }),
     );
+  });
+
+  it("flushes formatted summary markdown before page refresh", async () => {
+    vi.useFakeTimers();
+    const formattedSummary = "## **_Header_**\n- **_Bullet_**\n1. _Numbered_";
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json(
+          { report: { ...savedDraft, summary: formattedSummary } },
+          { status: 201 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+    await flushReact();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
+      target: { value: formattedSummary },
+    });
+    window.dispatchEvent(new Event("pagehide"));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/reports",
+      expect.objectContaining({
+        method: "POST",
+        keepalive: true,
+      }),
+    );
+
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(String(requestInit.body));
+    expect(body.summary).toBe(formattedSummary);
   });
 
   it("queues a follow-up save when edits happen during an in-flight save", async () => {
@@ -403,6 +540,222 @@ describe("DailyReportApp auto-draft", () => {
     });
   });
 
+  it("hides forward date controls on the latest report date", () => {
+    const today = todayDateString();
+
+    renderDailyReportApp(
+      {
+        ...savedDraft,
+        reportDate: today,
+      },
+      today,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Next day" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Jump to today" }),
+    ).toBeNull();
+  });
+
+  it("uses custom date and location pickers", async () => {
+    renderDailyReportApp(savedDraft);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open report date picker" }),
+    );
+
+    expect(screen.getByText("May 2026")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select May 19, 2026" }),
+    );
+
+    await waitFor(() => {
+      expect(mockRouterPush).toHaveBeenCalledWith("/?date=2026-05-19");
+    });
+
+    cleanup();
+    renderDailyReportApp(savedDraft);
+
+    const locationPicker = screen.getByRole("combobox", {
+      name: "Work location",
+    });
+
+    fireEvent.click(locationPicker);
+    fireEvent.click(screen.getByRole("option", { name: "Hybrid" }));
+
+    expect(locationPicker.textContent).toContain("Hybrid");
+  });
+
+  it("uses a custom drag preview for work item references", async () => {
+    const dataTransfer = {
+      effectAllowed: "",
+      setData: vi.fn(),
+      setDragImage: vi.fn(),
+    };
+
+    renderDailyReportApp({
+      ...savedDraft,
+      activities: [manualGoogleTask],
+    });
+
+    const workItem = screen.getByTitle(
+      "Drag into the summary to reference this work item",
+    );
+    fireEvent.dragStart(workItem, {
+      clientX: 80,
+      clientY: 96,
+      dataTransfer,
+    });
+
+    expect(dataTransfer.setDragImage).toHaveBeenCalled();
+    expect(dataTransfer.setData).toHaveBeenCalledWith(
+      "application/x-generis-activity-reference",
+      expect.stringContaining("Draft rollout plan"),
+    );
+    expect(dataTransfer.setData).not.toHaveBeenCalledWith(
+      "text/plain",
+      expect.any(String),
+    );
+
+    const preview = document.querySelector<HTMLElement>(
+      ".activity-drag-preview",
+    );
+    expect(preview?.textContent).toContain("Draft rollout plan");
+
+    const dragOver = new Event("dragover");
+    Object.defineProperties(dragOver, {
+      clientX: { value: 112 },
+      clientY: { value: 128 },
+    });
+    window.dispatchEvent(dragOver);
+
+    await waitFor(() => {
+      expect(preview?.style.left).toBe("112px");
+      expect(preview?.style.top).toBe("128px");
+    });
+
+    fireEvent.dragEnd(workItem);
+
+    await waitFor(() => {
+      expect(document.querySelector(".activity-drag-preview")).toBeNull();
+    });
+  });
+
+  it("prevents source links from showing the browser native drag preview", () => {
+    renderDailyReportApp({
+      ...savedDraft,
+      activities: [linkedJiraTask],
+    });
+
+    expect(
+      screen
+        .getByRole("link", {
+          name: "IT-3027: Improve website loading speed and performance",
+        })
+      .getAttribute("draggable"),
+    ).toBe("false");
+  });
+
+  it("renames work items locally from the item menu", async () => {
+    vi.useFakeTimers();
+    const renamedTask = {
+      ...manualGoogleTask,
+      title: "Renamed rollout plan",
+    };
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({
+          report: { ...savedDraft, activities: [renamedTask] },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp({
+      ...savedDraft,
+      activities: [manualGoogleTask],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "More actions for Draft rollout plan",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Task title" }), {
+      target: { value: "Renamed rollout plan" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.getByText("Renamed rollout plan")).toBeTruthy();
+
+    await advanceAutoSave();
+
+    const requestBody = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    );
+    expect(requestBody.activityUpdates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "task-manual",
+          title: "Renamed rollout plan",
+        }),
+      ]),
+    );
+  });
+
+  it("removes work items and matching summary references from the report", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({
+          report: {
+            ...savedDraft,
+            summary: "",
+            activities: [{ ...manualGoogleTask, selected: false }],
+          },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp({
+      ...savedDraft,
+      summary:
+        "[Draft rollout plan](https://generis.local/activity/task-manual?source=GOOGLE_TASKS)",
+      activities: [manualGoogleTask],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "More actions for Draft rollout plan",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(screen.queryByText("Draft rollout plan")).toBeNull();
+    expect(
+      (screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement)
+        .value,
+    ).toBe("");
+
+    await advanceAutoSave();
+
+    const requestBody = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    );
+    expect(requestBody.summary).toBe("");
+    expect(requestBody.activityUpdates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "task-manual",
+          selected: false,
+        }),
+      ]),
+    );
+  });
+
   it("creates a draft before submitting a new report", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -439,15 +792,17 @@ describe("DailyReportApp auto-draft", () => {
 
   it("autosaves submitted report edits through the update route", async () => {
     vi.useFakeTimers();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input) === "/api/reports/report-1") {
-        return Response.json({
-          report: { ...submittedReport, summary: "Submitted edit" },
-        });
-      }
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, _init?: RequestInit) => {
+        if (String(input) === "/api/reports/report-1") {
+          return Response.json({
+            report: { ...submittedReport, summary: "Submitted edit" },
+          });
+        }
 
-      return Response.json({ error: "Unexpected request." }, { status: 500 });
-    });
+        return Response.json({ error: "Unexpected request." }, { status: 500 });
+      },
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     renderDailyReportApp(submittedReport);
@@ -461,6 +816,11 @@ describe("DailyReportApp auto-draft", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/reports/report-1",
       expect.objectContaining({ method: "PUT" }),
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({ "X-Generis-Autosave": "1" }),
+      }),
     );
   });
 
@@ -504,23 +864,24 @@ describe("DailyReportApp auto-draft", () => {
   it("deletes a draft without immediately recreating it", async () => {
     vi.useFakeTimers();
     vi.spyOn(window, "confirm").mockReturnValue(true);
+    const deleteRequest = deferred<Response>();
     const fetchMock = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
+      (input: RequestInfo | URL, init?: RequestInit) => {
         if (
           String(input) === "/api/reports/report-1" &&
           init?.method === "DELETE"
         ) {
-          return Response.json({ ok: true });
+          return deleteRequest.promise;
         }
 
         if (String(input) === "/api/reports") {
-          return Response.json(
+          return Promise.resolve(Response.json(
             { report: { ...savedDraft, summary: "Fresh draft" } },
             { status: 201 },
-          );
+          ));
         }
 
-        return Response.json({ error: "Unexpected request." }, { status: 500 });
+        return Promise.resolve(Response.json({ error: "Unexpected request." }, { status: 500 }));
       },
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -529,6 +890,8 @@ describe("DailyReportApp auto-draft", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Delete draft" }));
 
+    expect(screen.getByRole("button", { name: "Deleting..." })).toBeTruthy();
+    deleteRequest.resolve(Response.json({ ok: true }));
     await flushReact();
     expect(screen.getByText("Draft deleted.")).toBeTruthy();
     expect(

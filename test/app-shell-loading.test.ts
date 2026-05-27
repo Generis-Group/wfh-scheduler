@@ -1,21 +1,82 @@
+// @vitest-environment jsdom
+
 import fs from "node:fs";
 import path from "node:path";
 
-import { describe, expect, it, vi } from "vitest";
+import React from "react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { mockPathname, mockRouterPrefetch, mockRouterPush, mockSearchParams } =
+  vi.hoisted(() => ({
+    mockPathname: { current: "/" },
+    mockRouterPrefetch: vi.fn(),
+    mockRouterPush: vi.fn(),
+    mockSearchParams: { current: "" },
+  }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/",
-  useRouter: () => ({ prefetch: vi.fn(), push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => mockPathname.current,
+  useRouter: () => ({ prefetch: mockRouterPrefetch, push: mockRouterPush }),
+  useSearchParams: () => new URLSearchParams(mockSearchParams.current),
 }));
+
+vi.mock("next/link", async () => {
+  const ReactModule = await vi.importActual<typeof import("react")>("react");
+
+  return {
+    default: ({
+      children,
+      href,
+      onClick,
+      prefetch: _prefetch,
+      ...props
+    }: {
+      children: React.ReactNode;
+      href: string | URL;
+      onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+      prefetch?: boolean;
+    }) =>
+      ReactModule.createElement(
+        "a",
+        {
+          ...props,
+          href: String(href),
+          onClick: (event: React.MouseEvent<HTMLAnchorElement>) => {
+            onClick?.(event);
+            event.preventDefault();
+          },
+        },
+        children,
+      ),
+  };
+});
 
 vi.mock("next-auth/react", () => ({
   signOut: vi.fn(),
 }));
 
-vi.mock("next/image", () => ({
-  default: "img",
-}));
+vi.mock("next/image", async () => {
+  const ReactModule = await vi.importActual<typeof import("react")>("react");
+
+  return {
+    default: ({
+      alt,
+      priority: _priority,
+      src,
+      ...props
+    }: {
+      alt: string;
+      priority?: boolean;
+      src: string | { src?: string };
+    }) =>
+      ReactModule.createElement("img", {
+        ...props,
+        alt,
+        src: typeof src === "string" ? src : (src.src ?? ""),
+      }),
+  };
+});
 
 vi.mock("@/components/theme-toggle", () => ({
   ThemeToggle: () => null,
@@ -25,9 +86,27 @@ import {
   activeNavKey,
   resolveLastReportDate,
   resolveLastReviewDate,
+  ReferenceAppShell,
+  shellPageKindFromHref,
 } from "@/components/reports/reference-shell";
+import { loadingKindFromHref } from "@/components/reports/page-loading-skeleton";
 
 const root = process.cwd();
+
+beforeEach(() => {
+  Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+    configurable: true,
+    value: vi.fn(),
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+  mockPathname.current = "/";
+  mockSearchParams.current = "";
+  vi.clearAllMocks();
+});
 
 function walkFiles(directory: string): string[] {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -39,6 +118,21 @@ function walkFiles(directory: string): string[] {
 
     return [fullPath];
   });
+}
+
+function renderReferenceShell(
+  children: React.ReactNode = "Current page content",
+) {
+  return render(
+    React.createElement(ReferenceAppShell, {
+      variant: "employee",
+      displayName: "Test User",
+      userEmail: "test@example.com",
+      userRole: "Employee",
+      mustChangePassword: false,
+      children: React.createElement("div", null, children),
+    }),
+  );
 }
 
 describe("authenticated app shell loading boundaries", () => {
@@ -55,6 +149,37 @@ describe("authenticated app shell loading boundaries", () => {
       expect(source, file).not.toContain("ReferenceAppShell");
       expect(source, file).not.toContain("route-loading");
     }
+  });
+
+  it("does not block the root document on session lookup before loading UI can stream", () => {
+    const rootLayoutSource = fs.readFileSync(
+      path.join(root, "app", "layout.tsx"),
+      "utf8",
+    );
+
+    expect(rootLayoutSource).not.toContain("@/lib/auth");
+    expect(rootLayoutSource).not.toContain("auth()");
+  });
+
+  it("uses a suspense fallback while the authenticated app shell loads", () => {
+    const appLayoutSource = fs.readFileSync(
+      path.join(root, "app", "(app)", "layout.tsx"),
+      "utf8",
+    );
+    const fallbackSource = fs.readFileSync(
+      path.join(
+        root,
+        "components",
+        "reports",
+        "app-shell-loading-fallback.tsx",
+      ),
+      "utf8",
+    );
+
+    expect(appLayoutSource).toContain("<Suspense");
+    expect(appLayoutSource).toContain("AppShellLoadingFallback");
+    expect(fallbackSource).not.toContain('displayName="Loading"');
+    expect(fallbackSource).toContain("profileLoading");
   });
 
   it("does not keep role-placeholder names in app code", () => {
@@ -80,6 +205,42 @@ describe("authenticated app shell loading boundaries", () => {
     expect(activeNavKey("/admin")).toBe("employees");
     expect(activeNavKey("/settings")).toBe("settings");
     expect(activeNavKey("/account")).toBe("settings");
+  });
+
+  it("maps shell routes to stable destination skeletons", () => {
+    expect(loadingKindFromHref("/coo", "admin")).toBe("review");
+    expect(shellPageKindFromHref("/", "employee")).toBe("daily");
+    expect(shellPageKindFromHref("/reports", "employee")).toBe("reports");
+    expect(shellPageKindFromHref("/history", "employee")).toBe("reports");
+    expect(shellPageKindFromHref("/review", "admin")).toBe("review");
+    expect(shellPageKindFromHref("/coo", "admin")).toBe("review");
+    expect(shellPageKindFromHref("/admin", "admin")).toBe("employees");
+    expect(shellPageKindFromHref("/settings#account", "employee")).toBe(
+      "settings",
+    );
+    expect(shellPageKindFromHref("/change-password", "employee")).toBeNull();
+  });
+
+  it("switches nav first and shows the destination skeleton during shell navigation", () => {
+    renderReferenceShell();
+
+    const reportsLink = screen.getAllByRole("link", {
+      name: "Reports",
+    })[0];
+
+    fireEvent.click(reportsLink);
+
+    expect(reportsLink.className).toContain("text-[#2563eb]");
+    expect(screen.queryByText("Current page content")).toBeNull();
+    expect(screen.getByLabelText("Loading page")).toBeTruthy();
+    expect(
+      document.querySelector(".reference-route-progress-bar"),
+    ).toBeTruthy();
+    expect(
+      document
+        .querySelector(".reference-content-scroll")
+        ?.getAttribute("aria-busy"),
+    ).toBe("true");
   });
 
   it("prefers the daily route date before falling back to the saved report date", () => {

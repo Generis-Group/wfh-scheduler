@@ -10,6 +10,10 @@ type Context = {
   };
 };
 
+function isAutosaveRequest(request: Request) {
+  return request.headers.get("x-generis-autosave") === "1";
+}
+
 export async function PUT(request: Request, { params }: Context) {
   try {
     const session = await requireSession();
@@ -18,7 +22,9 @@ export async function PUT(request: Request, { params }: Context) {
 
     const input = updateReportSchema.parse(await request.json());
     const updated = await updateReport(report.id, session.user.id, input);
-    revalidateReportRoutes();
+    if (!isAutosaveRequest(request)) {
+      revalidateReportRoutes();
+    }
 
     return json({ report: updated });
   } catch (error) {

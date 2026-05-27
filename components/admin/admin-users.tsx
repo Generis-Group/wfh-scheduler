@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, KeyRound, Save, UserPlus } from "lucide-react";
+import { Copy, KeyRound, Loader2, Save, UserPlus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -57,32 +58,47 @@ export function AdminUsers({
   const [newDepartmentName, setNewDepartmentName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [temporaryCredentials, setTemporaryCredentials] = useState<{ email: string; password: string } | null>(null);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [creatingDepartment, setCreatingDepartment] = useState(false);
+  const [resettingPasswordUserId, setResettingPasswordUserId] = useState<string | null>(null);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   async function createUser(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage(null);
-    setTemporaryCredentials(null);
-
-    const response = await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, role, status: "ACTIVE" })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      setMessage(data.error ?? "Unable to create user.");
+    if (isCreatingUser) {
       return;
     }
 
-    setUsers((current) => [...current, data.user]);
-    markServerDataStale();
-    setName("");
-    setEmail("");
-    setRole("EMPLOYEE");
-    setTemporaryCredentials({ email: data.user.email, password: data.temporaryPassword });
-    setMessage("User created with a temporary password.");
+    setMessage(null);
+    setTemporaryCredentials(null);
+    setIsCreatingUser(true);
+
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, role, status: "ACTIVE" })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setMessage(data.error ?? "Unable to create user.");
+        return;
+      }
+
+      setUsers((current) => [...current, data.user]);
+      markServerDataStale();
+      setName("");
+      setEmail("");
+      setRole("EMPLOYEE");
+      setTemporaryCredentials({ email: data.user.email, password: data.temporaryPassword });
+      setMessage("User created with a temporary password.");
+    } catch {
+      setMessage("Unable to create user. Check your connection and try again.");
+    } finally {
+      setIsCreatingUser(false);
+    }
   }
 
   async function updateUser(user: User, patch: UserPatch) {
@@ -121,22 +137,30 @@ export function AdminUsers({
       return;
     }
 
-    const response = await fetch("/api/admin/departments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: trimmedName })
-    });
-    const data = await response.json().catch(() => ({}));
+    setCreatingDepartment(true);
 
-    if (!response.ok) {
-      setMessage(data.error ?? "Unable to create department.");
-      return;
+    try {
+      const response = await fetch("/api/admin/departments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmedName })
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setMessage(data.error ?? "Unable to create department.");
+        return;
+      }
+
+      setDepartments((current) => [...current, data.department].sort((left, right) => left.name.localeCompare(right.name)));
+      markServerDataStale();
+      setNewDepartmentName("");
+      setMessage("Department created.");
+    } catch {
+      setMessage("Unable to create department. Check your connection and try again.");
+    } finally {
+      setCreatingDepartment(false);
     }
-
-    setDepartments((current) => [...current, data.department].sort((left, right) => left.name.localeCompare(right.name)));
-    markServerDataStale();
-    setNewDepartmentName("");
-    setMessage("Department created.");
   }
 
   function departmentIdsForUser(user: User) {
@@ -190,15 +214,29 @@ export function AdminUsers({
   }
 
   async function resetPassword(user: User) {
+    if (resettingPasswordUserId) {
+      return;
+    }
+
     setTemporaryCredentials(null);
+    setResettingPasswordUserId(user.id);
 
-    const response = await fetch(`/api/admin/users/${user.id}/reset-password`, { method: "POST" });
-    const data = await response.json();
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}/reset-password`, { method: "POST" });
+      const data = await response.json();
 
-    if (response.ok) {
+      if (!response.ok) {
+        setMessage(data.error ?? "Unable to reset password.");
+        return;
+      }
+
       setTemporaryCredentials({ email: user.email ?? "", password: data.temporaryPassword });
       markServerDataStale();
       setMessage("Temporary password created.");
+    } catch {
+      setMessage("Unable to reset password. Check your connection and try again.");
+    } finally {
+      setResettingPasswordUserId(null);
     }
   }
 
@@ -212,28 +250,43 @@ export function AdminUsers({
   }
 
   async function saveSettings() {
-    const response = await fetch("/api/admin/settings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings)
-    });
+    if (isSavingSettings) {
+      return;
+    }
 
-    if (response.ok) {
+    setIsSavingSettings(true);
+
+    try {
+      const response = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings)
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setMessage(data.error ?? "Unable to save company settings.");
+        return;
+      }
+
       markServerDataStale();
       setMessage("Company settings saved.");
+    } catch {
+      setMessage("Unable to save company settings. Check your connection and try again.");
+    } finally {
+      setIsSavingSettings(false);
     }
   }
 
   return (
-    <main className="reference-page">
+    <>
+      <main className="reference-page">
       <div className="reference-page-header">
         <div>
           <h1 className="reference-title">Employees</h1>
           <p className="reference-subtitle">Manage invite-only access, credentials users, and Jira reporting filters.</p>
         </div>
       </div>
-
-      {message ? <div className="mb-4 rounded-[10px] bg-white/80 px-4 py-3 text-sm text-[#475569] shadow-[0_8px_24px_rgba(15,23,42,0.05)] dark:bg-[#0f1b2a] dark:text-muted-foreground">{message}</div> : null}
 
       {temporaryCredentials ? (
         <div className="mb-4 rounded-[12px] border border-[#bfdbfe] bg-[#eff6ff] p-4 text-sm shadow-[0_8px_24px_rgba(15,23,42,0.05)] dark:border-[#1d4ed8]/40 dark:bg-[#132239]">
@@ -339,9 +392,18 @@ export function AdminUsers({
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Button variant="outline" size="sm" onClick={() => resetPassword(user)}>
-                          <KeyRound className="mr-2 h-4 w-4" />
-                          Reset
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={resettingPasswordUserId !== null}
+                          onClick={() => resetPassword(user)}
+                        >
+                          {resettingPasswordUserId === user.id ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <KeyRound className="mr-2 h-4 w-4" />
+                          )}
+                          {resettingPasswordUserId === user.id ? "Resetting..." : "Reset"}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -376,9 +438,16 @@ export function AdminUsers({
                     <option value="ADMIN">Admin</option>
                   </Select>
                 </div>
-                <Button className="w-full bg-[#2563eb] hover:bg-[#1d4ed8]">
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Create
+                <Button
+                  className="w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
+                  disabled={isCreatingUser}
+                >
+                  {isCreatingUser ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <UserPlus className="mr-2 h-4 w-4" />
+                  )}
+                  {isCreatingUser ? "Creating..." : "Create"}
                 </Button>
               </form>
             </CardContent>
@@ -396,8 +465,11 @@ export function AdminUsers({
                   onChange={(event) => setNewDepartmentName(event.target.value)}
                   placeholder="Department name"
                 />
-                <Button type="submit" variant="outline" disabled={!newDepartmentName.trim()}>
-                  Add
+                <Button type="submit" variant="outline" disabled={!newDepartmentName.trim() || creatingDepartment}>
+                  {creatingDepartment ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  {creatingDepartment ? "Adding..." : "Add"}
                 </Button>
               </form>
               <div className="flex flex-wrap gap-2">
@@ -436,9 +508,18 @@ export function AdminUsers({
                   }
                 />
               </div>
-              <Button variant="outline" className="w-full" onClick={saveSettings}>
-                <Save className="mr-2 h-4 w-4" />
-                Save settings
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={isSavingSettings}
+                onClick={saveSettings}
+              >
+                {isSavingSettings ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                {isSavingSettings ? "Saving..." : "Save settings"}
               </Button>
               <div className="flex flex-wrap gap-2">
                 {settings.jiraProjectKeys.map((key) => (
@@ -449,6 +530,8 @@ export function AdminUsers({
           </Card>
         </div>
       </div>
-    </main>
+      </main>
+      <FixedToast message={message} onDismiss={() => setMessage(null)} />
+    </>
   );
 }

@@ -2,6 +2,10 @@ import type { ActivityItem, SyncProvider } from "@prisma/client";
 import type { calendar_v3, tasks_v1 } from "googleapis";
 
 import {
+  importedActivityMetadata,
+  importedActivityTitle,
+} from "@/lib/activity-title-overrides";
+import {
   DEFAULT_TIMEZONE,
   parseReportDate,
   reportDateString,
@@ -9,6 +13,7 @@ import {
 } from "@/lib/dates";
 import { getGoogleServices } from "@/lib/integrations/google";
 import { getJiraConnection } from "@/lib/integrations/jira";
+import { HttpError } from "@/lib/http";
 import {
   normalizeCalendarEvent,
   normalizeGoogleTask,
@@ -20,6 +25,10 @@ import {
 import { prisma } from "@/lib/prisma";
 import { upsertImportedActivities } from "@/lib/services/activity";
 import { getCompanySettings } from "@/lib/services/company-settings";
+import {
+  createReportRevision,
+  getReportById,
+} from "@/lib/services/reports";
 
 type JiraIssue = {
   id: string;
@@ -97,6 +106,17 @@ type SyncResult = {
   skippedCount: number;
   staleCount: number;
   activities: ActivityItem[];
+};
+export type GoogleTaskSuggestion = {
+  taskId: string;
+  taskListId: string;
+  taskListTitle: string;
+  title: string;
+  notes: string | null;
+  status: string | null;
+  due: string | null;
+  updated: string | null;
+  sourceUrl: string | null;
 };
 
 function isInRange(date: Date | null | undefined, start: Date, end: Date) {
@@ -256,31 +276,214 @@ async function listGoogleTasks(tasks: GoogleTasksService, taskListId: string, pa
   return items;
 }
 
-async function listGoogleTasksForDate(tasks: GoogleTasksService, taskListId: string, start: Date, end: Date) {
-  const taskMap = new Map<string, tasks_v1.Schema$Task>();
-  const queryGroups: GoogleTaskListParams[] = [
-    {
-      completedMin: start.toISOString(),
-      completedMax: end.toISOString()
-    },
-    {
-      dueMin: start.toISOString(),
-      dueMax: end.toISOString()
-    },
-    {
-      updatedMin: start.toISOString()
-    }
-  ];
+async function listCompletedGoogleTasksForDate(
+  tasks: GoogleTasksService,
+  taskListId: string,
+  start: Date,
+  end: Date
+) {
+  return listGoogleTasks(tasks, taskListId, {
+    completedMin: start.toISOString(),
+    completedMax: end.toISOString()
+  });
+}
 
-  for (const params of queryGroups) {
-    for (const task of await listGoogleTasks(tasks, taskListId, params)) {
-      if (task.id) {
-        taskMap.set(task.id, task);
+function googleTaskSourceUrl(task: tasks_v1.Schema$Task) {
+  return task.assignmentInfo?.linkToTask ?? task.webViewLink ?? null;
+}
+
+function googleTaskSuggestion(
+  task: tasks_v1.Schema$Task,
+  taskListId: string,
+  taskListTitle: string
+): GoogleTaskSuggestion | null {
+  if (!task.id || task.deleted || task.status === "completed") {
+    return null;
+  }
+
+  return {
+    taskId: task.id,
+    taskListId,
+    taskListTitle,
+    title: task.title ?? "Untitled task",
+    notes: task.notes ?? null,
+    status: task.status ?? null,
+    due: task.due ?? null,
+    updated: task.updated ?? null,
+    sourceUrl: googleTaskSourceUrl(task)
+  };
+}
+
+function googleTaskSuggestionText(task: GoogleTaskSuggestion) {
+  return [task.title, task.notes, task.taskListTitle].filter(Boolean).join(" ").toLowerCase();
+}
+
+function googleTaskSuggestionSortValue(task: GoogleTaskSuggestion) {
+  const due = task.due ? new Date(task.due).getTime() : Number.MAX_SAFE_INTEGER;
+  const updated = task.updated ? new Date(task.updated).getTime() : 0;
+
+  return { due, updated };
+}
+
+async function configuredGoogleTaskLists(userId: string, tasks: GoogleTasksService) {
+  const settings = await prisma.userIntegrationSettings.upsert({
+    where: { userId },
+    update: {},
+    create: { userId, googleTaskListIds: [] }
+  });
+  const taskLists = await listAllGoogleTaskLists(tasks);
+  const selectedListIds =
+    settings.googleTaskListIds.length > 0
+      ? new Set(settings.googleTaskListIds)
+      : new Set(taskLists.map((list) => list.id).filter(Boolean) as string[]);
+
+  return taskLists.filter((taskList) => taskList.id && selectedListIds.has(taskList.id));
+}
+
+export async function searchIncompleteGoogleTasks(userId: string, query: string, limit = 12) {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (normalizedQuery.length < 2) {
+    return [];
+  }
+
+  const services = await getGoogleServices(userId);
+  const taskLists = await configuredGoogleTaskLists(userId, services.tasks);
+  const suggestions: GoogleTaskSuggestion[] = [];
+
+  for (const taskList of taskLists) {
+    if (!taskList.id) {
+      continue;
+    }
+
+    const tasks = await listGoogleTasks(services.tasks, taskList.id, {
+      showCompleted: false
+    });
+    const taskListTitle = taskList.title ?? "Google Tasks";
+
+    for (const task of tasks) {
+      const suggestion = googleTaskSuggestion(task, taskList.id, taskListTitle);
+
+      if (suggestion && googleTaskSuggestionText(suggestion).includes(normalizedQuery)) {
+        suggestions.push(suggestion);
       }
     }
   }
 
-  return [...taskMap.values()];
+  return suggestions
+    .sort((first, second) => {
+      const firstSort = googleTaskSuggestionSortValue(first);
+      const secondSort = googleTaskSuggestionSortValue(second);
+
+      return (
+        firstSort.due - secondSort.due ||
+        secondSort.updated - firstSort.updated ||
+        first.title.localeCompare(second.title)
+      );
+    })
+    .slice(0, limit);
+}
+
+export async function addGoogleTaskReference(userId: string, dateString: string, taskListId: string, taskId: string) {
+  const services = await getGoogleServices(userId);
+  const taskLists = await configuredGoogleTaskLists(userId, services.tasks);
+  const taskList = taskLists.find((item) => item.id === taskListId);
+
+  if (!taskList?.id) {
+    throw new HttpError(404, "Google Task list is not available.");
+  }
+
+  const taskResponse = await services.tasks.tasks.get({ tasklist: taskList.id, task: taskId });
+  const task = taskResponse.data;
+  const normalized = normalizeGoogleTask(task, taskList.id, taskList.title ?? "Google Tasks");
+
+  if (!normalized || task.status === "completed") {
+    throw new HttpError(400, "Choose an incomplete Google Task to add manually.");
+  }
+
+  const reportDate = parseReportDate(dateString);
+  const report = await prisma.dailyReport.upsert({
+    where: {
+      userId_reportDate: {
+        userId,
+        reportDate
+      }
+    },
+    update: {},
+    create: {
+      userId,
+      reportDate
+    }
+  });
+
+  await createReportRevision(report.id, userId);
+
+  const activityWhere = {
+    userId_reportDate_source_sourceId: {
+      userId,
+      reportDate,
+      source: "GOOGLE_TASKS" as const,
+      sourceId: normalized.sourceId
+    }
+  };
+  const existingActivity = await prisma.activityItem.findUnique({
+    where: activityWhere,
+    select: {
+      title: true,
+      metadata: true
+    }
+  });
+  const activityMetadata = importedActivityMetadata(
+    {
+      ...normalized.metadata,
+      manuallyAdded: true
+    },
+    normalized.title,
+    existingActivity
+  );
+  const activityTitle = importedActivityTitle(normalized.title, existingActivity);
+
+  await prisma.activityItem.upsert({
+    where: activityWhere,
+    update: {
+      dailyReportId: report.id,
+      sourceContainerId: normalized.sourceContainerId ?? null,
+      title: activityTitle,
+      description: normalized.description ?? null,
+      status: "in progress",
+      sourceUrl: normalized.sourceUrl ?? null,
+      startedAt: normalized.startedAt ?? null,
+      endedAt: normalized.endedAt ?? null,
+      durationMinutes: normalized.durationMinutes ?? null,
+      selected: true,
+      staleAt: null,
+      metadata: activityMetadata
+    },
+    create: {
+      userId,
+      dailyReportId: report.id,
+      reportDate,
+      source: "GOOGLE_TASKS",
+      sourceId: normalized.sourceId,
+      sourceContainerId: normalized.sourceContainerId ?? null,
+      title: activityTitle,
+      description: normalized.description ?? null,
+      status: "in progress",
+      sourceUrl: normalized.sourceUrl ?? null,
+      startedAt: normalized.startedAt ?? null,
+      endedAt: normalized.endedAt ?? null,
+      durationMinutes: normalized.durationMinutes ?? null,
+      selected: true,
+      metadata: activityMetadata
+    }
+  });
+
+  await prisma.dailyReport.update({
+    where: { id: report.id },
+    data: { updatedAt: new Date() }
+  });
+
+  return getReportById(report.id);
 }
 
 async function searchAllJiraIssues(jira: JiraConnection, input: { jql: string; fields: string[] }) {
@@ -607,25 +810,16 @@ export async function syncGoogleTasks(userId: string, dateString: string) {
   return runSync("GOOGLE_TASKS", userId, dateString, async () => {
     const { start, end } = zonedDayRange(dateString, DEFAULT_TIMEZONE);
     const services = await getGoogleServices(userId);
-    const settings = await prisma.userIntegrationSettings.upsert({
-      where: { userId },
-      update: {},
-      create: { userId, googleTaskListIds: [] }
-    });
-    const taskLists = await listAllGoogleTaskLists(services.tasks);
-    const selectedListIds =
-      settings.googleTaskListIds.length > 0
-        ? new Set(settings.googleTaskListIds)
-        : new Set(taskLists.map((list) => list.id).filter(Boolean) as string[]);
+    const taskLists = await configuredGoogleTaskLists(userId, services.tasks);
 
     const activities: NormalizedActivity[] = [];
 
     for (const taskList of taskLists) {
-      if (!taskList.id || !selectedListIds.has(taskList.id)) {
+      if (!taskList.id) {
         continue;
       }
 
-      const tasks = await listGoogleTasksForDate(services.tasks, taskList.id, start, end);
+      const tasks = await listCompletedGoogleTasksForDate(services.tasks, taskList.id, start, end);
 
       for (const task of tasks) {
         const normalized = normalizeGoogleTask(task, taskList.id, taskList.title ?? "Google Tasks");
@@ -639,7 +833,7 @@ export async function syncGoogleTasks(userId: string, dateString: string) {
           isInRange(normalized.endedAt, start, end) ||
           reportDateString(normalized.startedAt ?? start, DEFAULT_TIMEZONE) === dateString
         ) {
-          activities.push(normalized);
+          activities.push({ ...normalized, status: null });
         }
       }
     }

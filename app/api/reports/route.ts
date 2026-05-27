@@ -4,6 +4,10 @@ import { ensureDailyReport, getDailyReport, getReviewDashboardData, updateReport
 import { handleRouteError, HttpError, json } from "@/lib/http";
 import { createReportSchema, reportQuerySchema } from "@/lib/validation";
 
+function isAutosaveRequest(request: Request) {
+  return request.headers.get("x-generis-autosave") === "1";
+}
+
 export async function GET(request: Request) {
   try {
     const session = await requireSession();
@@ -42,7 +46,9 @@ export async function POST(request: Request) {
     const input = createReportSchema.parse(await request.json());
     const report = await ensureDailyReport(session.user.id, input.date);
     const updated = await updateReport(report.id, session.user.id, input);
-    revalidateReportRoutes();
+    if (!isAutosaveRequest(request)) {
+      revalidateReportRoutes();
+    }
 
     return json({ report: updated }, { status: 201 });
   } catch (error) {

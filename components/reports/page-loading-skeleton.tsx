@@ -206,7 +206,7 @@ export function loadingKindFromHref(
     return "reports";
   }
 
-  if (path.endsWith("/review")) {
+  if (path.endsWith("/review") || path.endsWith("/coo")) {
     return "review";
   }
 

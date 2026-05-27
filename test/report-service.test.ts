@@ -71,7 +71,9 @@ describe.runIf(process.env.TEST_DATABASE_URL)("report revisions", () => {
 
     const updated = await updateReport(report!.id, user.id, {
       summary: "Task: completed follow-up\nBlocker: waiting on approval",
-      activityUpdates: [{ id: imported.id, selected: false }],
+      activityUpdates: [
+        { id: imported.id, selected: false, title: "Renamed imported issue" },
+      ],
       deletedActivityIds: [imported.id, manual.id]
     });
 
@@ -80,6 +82,7 @@ describe.runIf(process.env.TEST_DATABASE_URL)("report revisions", () => {
 
     expect(updated?.blockers).toBe("waiting on approval");
     expect(importedAfter?.selected).toBe(false);
+    expect(importedAfter?.title).toBe("Renamed imported issue");
     expect(manualAfter).toBeNull();
 
     await prisma.user.delete({ where: { id: user.id } });

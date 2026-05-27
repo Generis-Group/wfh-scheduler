@@ -7,10 +7,10 @@ import { ThemeProvider } from "@/components/theme-provider";
 
 export function Providers({
   children,
-  session
+  session = null
 }: {
   children: React.ReactNode;
-  session: Session | null;
+  session?: Session | null;
 }) {
   return (
     <ThemeProvider>

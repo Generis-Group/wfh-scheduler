@@ -1,11 +1,22 @@
 import type { ReactNode } from "react";
 
-import { lineItems, splitBlockerText, summaryPlainText } from "@/lib/summary-format";
+import {
+  lineItems,
+  normalizeSummaryActivitySource,
+  normalizeSummaryLinkHref,
+  splitBlockerText,
+  summaryActivityReferenceIdFromHref,
+  summaryActivityReferenceSource,
+  summaryLinkAt,
+  summaryPlainText,
+  type SummaryActivityReferenceMap,
+} from "@/lib/summary-format";
 import { cn } from "@/lib/utils";
 
 type SummaryRendererProps = {
   value?: string | null;
   blockers?: string | null;
+  activityReferences?: SummaryActivityReferenceMap;
   emptyText?: string;
   className?: string;
 };
@@ -26,7 +37,7 @@ function markdownListLevel(whitespace: string) {
 function renderPlainText(value: string, blockerItems: string[], keyPrefix: string) {
   return splitBlockerText(value, blockerItems).map((segment, index) =>
     segment.blocker ? (
-      <mark key={`${keyPrefix}-mark-${index}`} className="summary-blocker-highlight">
+      <mark key={`${keyPrefix}-mark-${index}`} className="summary-blocker-mark">
         {segment.text}
       </mark>
     ) : (
@@ -35,18 +46,147 @@ function renderPlainText(value: string, blockerItems: string[], keyPrefix: strin
   );
 }
 
-function renderInline(value: string, blockerItems: string[], keyPrefix: string): ReactNode[] {
+function resolvedActivityReferenceHref(
+  link: NonNullable<ReturnType<typeof summaryLinkAt>>,
+  activityReferences?: SummaryActivityReferenceMap,
+) {
+  if (link.external) {
+    return link.href;
+  }
+
+  const activityId = summaryActivityReferenceIdFromHref(link.href);
+
+  return activityId
+    ? normalizeSummaryLinkHref(activityReferences?.[activityId]?.href)
+    : null;
+}
+
+function resolvedActivityReferenceLabel(
+  link: NonNullable<ReturnType<typeof summaryLinkAt>>,
+  activityReferences?: SummaryActivityReferenceMap,
+) {
+  const activityId = summaryActivityReferenceIdFromHref(link.href);
+  const title = activityId
+    ? activityReferences?.[activityId]?.title?.trim()
+    : null;
+
+  return title || link.label;
+}
+
+function resolvedActivityReferenceSource(
+  link: NonNullable<ReturnType<typeof summaryLinkAt>>,
+  label: string,
+  activityReferences?: SummaryActivityReferenceMap,
+) {
+  const activityId = summaryActivityReferenceIdFromHref(link.href);
+  const source = activityId
+    ? activityReferences?.[activityId]?.source
+    : null;
+  const normalizedSource = normalizeSummaryActivitySource(source);
+
+  return normalizedSource !== "UNKNOWN"
+    ? normalizedSource
+    : summaryActivityReferenceSource(link.href, label);
+}
+
+function renderActivityReference(
+  link: NonNullable<ReturnType<typeof summaryLinkAt>>,
+  children: ReactNode[],
+  key: string,
+  activityReferences?: SummaryActivityReferenceMap,
+) {
+  const label = resolvedActivityReferenceLabel(link, activityReferences);
+  const source = resolvedActivityReferenceSource(
+    link,
+    label,
+    activityReferences,
+  );
+  const href = resolvedActivityReferenceHref(link, activityReferences);
+  const content = (
+    <span className="summary-activity-reference-card" data-source={source}>
+      <span className="summary-activity-reference-icon" aria-hidden="true">
+        <span className="summary-activity-reference-symbol" />
+      </span>
+      <span className="summary-activity-reference-label">{children}</span>
+    </span>
+  );
+
+  return href ? (
+    <a
+      key={key}
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="summary-activity-reference"
+    >
+      {content}
+    </a>
+  ) : (
+    <span key={key} className="summary-activity-reference">
+      {content}
+    </span>
+  );
+}
+
+function nextSummaryLinkIndex(value: string, startIndex: number) {
+  let index = value.indexOf("[", startIndex);
+
+  while (index !== -1) {
+    if (summaryLinkAt(value, index)) {
+      return index;
+    }
+
+    index = value.indexOf("[", index + 1);
+  }
+
+  return -1;
+}
+
+function renderInline(
+  value: string,
+  blockerItems: string[],
+  keyPrefix: string,
+  activityReferences?: SummaryActivityReferenceMap,
+): ReactNode[] {
   const nodes: ReactNode[] = [];
   let index = 0;
 
   while (index < value.length) {
+    const link = summaryLinkAt(value, index);
+
+    if (link) {
+      const label = resolvedActivityReferenceLabel(link, activityReferences);
+      const children = renderInline(
+        label,
+        blockerItems,
+        `${keyPrefix}-link-${index}`,
+        activityReferences,
+      );
+
+      nodes.push(
+        renderActivityReference(
+          link,
+          children,
+          `${keyPrefix}-link-${index}`,
+          activityReferences,
+        ),
+      );
+      index += link.length;
+      continue;
+    }
+
     if (value.startsWith("**", index)) {
       const close = value.indexOf("**", index + 2);
 
       if (close !== -1) {
         nodes.push(
           <strong key={`${keyPrefix}-strong-${index}`} className="font-semibold">
-            {renderInline(value.slice(index + 2, close), blockerItems, `${keyPrefix}-strong-${index}`)}
+            {renderInline(
+              value.slice(index + 2, close),
+              blockerItems,
+              `${keyPrefix}-strong-${index}`,
+              activityReferences,
+            )}
           </strong>
         );
         index = close + 2;
@@ -60,7 +200,12 @@ function renderInline(value: string, blockerItems: string[], keyPrefix: string):
       if (close !== -1) {
         nodes.push(
           <em key={`${keyPrefix}-em-${index}`}>
-            {renderInline(value.slice(index + 1, close), blockerItems, `${keyPrefix}-em-${index}`)}
+            {renderInline(
+              value.slice(index + 1, close),
+              blockerItems,
+              `${keyPrefix}-em-${index}`,
+              activityReferences,
+            )}
           </em>
         );
         index = close + 1;
@@ -70,7 +215,8 @@ function renderInline(value: string, blockerItems: string[], keyPrefix: string):
 
     const nextBold = value.indexOf("**", index);
     const nextItalic = value.indexOf("_", index);
-    let nextMarker = [nextBold, nextItalic].filter((position) => position !== -1).sort((left, right) => left - right)[0] ?? value.length;
+    const nextLink = nextSummaryLinkIndex(value, index);
+    let nextMarker = [nextLink, nextBold, nextItalic].filter((position) => position !== -1).sort((left, right) => left - right)[0] ?? value.length;
 
     if (nextMarker === index) {
       nextMarker = index + 1;
@@ -83,7 +229,15 @@ function renderInline(value: string, blockerItems: string[], keyPrefix: string):
   return nodes;
 }
 
-function renderMarkdownList(lines: MarkdownListLine[], startIndex: number, level: number, ordered: boolean, blockerItems: string[], keyPrefix: string) {
+function renderMarkdownList(
+  lines: MarkdownListLine[],
+  startIndex: number,
+  level: number,
+  ordered: boolean,
+  blockerItems: string[],
+  keyPrefix: string,
+  activityReferences?: SummaryActivityReferenceMap,
+) {
   const TagName = ordered ? "ol" : "ul";
   const items: ReactNode[] = [];
   let index = startIndex;
@@ -95,11 +249,26 @@ function renderMarkdownList(lines: MarkdownListLine[], startIndex: number, level
       break;
     }
 
-    const children: ReactNode[] = [...renderInline(line.content, blockerItems, `${keyPrefix}-item-${index}`)];
+    const children: ReactNode[] = [
+      ...renderInline(
+        line.content,
+        blockerItems,
+        `${keyPrefix}-item-${index}`,
+        activityReferences,
+      ),
+    ];
     index += 1;
 
     while (index < lines.length && lines[index].level > level) {
-      const nested = renderMarkdownList(lines, index, lines[index].level, lines[index].ordered, blockerItems, `${keyPrefix}-nested-${index}`);
+      const nested = renderMarkdownList(
+        lines,
+        index,
+        lines[index].level,
+        lines[index].ordered,
+        blockerItems,
+        `${keyPrefix}-nested-${index}`,
+        activityReferences,
+      );
       children.push(nested.node);
       index = nested.index;
     }
@@ -121,7 +290,13 @@ function renderMarkdownList(lines: MarkdownListLine[], startIndex: number, level
   };
 }
 
-function renderMarkdownListBlock(lines: string[], startIndex: number, blockerItems: string[], keyPrefix: string) {
+function renderMarkdownListBlock(
+  lines: string[],
+  startIndex: number,
+  blockerItems: string[],
+  keyPrefix: string,
+  activityReferences?: SummaryActivityReferenceMap,
+) {
   const listLines: MarkdownListLine[] = [];
   let index = startIndex;
 
@@ -144,7 +319,15 @@ function renderMarkdownListBlock(lines: string[], startIndex: number, blockerIte
   let listIndex = 0;
 
   while (listIndex < listLines.length) {
-    const rendered = renderMarkdownList(listLines, listIndex, listLines[listIndex].level, listLines[listIndex].ordered, blockerItems, `${keyPrefix}-list-${listIndex}`);
+    const rendered = renderMarkdownList(
+      listLines,
+      listIndex,
+      listLines[listIndex].level,
+      listLines[listIndex].ordered,
+      blockerItems,
+      `${keyPrefix}-list-${listIndex}`,
+      activityReferences,
+    );
     nodes.push(rendered.node);
     listIndex = rendered.index;
   }
@@ -152,7 +335,11 @@ function renderMarkdownListBlock(lines: string[], startIndex: number, blockerIte
   return { nodes, index };
 }
 
-function renderBlocks(value: string, blockerItems: string[]) {
+function renderBlocks(
+  value: string,
+  blockerItems: string[],
+  activityReferences?: SummaryActivityReferenceMap,
+) {
   const lines = value.split("\n");
   const nodes: ReactNode[] = [];
   let index = 0;
@@ -161,7 +348,13 @@ function renderBlocks(value: string, blockerItems: string[]) {
     const line = lines[index];
 
     if (/^\s*(-|\d+\.)\s+/.test(line)) {
-      const rendered = renderMarkdownListBlock(lines, index, blockerItems, `block-${index}`);
+      const rendered = renderMarkdownListBlock(
+        lines,
+        index,
+        blockerItems,
+        `block-${index}`,
+        activityReferences,
+      );
       nodes.push(...rendered.nodes);
       index = rendered.index;
       continue;
@@ -171,7 +364,12 @@ function renderBlocks(value: string, blockerItems: string[]) {
     if (heading) {
       nodes.push(
         <h3 key={`heading-${index}`} className="my-0 text-xl font-normal leading-7 text-[#111827] dark:text-foreground">
-          {renderInline(heading[1], blockerItems, `heading-${index}`)}
+          {renderInline(
+            heading[1],
+            blockerItems,
+            `heading-${index}`,
+            activityReferences,
+          )}
         </h3>
       );
       index += 1;
@@ -189,7 +387,14 @@ function renderBlocks(value: string, blockerItems: string[]) {
         if (quoteLines.length) {
           quoteLines.push(<br key={`quote-br-${index}`} />);
         }
-        quoteLines.push(...renderInline(nextQuote[1], blockerItems, `quote-${index}`));
+        quoteLines.push(
+          ...renderInline(
+            nextQuote[1],
+            blockerItems,
+            `quote-${index}`,
+            activityReferences,
+          ),
+        );
         index += 1;
       }
       nodes.push(
@@ -202,7 +407,16 @@ function renderBlocks(value: string, blockerItems: string[]) {
 
     nodes.push(
       <p key={`paragraph-${index}`} className="my-0 min-h-6">
-        {line ? renderInline(line, blockerItems, `paragraph-${index}`) : <br />}
+        {line ? (
+          renderInline(
+            line,
+            blockerItems,
+            `paragraph-${index}`,
+            activityReferences,
+          )
+        ) : (
+          <br />
+        )}
       </p>
     );
     index += 1;
@@ -211,12 +425,18 @@ function renderBlocks(value: string, blockerItems: string[]) {
   return nodes;
 }
 
-export function SummaryRenderer({ value, blockers, emptyText = "No summary entered.", className }: SummaryRendererProps) {
+export function SummaryRenderer({
+  value,
+  blockers,
+  activityReferences,
+  emptyText = "No summary entered.",
+  className,
+}: SummaryRendererProps) {
   const trimmed = value?.trim();
 
   if (!trimmed) {
     return <p className={cn("text-sm text-[#667085] dark:text-muted-foreground", className)}>{emptyText}</p>;
   }
 
-  return <div className={cn("space-y-1 text-sm leading-6 text-[#111827] dark:text-foreground", className)}>{renderBlocks(value ?? "", lineItems(blockers))}</div>;
+  return <div className={cn("space-y-1 text-sm leading-6 text-[#111827] dark:text-foreground", className)}>{renderBlocks(value ?? "", lineItems(blockers), activityReferences)}</div>;
 }

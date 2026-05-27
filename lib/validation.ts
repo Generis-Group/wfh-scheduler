@@ -25,6 +25,7 @@ export const updateReportSchema = z.object({
     .array(
       z.object({
         id: z.string(),
+        title: z.string().min(1).max(300).optional(),
         selected: z.boolean().optional(),
         employeeNote: z.string().max(4000).nullable().optional(),
       }),

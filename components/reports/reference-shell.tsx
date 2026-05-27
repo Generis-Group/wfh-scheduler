@@ -21,7 +21,13 @@ import {
 } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
+import {
+  loadingKindFromHref,
+  PageLoadingSkeleton,
+  type PageLoadingKind,
+} from "@/components/reports/page-loading-skeleton";
 import {
   getFreshServerDataVersion,
   getServerDataVersion,
@@ -33,17 +39,24 @@ import { clampReportDateToToday } from "@/lib/dates";
 import { cn, initials } from "@/lib/utils";
 import generisLogo from "@/images/Generis_logo.png";
 
+type NavKey = "report" | "reports" | "review" | "employees" | "settings";
+
 type NavItem = {
   href: string;
   label: string;
   icon: ElementType;
-  key: string;
+  key: NavKey;
   prefetch: "eager" | "intent";
 };
 
 type RememberedDates = {
   lastReportDate?: string | null;
   lastReviewDate?: string | null;
+};
+
+type PendingNavigation = {
+  activeKey: NavKey | null;
+  pageKind: PageLoadingKind | null;
 };
 
 const employeeNav: NavItem[] = [
@@ -102,6 +115,7 @@ export function ReferenceAppShell({
   profileImage,
   userRole,
   mustChangePassword,
+  profileLoading = false,
 }: {
   children: ReactNode;
   variant: "employee" | "admin";
@@ -110,6 +124,7 @@ export function ReferenceAppShell({
   profileImage?: string | null;
   userRole: string;
   mustChangePassword: boolean;
+  profileLoading?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -119,17 +134,17 @@ export function ReferenceAppShell({
   const [profileOpen, setProfileOpen] = useState(false);
   const [lastReportDate, setLastReportDate] = useState<string | null>(null);
   const [lastReviewDate, setLastReviewDate] = useState<string | null>(null);
-  const [optimisticActive, setOptimisticActive] = useState(active);
-  const [navigationPendingHref, setNavigationPendingHref] = useState<
-    string | null
-  >(null);
+  const [pendingNavigation, setPendingNavigation] =
+    useState<PendingNavigation | null>(null);
   const [serverDataVersion, setServerDataVersion] = useState(0);
   const [freshServerDataVersion, setFreshServerDataVersion] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const prefetchedHrefsRef = useRef<Set<string>>(new Set());
-  const currentHref = `${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`;
+  const searchParamString = searchParams?.toString() ?? "";
+  const currentHref = `${pathname}${searchParamString ? `?${searchParamString}` : ""}`;
+  const routeDateParam = searchParams?.get("date") ?? null;
   const rememberedDates = useMemo(
     () => ({ lastReportDate, lastReviewDate }),
     [lastReportDate, lastReviewDate],
@@ -137,7 +152,9 @@ export function ReferenceAppShell({
   const logoHref = getLogoHref(variant, lastReviewDate);
   const mobileLogoHref = logoHref;
   const hasStalePrefetchedData = serverDataVersion !== freshServerDataVersion;
-  const navigationPending = navigationPendingHref !== null;
+  const navigationPending = pendingNavigation !== null;
+  const visibleActive = pendingNavigation?.activeKey ?? active;
+  const pendingPageKind = pendingNavigation?.pageKind ?? null;
 
   useDismissableLayer({
     open: profileOpen,
@@ -173,7 +190,7 @@ export function ReferenceAppShell({
       return;
     }
 
-    const routeReportDate = pathname === "/" ? searchParams?.get("date") : null;
+    const routeReportDate = pathname === "/" ? routeDateParam : null;
     const storedDate = window.localStorage.getItem("generis.lastReportDate");
     const nextReportDate = resolveLastReportDate(
       pathname,
@@ -189,15 +206,14 @@ export function ReferenceAppShell({
     }
 
     setLastReportDate(nextReportDate);
-  }, [pathname, searchParams, variant]);
+  }, [pathname, routeDateParam, variant]);
 
   useEffect(() => {
     if (variant !== "admin") {
       return;
     }
 
-    const routeReviewDate =
-      pathname === "/review" ? searchParams?.get("date") : null;
+    const routeReviewDate = pathname === "/review" ? routeDateParam : null;
     const storedDate = window.localStorage.getItem("generis.lastReviewDate");
     const nextReviewDate = resolveLastReviewDate(
       pathname,
@@ -213,27 +229,26 @@ export function ReferenceAppShell({
     }
 
     setLastReviewDate(nextReviewDate);
-  }, [pathname, searchParams, variant]);
+  }, [pathname, routeDateParam, variant]);
 
   useEffect(() => {
-    setNavigationPendingHref(null);
-    setOptimisticActive(active);
+    setPendingNavigation(null);
     resetContentScroll(contentScrollRef.current);
-  }, [active, pathname, searchParams]);
+  }, [active, pathname, searchParamString]);
 
   useEffect(() => {
-    if (!navigationPendingHref) {
+    if (!pendingNavigation) {
       return;
     }
 
     const fallbackTimer = window.setTimeout(() => {
-      setNavigationPendingHref(null);
+      setPendingNavigation(null);
     }, 10000);
 
     return () => {
       window.clearTimeout(fallbackTimer);
     };
-  }, [navigationPendingHref]);
+  }, [pendingNavigation]);
 
   useEffect(() => {
     function syncServerDataVersions() {
@@ -282,7 +297,7 @@ export function ReferenceAppShell({
 
   function routeLinkProps(
     href: string,
-    activeKey?: string,
+    activeKey?: NavKey,
     prefetch: NavItem["prefetch"] = "intent",
   ) {
     const prefetchHref = href.split("#")[0] || "/";
@@ -321,10 +336,10 @@ export function ReferenceAppShell({
         }
 
         resetContentScroll(contentScrollRef.current);
-        if (activeKey) {
-          setOptimisticActive(activeKey);
-        }
-        setNavigationPendingHref(href);
+        setPendingNavigation({
+          activeKey: activeKey ?? null,
+          pageKind: shellPageKindFromHref(href, variant),
+        });
         setProfileOpen(false);
 
         if (hasStalePrefetchedData) {
@@ -439,7 +454,7 @@ export function ReferenceAppShell({
                   sidebarCollapsed
                     ? "h-11 justify-center px-0"
                     : "gap-3 px-3 py-2.5",
-                  optimisticActive === item.key
+                  visibleActive === item.key
                     ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
                     : "text-[#52647a] hover:bg-[#eef4fb] hover:text-[#0f172a] dark:text-[#93a4b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]",
                 )}
@@ -489,7 +504,7 @@ export function ReferenceAppShell({
                       {...routeLinkProps(href, item.key, item.prefetch)}
                       className={cn(
                         "flex h-full items-center gap-2 border-b-[3px] px-4 text-sm font-semibold transition-colors",
-                        optimisticActive === item.key
+                        visibleActive === item.key
                           ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#bfdbfe]"
                           : "border-transparent text-[#52647a] hover:text-[#0f172a] dark:text-[#93a4b8] dark:hover:text-[#e2e8f0]",
                       )}
@@ -505,35 +520,47 @@ export function ReferenceAppShell({
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <div ref={profileMenuRef} className="relative flex items-center">
-                <button
-                  className="flex min-w-0 items-center gap-2 rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
-                  onClick={() => {
-                    setProfileOpen((open) => !open);
-                  }}
-                  aria-expanded={profileOpen}
-                  aria-haspopup="menu"
-                >
+                {profileLoading ? (
                   <div
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1d4ed8] bg-cover bg-center text-xs font-semibold text-white shadow-[0_8px_18px_rgba(29,78,216,0.22)] dark:bg-[#1d4ed8]"
-                    style={
-                      profileImage
-                        ? { backgroundImage: `url("${profileImage}")` }
-                        : undefined
-                    }
+                    className="flex min-w-0 items-center gap-2 rounded-[10px] px-1.5 py-1"
+                    aria-label="Loading profile"
+                    aria-busy="true"
                   >
-                    {profileImage ? null : initials(displayName)}
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <Skeleton className="hidden h-4 w-28 rounded-[4px] sm:block" />
+                    <Skeleton className="h-4 w-4 rounded-[4px]" />
                   </div>
-                  <div className="hidden max-w-[200px] truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0] sm:block">
-                    {displayName}
-                  </div>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 text-[#64748b] transition-transform dark:text-[#94a3b8]",
-                      profileOpen && "rotate-180",
-                    )}
-                  />
-                </button>
-                {profileOpen ? (
+                ) : (
+                  <button
+                    className="flex min-w-0 items-center gap-2 rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
+                    onClick={() => {
+                      setProfileOpen((open) => !open);
+                    }}
+                    aria-expanded={profileOpen}
+                    aria-haspopup="menu"
+                  >
+                    <div
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1d4ed8] bg-cover bg-center text-xs font-semibold text-white shadow-[0_8px_18px_rgba(29,78,216,0.22)] dark:bg-[#1d4ed8]"
+                      style={
+                        profileImage
+                          ? { backgroundImage: `url("${profileImage}")` }
+                          : undefined
+                      }
+                    >
+                      {profileImage ? null : initials(displayName)}
+                    </div>
+                    <div className="hidden max-w-[200px] truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0] sm:block">
+                      {displayName}
+                    </div>
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 text-[#64748b] transition-transform dark:text-[#94a3b8]",
+                        profileOpen && "rotate-180",
+                      )}
+                    />
+                  </button>
+                )}
+                {!profileLoading && profileOpen ? (
                   <div
                     className="absolute right-0 top-12 z-30 w-72 overflow-hidden rounded-[12px] border border-[#dbe3ee] bg-[#ffffff] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.16)] dark:border-[#24354c] dark:bg-[#0f1b2a] dark:shadow-[0_18px_45px_rgba(0,0,0,0.42)]"
                     role="menu"
@@ -559,7 +586,7 @@ export function ReferenceAppShell({
                     {mustChangePassword ? (
                       <Link
                         href="/change-password"
-                        {...routeLinkProps("/change-password", "account")}
+                        {...routeLinkProps("/change-password")}
                         className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
                       >
                         <KeyRound className="h-4 w-4" />
@@ -592,7 +619,7 @@ export function ReferenceAppShell({
                   {...routeLinkProps(href, item.key, item.prefetch)}
                   className={cn(
                     "flex h-full shrink-0 items-center gap-2 border-b-[3px] px-2 text-sm font-semibold transition-colors",
-                    optimisticActive === item.key
+                    visibleActive === item.key
                       ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#93c5fd]"
                       : "border-transparent text-[#475569] hover:text-[#0f172a] dark:text-[#94a3b8] dark:hover:text-[#e2e8f0]",
                   )}
@@ -609,7 +636,11 @@ export function ReferenceAppShell({
           aria-busy={navigationPending}
           className="reference-content-scroll min-w-0 flex-1 lg:min-h-0 lg:overflow-y-auto"
         >
-          {children}
+          {pendingPageKind ? (
+            <PageLoadingSkeleton kind={pendingPageKind} />
+          ) : (
+            children
+          )}
         </div>
       </div>
       {navigationPending ? (
@@ -653,7 +684,7 @@ function resetContentScroll(element: HTMLDivElement | null) {
   element?.scrollTo({ left: 0, top: 0 });
 }
 
-export function activeNavKey(pathname: string | null) {
+export function activeNavKey(pathname: string | null): NavKey {
   const path = pathname || "/";
 
   if (path === "/" || path === "") {
@@ -677,6 +708,28 @@ export function activeNavKey(pathname: string | null) {
   }
 
   return "report";
+}
+
+export function shellPageKindFromHref(
+  href: string,
+  variant: "employee" | "admin" = "employee",
+) {
+  const path = href.split("#")[0].split("?")[0] || "/";
+
+  if (
+    path === "/" ||
+    path.startsWith("/reports") ||
+    path.startsWith("/history") ||
+    path.startsWith("/review") ||
+    path.startsWith("/coo") ||
+    path.startsWith("/admin") ||
+    path.startsWith("/settings") ||
+    path.startsWith("/account")
+  ) {
+    return loadingKindFromHref(href, variant);
+  }
+
+  return null;
 }
 
 export function resolveLastReportDate(

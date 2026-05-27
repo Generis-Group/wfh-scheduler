@@ -2,8 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import type { MouseEvent } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { DragEvent, MouseEvent } from "react";
+import { flushSync } from "react-dom";
 import { signIn } from "next-auth/react";
 import {
   CalendarDays,
@@ -11,6 +19,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronsRight,
   Copy,
   Download,
   Edit3,
@@ -18,6 +27,7 @@ import {
   Loader2,
   MoreHorizontal,
   PenLine,
+  Plus,
   Search,
   Send,
   Trash2,
@@ -25,8 +35,8 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
 import {
   EmptyReferenceState,
@@ -34,6 +44,8 @@ import {
 } from "@/components/reports/reference-shell";
 import {
   SummaryEditor,
+  summaryActivityReferenceDragType,
+  type SummaryActivityReferenceDragPayload,
   type SummaryEditorHandle,
   type SummarySnapshot,
 } from "@/components/reports/summary-editor";
@@ -51,6 +63,8 @@ import type { OAuthProviderConfig } from "@/lib/oauth-config";
 import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
 import {
   extractBlockerLines,
+  removeSummaryActivityReferences,
+  summaryActivityReferenceHref,
   stripLegacyBlockerPrefixes,
   uniqueLines,
 } from "@/lib/summary-format";
@@ -126,10 +140,14 @@ const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
   { value: "OUT_OF_OFFICE", label: "Out of office" },
 ];
 
+const dateNavButtonClassName =
+  "flex h-8 w-8 items-center justify-center rounded-[6px] text-[#667085] transition-colors hover:bg-[#eef2f7] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#667085] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground dark:disabled:hover:bg-transparent dark:disabled:hover:text-muted-foreground";
+
 const activityPageSize = 5;
 const autoSaveDelayMs = 600;
+const autoSaveRequestHeader = "X-Generis-Autosave";
 type BusyAction = "submit" | "delete";
-type AutoSaveStatus = "saved" | "error";
+type AutoSaveStatus = "saved" | "saving" | "error";
 type SyncProviderKey = keyof typeof syncProviderLabels;
 const syncProviderSources: Record<SyncProviderKey, ActivitySource> = {
   jira: "JIRA",
@@ -143,6 +161,7 @@ type ReportPayload = {
   workLocation: WorkLocation;
   activityUpdates: Array<{
     id: string;
+    title: string;
     selected: boolean;
     employeeNote: string | null;
   }>;
@@ -163,7 +182,26 @@ type AutoDraftSnapshot = {
   hasMeaningfulContent: boolean;
 };
 
-type PendingDateControl = "previous" | "next" | "picker";
+type PendingDateControl = "previous" | "next" | "picker" | "today";
+type GoogleTaskSuggestion = {
+  taskId: string;
+  taskListId: string;
+  taskListTitle: string;
+  title: string;
+  notes: string | null;
+  status: string | null;
+  due: string | null;
+  updated: string | null;
+  sourceUrl: string | null;
+};
+type GoogleTaskSearchStatus = "idle" | "loading" | "error";
+type ActivityDragPreview = {
+  id: string;
+  source: ActivitySource;
+  title: string;
+  x: number;
+  y: number;
+};
 
 function toDate(value?: string | Date | null) {
   if (!value) {
@@ -215,17 +253,80 @@ function dateInputValue(value: string | Date) {
 
 function formatReportDate(value: string | Date) {
   const date = dateOnlyDisplayDate(value);
-  const formatted = new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-    weekday: "short",
-  }).formatToParts(date);
-  const lookup = Object.fromEntries(
-    formatted.map((part) => [part.type, part.value]),
+  }).format(date);
+}
+
+function twoDigit(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function dateStringFromParts(year: number, monthIndex: number, day: number) {
+  return `${year}-${twoDigit(monthIndex + 1)}-${twoDigit(day)}`;
+}
+
+function monthKeyFromDate(value: string | Date) {
+  return dateInputValue(value).slice(0, 7);
+}
+
+function monthDateFromKey(monthKey: string) {
+  return new Date(`${monthKey}-01T12:00:00`);
+}
+
+function addCalendarMonths(monthKey: string, offset: number) {
+  const monthDate = monthDateFromKey(monthKey);
+  const nextMonth = new Date(
+    monthDate.getFullYear(),
+    monthDate.getMonth() + offset,
+    1,
+    12,
   );
 
-  return `${lookup.month} ${lookup.day}, ${lookup.year} (${lookup.weekday})`;
+  return dateStringFromParts(
+    nextMonth.getFullYear(),
+    nextMonth.getMonth(),
+    1,
+  ).slice(0, 7);
+}
+
+function calendarDaysForMonth(monthKey: string) {
+  const monthDate = monthDateFromKey(monthKey);
+  const year = monthDate.getFullYear();
+  const monthIndex = monthDate.getMonth();
+  const firstWeekday = new Date(year, monthIndex, 1, 12).getDay();
+  const gridStart = new Date(year, monthIndex, 1 - firstWeekday, 12);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart);
+    date.setDate(gridStart.getDate() + index);
+
+    return {
+      value: dateStringFromParts(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate(),
+      ),
+      day: date.getDate(),
+      inCurrentMonth: date.getMonth() === monthIndex,
+    };
+  });
+}
+
+function formatMonthLabel(monthKey: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(monthDateFromKey(monthKey));
+}
+
+function workLocationLabel(value: WorkLocation) {
+  return (
+    workLocationOptions.find((option) => option.value === value)?.label ??
+    "Unspecified"
+  );
 }
 
 function formatDuration(minutes?: number | null) {
@@ -276,6 +377,24 @@ function statusTone(
   return "neutral";
 }
 
+function activityStatusLabel(activity: Activity) {
+  if (
+    activity.source === "GOOGLE_TASKS" &&
+    activity.status?.toLowerCase() === "completed"
+  ) {
+    return null;
+  }
+
+  return activity.status || "Not set";
+}
+
+function setTransparentDragImage(dataTransfer: DataTransfer) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  dataTransfer.setDragImage(canvas, 0, 0);
+}
+
 function sourceIcon(source: ActivitySource) {
   if (source === "GOOGLE_CALENDAR") {
     return <CalendarDays className="h-3.5 w-3.5 text-[#2563eb]" />;
@@ -323,6 +442,7 @@ function buildReportPayload(
       .filter((activity) => !isNewManualActivity(activity))
       .map((activity) => ({
         id: activity.id,
+        title: activity.title || "Untitled activity",
         selected: activity.selected,
         employeeNote: activity.employeeNote ?? null,
       })),
@@ -388,19 +508,43 @@ export function DailyReportApp({
     top: number;
     left: number;
   } | null>(null);
+  const [renamingActivity, setRenamingActivity] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
   const [importMenuOpen, setImportMenuOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>("saved");
   const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [datePickerMonth, setDatePickerMonth] = useState(() =>
+    monthKeyFromDate(reportDate),
+  );
+  const [locationMenuOpen, setLocationMenuOpen] = useState(false);
   const [importingProvider, setImportingProvider] =
     useState<SyncProviderKey | null>(null);
   const [pendingDateControl, setPendingDateControl] =
     useState<PendingDateControl | null>(null);
   const [activityPage, setActivityPage] = useState(1);
   const [activitySearch, setActivitySearch] = useState("");
+  const [googleTaskFinderOpen, setGoogleTaskFinderOpen] = useState(false);
+  const [googleTaskQuery, setGoogleTaskQuery] = useState("");
+  const [googleTaskResults, setGoogleTaskResults] = useState<
+    GoogleTaskSuggestion[]
+  >([]);
+  const [googleTaskSearchStatus, setGoogleTaskSearchStatus] =
+    useState<GoogleTaskSearchStatus>("idle");
+  const [addingGoogleTaskKey, setAddingGoogleTaskKey] = useState<string | null>(
+    null,
+  );
+  const [activityDragPreview, setActivityDragPreview] =
+    useState<ActivityDragPreview | null>(null);
   const summaryEditorRef = useRef<SummaryEditorHandle>(null);
+  const datePickerRef = useRef<HTMLDivElement | null>(null);
+  const locationMenuRef = useRef<HTMLDivElement | null>(null);
   const importMenuRef = useRef<HTMLDivElement | null>(null);
   const activityMenuRef = useRef<HTMLDivElement | null>(null);
+  const googleTaskSearchAbortRef = useRef<AbortController | null>(null);
   const dateInputRef = useRef<HTMLInputElement | null>(null);
   const autoSaveTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef<Promise<Report | null> | null>(null);
@@ -413,6 +557,7 @@ export function DailyReportApp({
   const lastSavedSignatureRef = useRef(
     draftPayloadSignature(reportDate, initialPayload),
   );
+  const activityDragPreviewId = activityDragPreview?.id ?? null;
 
   useDismissableLayer({
     open: importMenuOpen,
@@ -421,9 +566,24 @@ export function DailyReportApp({
   });
 
   useDismissableLayer({
+    open: datePickerOpen,
+    refs: [datePickerRef],
+    onDismiss: () => setDatePickerOpen(false),
+  });
+
+  useDismissableLayer({
+    open: locationMenuOpen,
+    refs: [locationMenuRef],
+    onDismiss: () => setLocationMenuOpen(false),
+  });
+
+  useDismissableLayer({
     open: Boolean(openActivityMenu),
     refs: [activityMenuRef],
-    onDismiss: () => setOpenActivityMenu(null),
+    onDismiss: () => {
+      setRenamingActivity(null);
+      setOpenActivityMenu(null);
+    },
   });
 
   useEffect(() => {
@@ -464,11 +624,23 @@ export function DailyReportApp({
     setActivities(initialReport.activities);
     setDeletedActivityIds([]);
     setOpenActivityMenu(null);
+    setRenamingActivity(null);
     setImportMenuOpen(false);
+    setDatePickerOpen(false);
+    setDatePickerMonth(monthKeyFromDate(reportDate));
+    setLocationMenuOpen(false);
     setMessage(null);
     setAutoSaveStatus("saved");
     setActivityPage(1);
     setActivitySearch("");
+    setActivityDragPreview(null);
+    setGoogleTaskFinderOpen(false);
+    setGoogleTaskQuery("");
+    setGoogleTaskResults([]);
+    setGoogleTaskSearchStatus("idle");
+    setAddingGoogleTaskKey(null);
+    googleTaskSearchAbortRef.current?.abort();
+    googleTaskSearchAbortRef.current = null;
     setPendingDateControl(null);
   }, [initialReport, date, reportDate]);
 
@@ -486,21 +658,214 @@ export function DailyReportApp({
     };
   }, [pendingDateControl]);
 
+  useEffect(() => {
+    if (!activityDragPreviewId) {
+      return;
+    }
+
+    document.body.classList.add("reference-activity-dragging");
+
+    function updatePreviewPosition(event: globalThis.DragEvent) {
+      if (event.clientX === 0 && event.clientY === 0) {
+        return;
+      }
+
+      setActivityDragPreview((current) =>
+        current
+          ? {
+              ...current,
+              x: event.clientX,
+              y: event.clientY,
+            }
+          : current,
+      );
+    }
+
+    function clearPreview() {
+      setActivityDragPreview(null);
+    }
+
+    window.addEventListener("dragover", updatePreviewPosition);
+    window.addEventListener("drop", clearPreview);
+    window.addEventListener("dragend", clearPreview);
+
+    return () => {
+      document.body.classList.remove("reference-activity-dragging");
+      window.removeEventListener("dragover", updatePreviewPosition);
+      window.removeEventListener("drop", clearPreview);
+      window.removeEventListener("dragend", clearPreview);
+    };
+  }, [activityDragPreviewId]);
+
+  useEffect(() => {
+    googleTaskSearchAbortRef.current?.abort();
+
+    if (!googleTaskFinderOpen) {
+      setGoogleTaskResults([]);
+      setGoogleTaskSearchStatus("idle");
+      return;
+    }
+
+    const query = googleTaskQuery.trim();
+
+    if (query.length < 2) {
+      setGoogleTaskResults([]);
+      setGoogleTaskSearchStatus("idle");
+      return;
+    }
+
+    const controller = new AbortController();
+    googleTaskSearchAbortRef.current = controller;
+    const timer = window.setTimeout(async () => {
+      setGoogleTaskSearchStatus("loading");
+
+      try {
+        const response = await fetch(
+          `/api/google-tasks/search?q=${encodeURIComponent(query)}`,
+          { signal: controller.signal },
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            await responseErrorMessage(response, "Unable to search tasks."),
+          );
+        }
+
+        const body = (await response.json()) as {
+          tasks?: GoogleTaskSuggestion[];
+        };
+        setGoogleTaskResults(body.tasks ?? []);
+        setGoogleTaskSearchStatus("idle");
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        setGoogleTaskSearchStatus("error");
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [googleTaskFinderOpen, googleTaskQuery]);
+
   function setActivity(id: string, patch: Partial<Activity>) {
     setActivities((items) =>
       items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
     );
   }
 
-  function handleSummaryChange(snapshot: SummarySnapshot) {
-    setSummary(snapshot.summary);
-    setBlockers(snapshot.blockers);
+  function removeSummaryReferencesForActivity(activityId: string) {
+    const snapshot = summaryEditorRef.current?.getSnapshot() ?? {
+      summary,
+      blockers,
+    };
+    const nextSummary = removeSummaryActivityReferences(
+      snapshot.summary,
+      activityId,
+    );
+
+    if (nextSummary === snapshot.summary) {
+      return;
+    }
+
+    const nextSnapshot = { ...snapshot, summary: nextSummary };
+    summaryEditorRef.current?.setSnapshot(nextSnapshot);
+    handleSummaryChange(nextSnapshot);
   }
 
+  const clearAutoDraftTimer = useCallback(() => {
+    if (!autoSaveTimerRef.current) {
+      return;
+    }
+
+    window.clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = null;
+  }, []);
+
+  const shouldAutoSaveSnapshot = useCallback((snapshot: AutoDraftSnapshot) => {
+    if (snapshot.signature === lastSavedSignatureRef.current) {
+      return false;
+    }
+
+    return Boolean(
+      snapshot.reportId ||
+      reportRef.current.id ||
+      snapshot.hasMeaningfulContent,
+    );
+  }, []);
+
+  const draftSnapshotFor = useCallback((
+    summaryValue: string,
+    blockersValue: string,
+  ): AutoDraftSnapshot => {
+    const payload = buildReportPayload(
+      summaryValue,
+      blockersValue,
+      workLocation,
+      activities,
+      deletedActivityIds,
+    );
+    const signature = draftPayloadSignature(reportDate, payload);
+
+    return {
+      reportId: reportRef.current.id,
+      reportDate,
+      payload,
+      signature,
+      hasMeaningfulContent: hasMeaningfulDraftPayload(payload),
+    };
+  }, [activities, deletedActivityIds, reportDate, workLocation]);
+
+  const scheduleAutoDraftSave = useCallback(() => {
+    clearAutoDraftTimer();
+    setAutoSaveStatus("saving");
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      void flushAutoDraftSaveRef.current();
+    }, autoSaveDelayMs);
+  }, [clearAutoDraftTimer]);
+
+  const handleSummaryChange = useCallback(
+    (snapshot: SummarySnapshot) => {
+      const nextSnapshot = draftSnapshotFor(
+        snapshot.summary,
+        snapshot.blockers,
+      );
+
+      latestDraftRef.current = nextSnapshot;
+
+      if (shouldAutoSaveSnapshot(nextSnapshot)) {
+        scheduleAutoDraftSave();
+      } else {
+        clearAutoDraftTimer();
+      }
+
+      startTransition(() => {
+        setSummary((current) =>
+          current === snapshot.summary ? current : snapshot.summary,
+        );
+        setBlockers((current) =>
+          current === snapshot.blockers ? current : snapshot.blockers,
+        );
+      });
+    },
+    [
+      clearAutoDraftTimer,
+      draftSnapshotFor,
+      scheduleAutoDraftSave,
+      shouldAutoSaveSnapshot,
+    ],
+  );
+
   function removeActivity(activity: Activity) {
+    removeSummaryReferencesForActivity(activity.id);
+
     if (activity.source !== "MANUAL") {
       setActivity(activity.id, { selected: false });
       setOpenActivityMenu(null);
+      setRenamingActivity(null);
       return;
     }
 
@@ -511,6 +876,27 @@ export function DailyReportApp({
       ]);
     }
     setOpenActivityMenu(null);
+    setRenamingActivity(null);
+  }
+
+  function startRenamingActivity(activity: Activity) {
+    setRenamingActivity({
+      id: activity.id,
+      title: activity.title || "Untitled activity",
+    });
+  }
+
+  function saveActivityTitle(activity: Activity) {
+    const nextTitle = renamingActivity?.title.trim();
+
+    if (!nextTitle) {
+      return;
+    }
+
+    setActivity(activity.id, { title: nextTitle });
+    setRenamingActivity(null);
+    setOpenActivityMenu(null);
+    setMessage("Task renamed locally.");
   }
 
   function toggleActivityMenu(
@@ -519,12 +905,13 @@ export function DailyReportApp({
   ) {
     if (openActivityMenu?.id === activityId) {
       setOpenActivityMenu(null);
+      setRenamingActivity(null);
       return;
     }
 
     const rect = event.currentTarget.getBoundingClientRect();
     const menuWidth = 240;
-    const menuHeight = 204;
+    const menuHeight = 208;
     const gap = 8;
     const top = Math.min(
       window.innerHeight - menuHeight - 12,
@@ -537,6 +924,7 @@ export function DailyReportApp({
 
     setImportMenuOpen(false);
     setOpenActivityMenu({ id: activityId, top, left });
+    setRenamingActivity(null);
   }
 
   useEffect(() => {
@@ -545,6 +933,7 @@ export function DailyReportApp({
     }
 
     function closeMenu() {
+      setRenamingActivity(null);
       setOpenActivityMenu(null);
     }
 
@@ -557,48 +946,16 @@ export function DailyReportApp({
     };
   }, [openActivityMenu]);
 
-  function clearAutoDraftTimer() {
-    if (!autoSaveTimerRef.current) {
-      return;
-    }
-
-    window.clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = null;
-  }
-
-  function shouldAutoSaveSnapshot(snapshot: AutoDraftSnapshot) {
-    if (snapshot.signature === lastSavedSignatureRef.current) {
-      return false;
-    }
-
-    return Boolean(
-      snapshot.reportId ||
-      reportRef.current.id ||
-      snapshot.hasMeaningfulContent,
-    );
-  }
-
-  function captureCurrentDraftSnapshot() {
+  const captureCurrentDraftSnapshot = useCallback(({
+    syncState = true,
+  }: { syncState?: boolean } = {}) => {
     const editorSnapshot = summaryEditorRef.current?.getSnapshot();
     const currentSummary = editorSnapshot?.summary ?? summary;
     const currentBlockers = editorSnapshot?.blockers ?? blockers;
-    const payload = buildReportPayload(
-      currentSummary,
-      currentBlockers,
-      workLocation,
-      activities,
-      deletedActivityIds,
-    );
-    const signature = draftPayloadSignature(reportDate, payload);
-    const snapshot: AutoDraftSnapshot = {
-      reportId: reportRef.current.id,
-      reportDate,
-      payload,
-      signature,
-      hasMeaningfulContent: hasMeaningfulDraftPayload(payload),
-    };
+    const snapshot = draftSnapshotFor(currentSummary, currentBlockers);
 
     if (
+      syncState &&
       editorSnapshot &&
       (currentSummary !== summary || currentBlockers !== blockers)
     ) {
@@ -608,7 +965,7 @@ export function DailyReportApp({
 
     latestDraftRef.current = snapshot;
     return snapshot;
-  }
+  }, [blockers, draftSnapshotFor, summary]);
 
   function applySavedReport(
     nextReport: Report,
@@ -675,6 +1032,29 @@ export function DailyReportApp({
     });
   }
 
+  const draftSaveRequest = useCallback((snapshot: AutoDraftSnapshot): {
+    url: string;
+    init: RequestInit;
+  } => {
+    const reportId = snapshot.reportId || reportRef.current.id;
+
+    return {
+      url: reportId ? `/api/reports/${reportId}` : "/api/reports",
+      init: {
+        method: reportId ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          [autoSaveRequestHeader]: "1",
+        },
+        body: JSON.stringify(
+          reportId
+            ? snapshot.payload
+            : { ...snapshot.payload, date: snapshot.reportDate },
+        ),
+      },
+    };
+  }, []);
+
   function startAutoDraftSave(
     snapshot: AutoDraftSnapshot,
     forceCreate = false,
@@ -683,23 +1063,13 @@ export function DailyReportApp({
       return Promise.resolve(reportRef.current.id ? reportRef.current : null);
     }
 
-    const reportId = snapshot.reportId || reportRef.current.id;
     const generation = saveGenerationRef.current;
     const savedSignature = snapshot.signature;
+    const requestDetails = draftSaveRequest(snapshot);
+    setAutoSaveStatus("saving");
     const request = (async (): Promise<Report | null> => {
       try {
-        const response = await fetch(
-          reportId ? `/api/reports/${reportId}` : "/api/reports",
-          {
-            method: reportId ? "PUT" : "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(
-              reportId
-                ? snapshot.payload
-                : { ...snapshot.payload, date: snapshot.reportDate },
-            ),
-          },
-        );
+        const response = await fetch(requestDetails.url, requestDetails.init);
 
         if (!response.ok) {
           throw new Error(
@@ -774,16 +1144,43 @@ export function DailyReportApp({
       }
     }
 
-    scheduleAutoDraftSave();
-    return savedReport;
-  }
-
-  function scheduleAutoDraftSave() {
     clearAutoDraftTimer();
+    setAutoSaveStatus("saving");
     autoSaveTimerRef.current = window.setTimeout(() => {
       void flushAutoDraftSaveRef.current();
     }, autoSaveDelayMs);
+    return savedReport;
   }
+
+  useEffect(() => {
+    function savePendingDraftBeforeUnload() {
+      const snapshot = captureCurrentDraftSnapshot({ syncState: false });
+
+      if (!shouldAutoSaveSnapshot(snapshot)) {
+        return;
+      }
+
+      const request = draftSaveRequest(snapshot);
+      clearAutoDraftTimer();
+      void fetch(request.url, {
+        ...request.init,
+        keepalive: true,
+      }).catch(() => {
+        // The page is unloading; the normal autosave error UI cannot be shown.
+      });
+    }
+
+    window.addEventListener("pagehide", savePendingDraftBeforeUnload);
+
+    return () => {
+      window.removeEventListener("pagehide", savePendingDraftBeforeUnload);
+    };
+  }, [
+    captureCurrentDraftSnapshot,
+    clearAutoDraftTimer,
+    draftSaveRequest,
+    shouldAutoSaveSnapshot,
+  ]);
 
   async function submitReport() {
     if (busyAction || importingProvider) {
@@ -791,52 +1188,57 @@ export function DailyReportApp({
     }
 
     const wasPublished = reportRef.current.status === "SUBMITTED";
-    setBusyAction("submit");
-    setMessage(null);
-
-    const saved = await flushAutoDraftSave({
-      forceCreate: !reportRef.current.id,
+    flushSync(() => {
+      setBusyAction("submit");
+      setMessage(null);
     });
 
-    if (!saved?.id) {
-      setMessage("Save failed. Try again before submitting.");
-      setBusyAction(null);
-      return;
-    }
+    try {
+      const saved = await flushAutoDraftSave({
+        forceCreate: !reportRef.current.id,
+      });
 
-    const submitResponse = await fetch(`/api/reports/${saved.id}/submit`, {
-      method: "POST",
-    });
+      if (!saved?.id) {
+        setMessage("Save failed. Try again before submitting.");
+        return;
+      }
 
-    if (!submitResponse.ok) {
-      setMessage(
-        (await submitResponse.json()).error ?? "Unable to submit report.",
-      );
-      setBusyAction(null);
-      return;
-    }
+      const submitResponse = await fetch(`/api/reports/${saved.id}/submit`, {
+        method: "POST",
+      });
 
-    const nextReport = (await submitResponse.json()).report as Report;
-    applySavedReport(
-      nextReport,
-      true,
-      draftPayloadSignature(
-        reportDate,
-        buildReportPayload(
-          summary,
-          blockers,
-          workLocation,
-          activities,
-          deletedActivityIds,
+      if (!submitResponse.ok) {
+        setMessage(
+          (await submitResponse.json()).error ?? "Unable to submit report.",
+        );
+        return;
+      }
+
+      const nextReport = (await submitResponse.json()).report as Report;
+      applySavedReport(
+        nextReport,
+        true,
+        draftPayloadSignature(
+          reportDate,
+          buildReportPayload(
+            summary,
+            blockers,
+            workLocation,
+            activities,
+            deletedActivityIds,
+          ),
         ),
-      ),
-    );
-    markServerDataStale();
-    setAutoSaveStatus("saved");
-    setMessage(
-      wasPublished ? "Resubmitted for review." : "Submitted for review.",
-    );
-    setBusyAction(null);
+      );
+      markServerDataStale();
+      setAutoSaveStatus("saved");
+      setMessage(
+        wasPublished ? "Resubmitted for review." : "Submitted for review.",
+      );
+    } catch {
+      setMessage("Unable to submit report. Check your connection and try again.");
+    } finally {
+      setBusyAction(null);
+    }
   }
 
   async function deleteDraft() {
@@ -852,59 +1254,65 @@ export function DailyReportApp({
       return;
     }
 
-    setBusyAction("delete");
-    setMessage(null);
+    flushSync(() => {
+      setBusyAction("delete");
+      setMessage(null);
+    });
     clearAutoDraftTimer();
     saveGenerationRef.current += 1;
     saveInFlightRef.current = null;
 
-    const response = await fetch(`/api/reports/${report.id}`, {
-      method: "DELETE",
-    });
+    try {
+      const response = await fetch(`/api/reports/${report.id}`, {
+        method: "DELETE",
+      });
 
-    if (!response.ok) {
-      setMessage((await response.json()).error ?? "Unable to delete draft.");
+      if (!response.ok) {
+        setMessage((await response.json()).error ?? "Unable to delete draft.");
+        return;
+      }
+
+      const clearedReport: Report = {
+        ...reportRef.current,
+        id: "",
+        summary: "",
+        blockers: "",
+        workLocation: "UNKNOWN" as WorkLocation,
+        status: "DRAFT",
+        activities: [],
+        submittedAt: null,
+        updatedAt: null,
+      };
+      const clearedPayload = buildReportPayload("", "", "UNKNOWN", [], []);
+
+      reportRef.current = clearedReport;
+      lastSavedSignatureRef.current = draftPayloadSignature(
+        reportDate,
+        clearedPayload,
+      );
+      latestDraftRef.current = {
+        reportId: "",
+        reportDate,
+        payload: clearedPayload,
+        signature: lastSavedSignatureRef.current,
+        hasMeaningfulContent: false,
+      };
+
+      setReport(clearedReport);
+      setSummary("");
+      setBlockers("");
+      setWorkLocation("UNKNOWN");
+      setActivities([]);
+      setDeletedActivityIds([]);
+      summaryEditorRef.current?.setSnapshot({ summary: "", blockers: "" });
+      markServerDataStale();
+      setAutoSaveStatus("saved");
+      setMessage("Draft deleted.");
+    } catch {
+      setMessage("Unable to delete draft. Check your connection and try again.");
+    } finally {
       setBusyAction(null);
-      return;
     }
-
-    const clearedReport: Report = {
-      ...reportRef.current,
-      id: "",
-      summary: "",
-      blockers: "",
-      workLocation: "UNKNOWN" as WorkLocation,
-      status: "DRAFT",
-      activities: [],
-      submittedAt: null,
-      updatedAt: null,
-    };
-    const clearedPayload = buildReportPayload("", "", "UNKNOWN", [], []);
-
-    reportRef.current = clearedReport;
-    lastSavedSignatureRef.current = draftPayloadSignature(
-      reportDate,
-      clearedPayload,
-    );
-    latestDraftRef.current = {
-      reportId: "",
-      reportDate,
-      payload: clearedPayload,
-      signature: lastSavedSignatureRef.current,
-      hasMeaningfulContent: false,
-    };
-
-    setReport(clearedReport);
-    setSummary("");
-    setBlockers("");
-    setWorkLocation("UNKNOWN");
-    setActivities([]);
-    setDeletedActivityIds([]);
-    summaryEditorRef.current?.setSnapshot({ summary: "", blockers: "" });
-    markServerDataStale();
-    setAutoSaveStatus("saved");
-    setMessage("Draft deleted.");
-    setBusyAction(null);
   }
 
   async function sync(provider: SyncProviderKey) {
@@ -913,8 +1321,10 @@ export function DailyReportApp({
     }
 
     const providerLabel = syncProviderLabels[provider];
-    setImportingProvider(provider);
-    setMessage(null);
+    flushSync(() => {
+      setImportingProvider(provider);
+      setMessage(null);
+    });
 
     try {
       const response = await fetch(`/api/sync/${provider}`, {
@@ -963,6 +1373,59 @@ export function DailyReportApp({
     }
   }
 
+  async function addGoogleTask(task: GoogleTaskSuggestion) {
+    if (busyAction || importingProvider || addingGoogleTaskKey) {
+      return;
+    }
+
+    const taskKey = `${task.taskListId}:${task.taskId}`;
+    flushSync(() => {
+      setAddingGoogleTaskKey(taskKey);
+      setMessage(null);
+    });
+
+    try {
+      const snapshot = latestDraftRef.current;
+      const needsSave = snapshot ? shouldAutoSaveSnapshot(snapshot) : false;
+      const saved = await flushAutoDraftSave();
+
+      if (needsSave && !saved) {
+        setMessage("Save failed. Try again before adding the task.");
+        return;
+      }
+
+      const response = await fetch("/api/reports/google-task", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date,
+          taskId: task.taskId,
+          taskListId: task.taskListId,
+        }),
+      });
+
+      if (!response.ok) {
+        setMessage(
+          await responseErrorMessage(response, "Unable to add Google Task."),
+        );
+        return;
+      }
+
+      const body = (await response.json()) as { report: Report };
+      applySavedReport(body.report, true, "");
+      markServerDataStale();
+      setActivityPage(1);
+      setGoogleTaskQuery("");
+      setGoogleTaskResults([]);
+      setGoogleTaskSearchStatus("idle");
+      setMessage("Google Task added to this report.");
+    } catch {
+      setMessage("Unable to add Google Task. Check your connection and try again.");
+    } finally {
+      setAddingGoogleTaskKey(null);
+    }
+  }
+
   function connectProvider(provider: "google" | "atlassian") {
     signIn(
       provider,
@@ -987,6 +1450,76 @@ export function DailyReportApp({
     setMessage("Activity title copied.");
   }
 
+  function activityReferencePayload(
+    activity: Activity,
+  ): SummaryActivityReferenceDragPayload {
+    return {
+      activityId: activity.id,
+      source: activity.source,
+      title: activity.title || "Untitled activity",
+      url: activity.sourceUrl,
+    };
+  }
+
+  function updateActivityDragPreviewPosition(clientX: number, clientY: number) {
+    if (clientX === 0 && clientY === 0) {
+      return;
+    }
+
+    setActivityDragPreview((current) =>
+      current
+        ? {
+            ...current,
+            x: clientX,
+            y: clientY,
+          }
+        : current,
+    );
+  }
+
+  function dragActivityReference(
+    activity: Activity,
+    event: DragEvent<HTMLElement>,
+  ) {
+    const payload = activityReferencePayload(activity);
+
+    event.dataTransfer.effectAllowed = "copy";
+    setTransparentDragImage(event.dataTransfer);
+    event.dataTransfer.setData(
+      summaryActivityReferenceDragType,
+      JSON.stringify(payload),
+    );
+    setActivityDragPreview({
+      id: activity.id,
+      source: activity.source,
+      title: payload.title,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }
+
+  function moveActivityReferenceDrag(event: DragEvent<HTMLElement>) {
+    updateActivityDragPreviewPosition(event.clientX, event.clientY);
+  }
+
+  function endActivityReferenceDrag() {
+    setActivityDragPreview(null);
+  }
+
+  const includeDroppedActivityReference = useCallback((
+    payload: SummaryActivityReferenceDragPayload,
+  ) => {
+    if (!payload.activityId) {
+      return;
+    }
+
+    setActivities((items) =>
+      items.map((item) =>
+        item.id === payload.activityId ? { ...item, selected: true } : item,
+      ),
+    );
+  }, []);
+
   function openActivitySource(activity: Activity) {
     if (!activity.sourceUrl || activity.sourceUrl === "#") {
       setMessage("This activity does not have a source link.");
@@ -1003,6 +1536,7 @@ export function DailyReportApp({
   const isSubmitting = busyAction === "submit";
   const isDeleting = busyAction === "delete";
   const isImporting = importingProvider !== null;
+  const isAddingGoogleTask = addingGoogleTaskKey !== null;
   const isPublishedReport = report.status === "SUBMITTED";
   const submitButtonText = isPublishedReport
     ? "Resubmit update"
@@ -1013,13 +1547,19 @@ export function DailyReportApp({
   const statusIndicatorLabel = isPublishedReport ? "Published" : "Draft";
   const StatusIndicatorIcon = isPublishedReport ? CheckCircle2 : PenLine;
   const dateNavigationPending = pendingDateControl !== null;
-  const isBusy = busyAction !== null || isImporting || dateNavigationPending;
+  const isBusy =
+    busyAction !== null ||
+    isImporting ||
+    dateNavigationPending ||
+    isAddingGoogleTask;
   const dateControlsDisabled = isBusy;
   const maxReportDate = todayDateString();
   const canGoToNextReportDate = reportDate < maxReportDate;
-  const selectedCount = activities.filter(
-    (activity) => activity.selected,
-  ).length;
+  const visibleActivities = useMemo(
+    () => activities.filter((activity) => activity.selected),
+    [activities],
+  );
+  const workItemCount = visibleActivities.length;
   const currentPayload = buildReportPayload(
     summary,
     blockers,
@@ -1043,7 +1583,7 @@ export function DailyReportApp({
   flushAutoDraftSaveRef.current = flushAutoDraftSave;
   const normalizedActivitySearch = activitySearch.trim().toLowerCase();
   const filteredActivities = normalizedActivitySearch
-    ? activities.filter((activity) =>
+    ? visibleActivities.filter((activity) =>
         [
           activity.title,
           activity.description,
@@ -1056,10 +1596,7 @@ export function DailyReportApp({
           .toLowerCase()
           .includes(normalizedActivitySearch),
       )
-    : activities;
-  const filteredSelectedCount = filteredActivities.filter(
-    (activity) => activity.selected,
-  ).length;
+    : visibleActivities;
   const activityPageCount = Math.max(
     1,
     Math.ceil(filteredActivities.length / activityPageSize),
@@ -1076,6 +1613,24 @@ export function DailyReportApp({
   const pagedActivities = filteredActivities.slice(
     (currentActivityPage - 1) * activityPageSize,
     currentActivityPage * activityPageSize,
+  );
+  const calendarDays = calendarDaysForMonth(datePickerMonth);
+  const canGoToNextCalendarMonth =
+    addCalendarMonths(datePickerMonth, 1) <= monthKeyFromDate(maxReportDate);
+  const selectedWorkLocationLabel = workLocationLabel(workLocation);
+  const activityReferences = useMemo(
+    () =>
+      Object.fromEntries(
+        visibleActivities.map((activity) => [
+          activity.id,
+          {
+            href: activity.sourceUrl,
+            source: activity.source,
+            title: activity.title,
+          },
+        ]),
+      ),
+    [visibleActivities],
   );
 
   useEffect(() => {
@@ -1096,6 +1651,7 @@ export function DailyReportApp({
     }
 
     clearAutoDraftTimer();
+    setAutoSaveStatus("saving");
     autoSaveTimerRef.current = window.setTimeout(() => {
       void flushAutoDraftSaveRef.current();
     }, autoSaveDelayMs);
@@ -1103,7 +1659,13 @@ export function DailyReportApp({
     return () => {
       clearAutoDraftTimer();
     };
-  }, [currentDraftSignature, report.id, report.status]);
+  }, [
+    clearAutoDraftTimer,
+    currentDraftSignature,
+    report.id,
+    report.status,
+    shouldAutoSaveSnapshot,
+  ]);
 
   async function goToReportDate(
     nextDate: string,
@@ -1125,7 +1687,9 @@ export function DailyReportApp({
       return;
     }
 
-    setPendingDateControl(control);
+    flushSync(() => {
+      setPendingDateControl(control);
+    });
 
     const snapshot = latestDraftRef.current;
     const needsSave = snapshot ? shouldAutoSaveSnapshot(snapshot) : false;
@@ -1142,23 +1706,30 @@ export function DailyReportApp({
   }
 
   function openReportDatePicker() {
-    const input = dateInputRef.current;
-
-    if (!input) {
+    if (dateControlsDisabled) {
       return;
     }
 
-    if (typeof input.showPicker === "function") {
-      try {
-        input.showPicker();
-        return;
-      } catch {
-        // Fall through to the focus/click fallback.
-      }
+    setDatePickerMonth(monthKeyFromDate(reportDate));
+    setDatePickerOpen((open) => !open);
+  }
+
+  function selectReportDate(nextDate: string) {
+    setDatePickerOpen(false);
+    void goToReportDate(nextDate, "picker");
+  }
+
+  function selectWorkLocation(nextLocation: WorkLocation) {
+    setWorkLocation(nextLocation);
+    setLocationMenuOpen(false);
+  }
+
+  function toggleLocationMenu() {
+    if (isBusy) {
+      return;
     }
 
-    input.focus();
-    input.click();
+    setLocationMenuOpen((open) => !open);
   }
 
   function goToRelativeReportDate(days: number) {
@@ -1168,9 +1739,15 @@ export function DailyReportApp({
     );
   }
 
+  function goToTodayReportDate() {
+    void goToReportDate(maxReportDate, "today");
+  }
+
   const menuActivity = openActivityMenu
     ? activities.find((activity) => activity.id === openActivityMenu.id)
     : null;
+  const isRenamingMenuActivity =
+    Boolean(menuActivity) && renamingActivity?.id === menuActivity?.id;
 
   return (
     <>
@@ -1216,12 +1793,16 @@ export function DailyReportApp({
         </div>
 
         <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
-          <div className="grid gap-2 min-[900px]:grid-cols-[minmax(320px,430px)_minmax(180px,220px)_minmax(190px,240px)] min-[900px]:items-center min-[900px]:justify-between">
-            <div className="relative grid h-10 min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              ref={datePickerRef}
+              className="relative grid h-10 w-full min-w-0 grid-cols-[2rem_minmax(0,1fr)_2rem_2rem] items-center gap-0.5 rounded-[8px] bg-white p-1 shadow-none ring-1 ring-[#dfe4ee] min-[520px]:w-[300px] dark:bg-[#101d2e] dark:ring-[#263a55]"
+            >
               <button
                 type="button"
-                className="flex h-10 w-10 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#101d2e] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:hover:text-foreground"
+                className={dateNavButtonClassName}
                 aria-label="Previous day"
+                title="Previous day"
                 onClick={() => goToRelativeReportDate(-1)}
                 disabled={dateControlsDisabled}
               >
@@ -1233,7 +1814,7 @@ export function DailyReportApp({
               </button>
               <button
                 type="button"
-                className="flex h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-[7px] bg-white px-4 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-70 dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55] dark:hover:bg-white/5"
+                className="flex h-8 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-[6px] px-2 text-sm font-semibold text-[#111827] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-70 dark:text-foreground dark:hover:bg-white/5"
                 onClick={openReportDatePicker}
                 aria-label="Open report date picker"
                 disabled={dateControlsDisabled}
@@ -1248,8 +1829,9 @@ export function DailyReportApp({
               {canGoToNextReportDate ? (
                 <button
                   type="button"
-                  className="flex h-10 w-10 items-center justify-center rounded-[7px] bg-white text-[#475467] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#101d2e] dark:text-muted-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:hover:text-foreground"
+                  className={dateNavButtonClassName}
                   aria-label="Next day"
+                  title="Next day"
                   onClick={() => goToRelativeReportDate(1)}
                   disabled={dateControlsDisabled}
                 >
@@ -1257,6 +1839,24 @@ export function DailyReportApp({
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <ChevronRight className="h-4 w-4" />
+                  )}
+                </button>
+              ) : (
+                <span aria-hidden="true" />
+              )}
+              {canGoToNextReportDate ? (
+                <button
+                  type="button"
+                  className={dateNavButtonClassName}
+                  aria-label="Jump to today"
+                  title="Jump to today"
+                  onClick={goToTodayReportDate}
+                  disabled={dateControlsDisabled}
+                >
+                  {pendingDateControl === "today" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ChevronsRight className="h-4 w-4" />
                   )}
                 </button>
               ) : (
@@ -1272,30 +1872,142 @@ export function DailyReportApp({
                 className="pointer-events-none absolute left-1/2 top-1/2 h-px w-px -translate-x-1/2 -translate-y-1/2 border-0 p-0 opacity-0"
                 aria-label="Select report date"
               />
+              {datePickerOpen ? (
+                <div className="absolute left-0 top-11 z-30 w-full min-w-[300px] rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      className="reference-menu-button"
+                      aria-label="Previous month"
+                      onClick={() =>
+                        setDatePickerMonth((month) =>
+                          addCalendarMonths(month, -1),
+                        )
+                      }
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <div className="text-sm font-semibold text-[#111827] dark:text-foreground">
+                      {formatMonthLabel(datePickerMonth)}
+                    </div>
+                    <button
+                      type="button"
+                      className="reference-menu-button"
+                      aria-label="Next month"
+                      disabled={!canGoToNextCalendarMonth}
+                      onClick={() =>
+                        setDatePickerMonth((month) =>
+                          addCalendarMonths(month, 1),
+                        )
+                      }
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 px-1 pb-1 text-center text-[11px] font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                      (weekday) => (
+                        <span key={weekday}>{weekday}</span>
+                      ),
+                    )}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {calendarDays.map((calendarDay) => {
+                      const isSelected = calendarDay.value === reportDate;
+                      const isFuture = calendarDay.value > maxReportDate;
+
+                      return (
+                        <button
+                          key={calendarDay.value}
+                          type="button"
+                          className={cn(
+                            "flex h-9 items-center justify-center rounded-[7px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]",
+                            calendarDay.inCurrentMonth
+                              ? "text-[#111827] hover:bg-[#eff6ff] dark:text-foreground dark:hover:bg-white/10"
+                              : "text-[#98a2b3] hover:bg-[#f8fafc] dark:text-muted-foreground/70 dark:hover:bg-white/5",
+                            isSelected &&
+                              "bg-[#2563eb] text-white hover:bg-[#1d4ed8] dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400",
+                            isFuture &&
+                              "cursor-not-allowed opacity-35 hover:bg-transparent dark:hover:bg-transparent",
+                          )}
+                          aria-label={`Select ${formatReportDate(calendarDay.value)}`}
+                          aria-current={isSelected ? "date" : undefined}
+                          disabled={isFuture || dateControlsDisabled}
+                          onClick={() => selectReportDate(calendarDay.value)}
+                        >
+                          {calendarDay.day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
-            <label className="flex min-h-10 w-full items-center gap-3 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]">
-              <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
-                Location
-              </span>
-              <Select
-                value={workLocation}
-                onChange={(event) =>
-                  setWorkLocation(event.target.value as WorkLocation)
-                }
-                className="h-8 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm font-semibold text-[#111827] shadow-none focus-visible:ring-0 dark:bg-transparent dark:text-foreground"
+            <div
+              ref={locationMenuRef}
+              className="relative w-full min-[520px]:w-[220px]"
+            >
+              <button
+                type="button"
+                role="combobox"
                 aria-label="Work location"
+                aria-controls="work-location-menu"
+                aria-expanded={locationMenuOpen}
+                className="flex min-h-10 w-full items-center gap-3 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#101d2e] dark:ring-[#263a55] dark:hover:bg-white/5"
+                disabled={isBusy}
+                onClick={toggleLocationMenu}
               >
-                {workLocationOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </label>
+                <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
+                  Location
+                </span>
+                <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-[#111827] dark:text-foreground">
+                  {selectedWorkLocationLabel}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-[#667085] transition-transform dark:text-muted-foreground",
+                    locationMenuOpen && "rotate-180",
+                  )}
+                />
+              </button>
+              {locationMenuOpen ? (
+                <div
+                  id="work-location-menu"
+                  role="listbox"
+                  aria-label="Work location options"
+                  className="absolute left-0 top-12 z-30 w-full rounded-[8px] bg-white p-1.5 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                >
+                  {workLocationOptions.map((option) => {
+                    const selected = option.value === workLocation;
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-[7px] px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]",
+                          selected
+                            ? "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-blue-100"
+                            : "text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5",
+                        )}
+                        onClick={() => selectWorkLocation(option.value)}
+                      >
+                        <span>{option.label}</span>
+                        {selected ? (
+                          <CheckCircle2 className="h-4 w-4 text-[#2563eb] dark:text-blue-300" />
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
 
             <div
-              className="flex min-h-10 w-full items-center gap-4 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
+              className="inline-flex min-h-10 w-fit max-w-full items-center gap-2 rounded-[7px] bg-white px-3 text-xs shadow-none ring-1 ring-[#dfe4ee] min-[900px]:ml-auto dark:bg-[#101d2e] dark:ring-[#263a55]"
               aria-live="polite"
             >
               <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
@@ -1303,16 +2015,21 @@ export function DailyReportApp({
               </span>
               <span
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-full px-2.5 py-1 font-medium",
+                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
                   isPublishedReport
                     ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300"
                     : "bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300",
                 )}
               >
-                <StatusIndicatorIcon className="h-4 w-4" />
+                <StatusIndicatorIcon className="h-3.5 w-3.5" />
                 {statusIndicatorLabel}
               </span>
-              {autoSaveStatus === "error" ? (
+              {autoSaveStatus === "saving" ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#667085] dark:text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Saving...
+                </span>
+              ) : autoSaveStatus === "error" ? (
                 <span className="text-xs font-semibold text-red-700 dark:text-red-300">
                   Save failed
                 </span>
@@ -1333,7 +2050,7 @@ export function DailyReportApp({
                     tone="neutral"
                     className="px-2.5 py-1 text-xs"
                   >
-                    {selectedCount} selected
+                    {workItemCount} item{workItemCount === 1 ? "" : "s"}
                   </ReferenceBadge>
                 </div>
               </div>
@@ -1352,7 +2069,9 @@ export function DailyReportApp({
                   ) : (
                     <Download className="mr-2 h-4 w-4" />
                   )}
-                  Import
+                  {importingProvider
+                    ? `Importing ${syncProviderLabels[importingProvider]}...`
+                    : "Import"}
                   <ChevronDown
                     className={cn("ml-2 h-4 w-4", isImporting && "opacity-0")}
                     aria-hidden="true"
@@ -1396,6 +2115,20 @@ export function DailyReportApp({
                     >
                       {canSyncGoogle ? "Import Tasks" : "Connect Google Tasks"}
                     </button>
+                    <button
+                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+                      disabled={!canSyncGoogle && !oauthConfig.google}
+                      onClick={() => {
+                        setImportMenuOpen(false);
+                        canSyncGoogle
+                          ? setGoogleTaskFinderOpen(true)
+                          : connectProvider("google");
+                      }}
+                    >
+                      {canSyncGoogle
+                        ? "Find unfinished task"
+                        : "Connect Google Tasks"}
+                    </button>
                     <Link
                       className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#2563eb] hover:bg-[#eff6ff] dark:text-[#93c5fd] dark:hover:bg-white/5"
                       href="/settings#integrations"
@@ -1407,6 +2140,84 @@ export function DailyReportApp({
                 ) : null}
               </div>
             </div>
+
+            {googleTaskFinderOpen ? (
+              <div className="mt-3 rounded-[8px] bg-[#f8fafc] p-2 ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]">
+                <div className="flex items-center gap-2">
+                  <label className="relative block min-w-0 flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98a2b3]" />
+                    <Input
+                      value={googleTaskQuery}
+                      onChange={(event) =>
+                        setGoogleTaskQuery(event.target.value)
+                      }
+                      placeholder="Find unfinished Google Tasks"
+                      className="h-9 rounded-[7px] bg-white pl-9 text-sm shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#101d2e] dark:ring-[#3a506d]"
+                      aria-label="Find unfinished Google Tasks"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[7px] text-[#667085] transition-colors hover:bg-[#eef2f7] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+                    aria-label="Close Google Tasks finder"
+                    onClick={() => {
+                      setGoogleTaskFinderOpen(false);
+                      setGoogleTaskQuery("");
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                {googleTaskSearchStatus === "loading" ? (
+                  <div className="mt-2 flex items-center gap-2 px-1 py-1.5 text-xs font-medium text-[#667085] dark:text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Searching...
+                  </div>
+                ) : googleTaskSearchStatus === "error" ? (
+                  <div className="mt-2 px-1 py-1.5 text-xs font-medium text-red-700 dark:text-red-300">
+                    Could not search Google Tasks.
+                  </div>
+                ) : googleTaskQuery.trim().length >= 2 &&
+                  googleTaskResults.length === 0 ? (
+                  <div className="mt-2 px-1 py-1.5 text-xs font-medium text-[#667085] dark:text-muted-foreground">
+                    No unfinished tasks found.
+                  </div>
+                ) : googleTaskResults.length > 0 ? (
+                  <div className="mt-2 max-h-44 space-y-1 overflow-y-auto pr-1">
+                    {googleTaskResults.map((task) => {
+                      const taskKey = `${task.taskListId}:${task.taskId}`;
+                      const isAdding = addingGoogleTaskKey === taskKey;
+
+                      return (
+                        <button
+                          key={taskKey}
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-[7px] px-2 py-2 text-left transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:hover:bg-white/5"
+                          disabled={Boolean(addingGoogleTaskKey)}
+                          onClick={() => void addGoogleTask(task)}
+                        >
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] bg-white text-[#2563eb] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#3a506d]">
+                            {isAdding ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Plus className="h-3.5 w-3.5" />
+                            )}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-[#111827] dark:text-foreground">
+                              {task.title}
+                            </span>
+                            <span className="block truncate text-xs text-[#667085] dark:text-muted-foreground">
+                              {isAdding ? "Adding..." : task.taskListTitle}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <label className="relative mt-3 block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98a2b3]" />
@@ -1422,8 +2233,8 @@ export function DailyReportApp({
               />
             </label>
 
-            <div className="mt-3 h-[390px] space-y-2 overflow-y-auto pr-1">
-              {activities.length === 0 ? (
+            <div className="mt-3 h-[390px] space-y-2 overflow-y-auto p-1">
+              {workItemCount === 0 ? (
                 <EmptyReferenceState>
                   No activities yet. Import work from Jira, Calendar, or Tasks.
                 </EmptyReferenceState>
@@ -1432,21 +2243,38 @@ export function DailyReportApp({
                   No work items match your search.
                 </EmptyReferenceState>
               ) : (
-                pagedActivities.map((activity) => (
-                  <article
-                    key={activity.id}
-                    className="grid min-h-[68px] grid-cols-[24px_34px_minmax(0,1fr)_auto_58px_28px] items-center gap-2.5 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
-                  >
+                pagedActivities.map((activity) => {
+                  const statusLabel = activityStatusLabel(activity);
+
+                  return (
+                    <article
+                      key={activity.id}
+                      draggable
+                      title="Drag into the summary to reference this work item"
+                      className={cn(
+                        "grid min-h-[68px] cursor-grab grid-cols-[24px_34px_minmax(0,1fr)_auto_58px_28px] items-center gap-2.5 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] transition-[opacity,transform,box-shadow] active:cursor-grabbing dark:bg-[#0f1b2a] dark:ring-[#263a55]",
+                        activityDragPreviewId === activity.id &&
+                          "scale-[0.995] opacity-55",
+                      )}
+                      onDragStart={(event) =>
+                        dragActivityReference(activity, event)
+                      }
+                      onDrag={moveActivityReferenceDrag}
+                      onDragEnd={endActivityReferenceDrag}
+                    >
                     <input
                       type="checkbox"
                       className="h-5 w-5 rounded border-[#cbd5e1] accent-[#4f46e5]"
                       checked={activity.selected}
-                      onChange={(event) =>
-                        setActivity(activity.id, {
-                          selected: event.target.checked,
-                        })
-                      }
-                      aria-label={`Include ${activity.title}`}
+                      onChange={(event) => {
+                        if (event.target.checked) {
+                          setActivity(activity.id, { selected: true });
+                          return;
+                        }
+
+                        removeActivity(activity);
+                      }}
+                      aria-label={`Remove ${activity.title}`}
                     />
                     <div
                       className={cn(
@@ -1463,6 +2291,7 @@ export function DailyReportApp({
                             href={activity.sourceUrl}
                             target="_blank"
                             rel="noreferrer"
+                            draggable={false}
                             className="hover:text-[#2563eb]"
                           >
                             {activity.title || "Untitled activity"}
@@ -1485,12 +2314,16 @@ export function DailyReportApp({
                         ) : null}
                       </div>
                     </div>
-                    <ReferenceBadge
-                      tone={statusTone(activity.status)}
-                      className="justify-self-start px-2.5 py-1 text-xs"
-                    >
-                      {activity.status || "Not set"}
-                    </ReferenceBadge>
+                    {statusLabel ? (
+                      <ReferenceBadge
+                        tone={statusTone(activity.status)}
+                        className="justify-self-start px-2.5 py-1 text-xs"
+                      >
+                        {statusLabel}
+                      </ReferenceBadge>
+                    ) : (
+                      <span aria-hidden="true" />
+                    )}
                     <div className="text-sm font-medium text-[#111827] dark:text-foreground">
                       {formatDuration(activity.durationMinutes)}
                     </div>
@@ -1503,18 +2336,19 @@ export function DailyReportApp({
                     >
                       <MoreHorizontal className="h-4 w-4" />
                     </button>
-                  </article>
-                ))
+                    </article>
+                  );
+                })
               )}
             </div>
 
             <div className="mt-auto border-t border-[#e6eaf2] pt-3 dark:border-[#263a55]">
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[#667085] dark:text-muted-foreground">
                 <span>
-                  {selectedCount} of {activities.length} items selected
-                  {activities.length > 0
+                  {workItemCount} work item{workItemCount === 1 ? "" : "s"}
+                  {workItemCount > 0
                     ? normalizedActivitySearch
-                      ? `, showing ${activityPageStart}-${activityPageEnd} of ${filteredActivities.length} matches (${filteredSelectedCount} selected)`
+                      ? `, showing ${activityPageStart}-${activityPageEnd} of ${filteredActivities.length} matches`
                       : `, showing ${activityPageStart}-${activityPageEnd}`
                     : ""}
                 </span>
@@ -1574,7 +2408,9 @@ export function DailyReportApp({
               initialSummary={editorSummaryForReport(initialReport)}
               initialBlockers={blockersForReport(initialReport)}
               resetKey={`${date}:${initialReport.id}:${initialReport.updatedAt ?? ""}`}
+              activityReferences={activityReferences}
               onChange={handleSummaryChange}
+              onActivityReferenceDrop={includeDroppedActivityReference}
             />
           </aside>
         </div>
@@ -1602,26 +2438,57 @@ export function DailyReportApp({
             </button>
             <button
               className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
-              onClick={() => {
-                setActivity(menuActivity.id, {
-                  selected: !menuActivity.selected,
-                });
-                setOpenActivityMenu(null);
-              }}
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              {menuActivity.selected ? "Exclude" : "Include"}
-            </button>
-            <button
-              className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
-              onClick={() => {
-                setActivity(menuActivity.id, { employeeNote: "" });
-                setOpenActivityMenu(null);
-              }}
+              onClick={() => startRenamingActivity(menuActivity)}
             >
               <Edit3 className="h-4 w-4" />
-              Clear note
+              Rename
             </button>
+            {isRenamingMenuActivity ? (
+              <form
+                className="m-1 rounded-[7px] bg-[#f8fafc] p-2 ring-1 ring-[#e1e6ef] dark:bg-[#0b1523] dark:ring-[#263a55]"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  saveActivityTitle(menuActivity);
+                }}
+              >
+                <Input
+                  value={renamingActivity?.title ?? ""}
+                  onChange={(event) =>
+                    setRenamingActivity((current) =>
+                      current && current.id === menuActivity.id
+                        ? { ...current, title: event.target.value }
+                        : current,
+                    )
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setRenamingActivity(null);
+                    }
+                  }}
+                  autoFocus
+                  aria-label="Task title"
+                  placeholder="Task title"
+                  className="h-8 rounded-[6px] bg-white text-sm shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#101d2e] dark:ring-[#3a506d]"
+                />
+                <div className="mt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="rounded-[6px] px-2.5 py-1.5 text-xs font-semibold text-[#667085] hover:bg-white dark:text-muted-foreground dark:hover:bg-white/5"
+                    onClick={() => setRenamingActivity(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-[6px] bg-[#2563eb] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!renamingActivity?.title.trim()}
+                  >
+                    Save
+                  </button>
+                </div>
+              </form>
+            ) : null}
             <button
               className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
               onClick={() => copyActivityTitle(menuActivity)}
@@ -1634,30 +2501,39 @@ export function DailyReportApp({
               onClick={() => removeActivity(menuActivity)}
             >
               <Trash2 className="h-4 w-4" />
-              {menuActivity.source === "MANUAL"
-                ? "Delete item"
-                : "Remove from report"}
+              Remove
             </button>
           </div>
         </>
       ) : null}
-      {message ? (
+      {activityDragPreview ? (
         <div
-          className="fixed bottom-5 right-5 z-50 flex max-w-[min(420px,calc(100vw-2.5rem))] items-start gap-3 rounded-[12px] bg-white px-4 py-3 text-sm font-medium text-[#334155] shadow-[0_18px_42px_rgba(15,23,42,0.18)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:text-[#d7e0ec] dark:ring-[#263a55]"
-          role="status"
-          aria-live="polite"
+          className="activity-drag-preview pointer-events-none fixed z-[80] flex max-w-[320px] items-center gap-3 rounded-[12px] bg-white/95 px-3 py-2.5 text-sm text-[#111827] shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-[#dbe5f4] backdrop-blur dark:bg-[#0f1b2a]/95 dark:text-foreground dark:ring-[#263a55]"
+          style={{
+            left: activityDragPreview.x,
+            top: activityDragPreview.y,
+          }}
+          aria-hidden="true"
         >
-          <span className="min-w-0 flex-1">{message}</span>
-          <button
-            type="button"
-            className="-mr-1 -mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-[#64748b] transition-colors hover:bg-[#eef2f7] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
-            aria-label="Dismiss message"
-            onClick={() => setMessage(null)}
+          <span
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px]",
+              sourceStyles[activityDragPreview.source],
+            )}
           >
-            <X className="h-4 w-4" />
-          </button>
+            {sourceIcon(activityDragPreview.source)}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate font-semibold">
+              {activityDragPreview.title}
+            </span>
+            <span className="block truncate text-xs text-[#667085] dark:text-muted-foreground">
+              {sourceLabels[activityDragPreview.source]}
+            </span>
+          </span>
         </div>
       ) : null}
+      <FixedToast message={message} onDismiss={() => setMessage(null)} />
     </>
   );
 }
