@@ -4,6 +4,8 @@ import bcrypt from "bcryptjs";
 import { isGenerisEmail, normalizeEmail } from "@/lib/auth-domain";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
+import type { EmailDelivery } from "@/lib/email";
+import { sendTemporaryPasswordEmail } from "@/lib/services/account-emails";
 import { createDepartment as createDepartmentRecord, departmentMembershipSelect } from "@/lib/services/departments";
 import type { accountProfileSchema, changePasswordSchema, createUserSchema, resetPasswordSchema, updateUserSchema } from "@/lib/validation";
 import type { z } from "zod";
@@ -26,6 +28,25 @@ export const adminUserSelect = {
 
 function generateTemporaryPassword() {
   return crypto.randomBytes(12).toString("base64url");
+}
+
+async function deliverTemporaryPasswordEmail({
+  user,
+  temporaryPassword,
+  kind,
+}: {
+  user: {
+    email?: string | null;
+    name?: string | null;
+  };
+  temporaryPassword: string;
+  kind: "INVITE" | "RESET";
+}): Promise<EmailDelivery> {
+  return sendTemporaryPasswordEmail({
+    user,
+    temporaryPassword,
+    kind,
+  });
 }
 
 export async function createAppUser(input: CreateUserInput) {
@@ -58,7 +79,13 @@ export async function createAppUser(input: CreateUserInput) {
     select: adminUserSelect
   });
 
-  return { user, temporaryPassword };
+  const emailDelivery = await deliverTemporaryPasswordEmail({
+    user,
+    temporaryPassword,
+    kind: "INVITE",
+  });
+
+  return { user, temporaryPassword, emailDelivery };
 }
 
 export async function updateAppUser(userId: string, input: UpdateUserInput) {
@@ -179,5 +206,11 @@ export async function resetAppUserPassword(userId: string, input: ResetPasswordI
     select: adminUserSelect
   });
 
-  return { user, temporaryPassword };
+  const emailDelivery = await deliverTemporaryPasswordEmail({
+    user,
+    temporaryPassword,
+    kind: "RESET",
+  });
+
+  return { user, temporaryPassword, emailDelivery };
 }

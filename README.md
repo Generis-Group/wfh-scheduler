@@ -77,5 +77,6 @@ npm run db:seed
 - OAuth tokens are encrypted before being stored in the Auth.js `Account` table, and refreshes persist updated encrypted tokens.
 - Sign-in and admin-created accounts are restricted to `@generisgp.com` email addresses.
 - Reviewer/admin digest emails use Resend; manual digests go to the sender, scheduled digests are sent separately to each active reviewer/admin with that recipient's review scope, and include coverage, missing reports, late/edit flags, and a link back to the review dashboard.
+- Transactional email also uses Resend for admin-created account invites, temporary password resets, reviewer report reminders, and reviewer comment notifications. After the sending domain is verified in Resend DNS, set `EMAIL_FROM` to that verified sender, for example `Generis Reports <reports@generisgp.com>`.
 - Employees can revise submitted reports; previous submitted snapshots are retained in `ReportRevision`.
 - Reviewer access uses the `REVIEWER` role internally; legacy `/coo` links redirect to `/review`.

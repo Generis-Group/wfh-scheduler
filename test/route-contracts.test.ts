@@ -36,6 +36,12 @@ vi.mock("@/lib/services/reports", () => ({
     rows: [],
     metrics: { users: 1, submitted: 0, sourceMix: [] }
   })),
+  getWeeklyReportForEmployee: vi.fn(async () => ({
+    employee: { id: "user-1", name: "Employee", role: "EMPLOYEE" },
+    weekStart: "2026-05-11",
+    weekEnd: "2026-05-15",
+    reports: []
+  })),
   getReportById: vi.fn(async () => ({ id: "report-1", userId: "user-1" })),
   updateReport: vi.fn(async () => ({ id: "report-1" })),
   submitReport: vi.fn(async () => ({ id: "report-1", status: "SUBMITTED" })),
@@ -98,6 +104,27 @@ vi.mock("@/lib/services/email-digest", () => ({
     from: "reports@generisgp.com",
     digestTime: "6:00 PM America/Toronto",
     recipientRule: "Manual digests go to the sender; scheduled digests are scoped per active reviewer/admin"
+  }))
+}));
+
+vi.mock("@/lib/services/report-reminder-email", () => ({
+  sendReportReminderEmail: vi.fn(async () => ({
+    employee: {
+      id: "user-1",
+      name: "Employee",
+      email: "employee@generisgp.com"
+    },
+    emailDelivery: {
+      status: "SENT",
+      providerMessageId: "reminder-1"
+    }
+  }))
+}));
+
+vi.mock("@/lib/services/report-comment-emails", () => ({
+  sendReportCommentEmail: vi.fn(async () => ({
+    status: "SENT",
+    providerMessageId: "comment-1"
   }))
 }));
 
@@ -308,6 +335,37 @@ describe("route contracts", () => {
     expect(reports.deleteDraftReport).toHaveBeenCalledWith("report-1");
   });
 
+  it("emails an employee when a reviewer adds a report comment", async () => {
+    const comments = await import("@/lib/services/report-comment-emails");
+    const { POST } = await import("@/app/api/reports/[id]/comments/route");
+    vi.mocked(comments.sendReportCommentEmail).mockClear();
+
+    const response = await POST(
+      new Request("http://localhost/api/reports/report-1/comments", {
+        method: "POST",
+        body: JSON.stringify({ body: "Please add the client follow-up." })
+      }),
+      { params: { id: "report-1" } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(comments.sendReportCommentEmail).toHaveBeenCalledWith({
+      report: { id: "report-1" },
+      commentBody: "Please add the client follow-up.",
+      author: {
+        name: undefined,
+        email: undefined
+      }
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      report: { id: "report-1" },
+      emailDelivery: {
+        status: "SENT",
+        providerMessageId: "comment-1"
+      }
+    });
+  });
+
   it("sends a manual reviewer email digest", async () => {
     const { POST } = await import("@/app/api/review/email-digest/route");
     const response = await POST(
@@ -329,6 +387,67 @@ describe("route contracts", () => {
         status: "SUCCEEDED"
       },
       skipped: false
+    });
+  });
+
+  it("returns a reviewer weekly report for one employee", async () => {
+    const reports = await import("@/lib/services/reports");
+    const { GET } = await import("@/app/api/review/weekly-report/route");
+    vi.mocked(reports.getWeeklyReportForEmployee).mockClear();
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/review/weekly-report?userId=user-1&date=2026-05-13"
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(reports.getWeeklyReportForEmployee).toHaveBeenCalledWith(
+      "user-1",
+      "2026-05-13",
+      { userId: "admin-1", role: "ADMIN" }
+    );
+    await expect(response.json()).resolves.toEqual({
+      weeklyReport: {
+        employee: { id: "user-1", name: "Employee", role: "EMPLOYEE" },
+        weekStart: "2026-05-11",
+        weekEnd: "2026-05-15",
+        reports: []
+      }
+    });
+  });
+
+  it("sends a report reminder to one reviewable employee", async () => {
+    const reminders = await import("@/lib/services/report-reminder-email");
+    const { POST } = await import("@/app/api/review/report-reminder/route");
+    vi.mocked(reminders.sendReportReminderEmail).mockClear();
+
+    const response = await POST(
+      new Request("http://localhost/api/review/report-reminder", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: "user-1",
+          date: "2026-05-13"
+        })
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(reminders.sendReportReminderEmail).toHaveBeenCalledWith({
+      userId: "user-1",
+      date: "2026-05-13",
+      scope: { userId: "admin-1", role: "ADMIN" }
+    });
+    await expect(response.json()).resolves.toEqual({
+      employee: {
+        id: "user-1",
+        name: "Employee",
+        email: "employee@generisgp.com"
+      },
+      emailDelivery: {
+        status: "SENT",
+        providerMessageId: "reminder-1"
+      }
     });
   });
 

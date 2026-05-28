@@ -1,8 +1,13 @@
 import type { EmailRun, Prisma } from "@prisma/client";
 
 import { DEFAULT_TIMEZONE, parseReportDate, reportDayEnd } from "@/lib/dates";
-import { getOptionalEnv } from "@/lib/env";
-import { HttpError } from "@/lib/http";
+import {
+  appBaseUrl,
+  escapeAttribute,
+  escapeHtml,
+  getEmailStatus,
+  sendEmail,
+} from "@/lib/email";
 import { isGenerisEmail } from "@/lib/auth-domain";
 import { prisma } from "@/lib/prisma";
 import type { ReviewScope } from "@/lib/services/departments";
@@ -238,8 +243,7 @@ export async function sendReviewDigest({
 
   const recipients = await selectReviewDigestRecipients(scope);
   const rows = await listReportsForDate(date, scope);
-  const appBaseUrl = getOptionalEnv("APP_BASE_URL") ?? getOptionalEnv("NEXTAUTH_URL") ?? "http://localhost:3000";
-  const digest = buildReviewDigest({ date, rows, recipients, appBaseUrl, filters });
+  const digest = buildReviewDigest({ date, rows, recipients, appBaseUrl: appBaseUrl(), filters });
   const emailRun = retryRun
     ? await prisma.emailRun.update({
         where: { id: retryRun.id },
@@ -281,7 +285,7 @@ export async function sendReviewDigest({
   }
 
   try {
-    const providerMessageId = await sendResendEmail({
+    const providerMessageId = await sendEmail({
       to: recipients.map((recipient) => recipient.email),
       subject: digest.subject,
       html: digest.html,
@@ -343,54 +347,15 @@ export async function getLastReviewDigestRun() {
 }
 
 export function getReviewDigestEmailStatus() {
+  const emailStatus = getEmailStatus();
+
   return {
-    configured: Boolean(getOptionalEnv("RESEND_API_KEY") && getOptionalEnv("EMAIL_FROM")),
-    provider: "Resend",
-    from: getOptionalEnv("EMAIL_FROM") ?? null,
+    configured: emailStatus.configured,
+    provider: emailStatus.provider,
+    from: emailStatus.from,
     digestTime: `6:00 PM ${DEFAULT_TIMEZONE}`,
     recipientRule: "Manual digests go to the sender; scheduled digests are scoped per active reviewer/admin"
   };
-}
-
-async function sendResendEmail({
-  to,
-  subject,
-  html,
-  text
-}: {
-  to: string[];
-  subject: string;
-  html: string;
-  text: string;
-}) {
-  const apiKey = getOptionalEnv("RESEND_API_KEY");
-  const from = getOptionalEnv("EMAIL_FROM");
-
-  if (!apiKey || !from) {
-    throw new HttpError(500, "Resend email is not configured.");
-  }
-
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      from,
-      to,
-      subject,
-      html,
-      text
-    })
-  });
-  const body = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(body?.message ? `Resend email failed: ${body.message}` : `Resend email failed with status ${response.status}.`);
-  }
-
-  return typeof body?.id === "string" ? body.id : null;
 }
 
 function metricRow(label: string, value: string) {
@@ -414,17 +379,4 @@ function personList(title: string, rows: DigestRow[]) {
       ${body}
     </section>
   `;
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function escapeAttribute(value: string) {
-  return escapeHtml(value);
 }

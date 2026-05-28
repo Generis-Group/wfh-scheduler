@@ -2,7 +2,7 @@ import crypto from "crypto";
 import type { Prisma } from "@prisma/client";
 
 import { activityMetadataWithLocalTitleState } from "@/lib/activity-title-overrides";
-import { parseReportDate } from "@/lib/dates";
+import { addReportDateDays, parseReportDate } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { departmentMembershipSelect, getReviewableEmployeeWhere, type ReviewScope } from "@/lib/services/departments";
@@ -530,6 +530,66 @@ export async function getReviewDashboardData(dateString: string, scope?: ReviewS
   const metrics = await getDashboardMetricsForWhere(reportDate, employeeWhere);
 
   return { rows, metrics };
+}
+
+export function reportWorkWeekRange(dateString: string) {
+  const date = parseReportDate(dateString);
+  const weekday = date.getUTCDay();
+  const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+  const start = addReportDateDays(dateString, mondayOffset);
+  const end = addReportDateDays(start, 4);
+
+  return { start, end };
+}
+
+export async function getWeeklyReportForEmployee(
+  employeeId: string,
+  dateString: string,
+  scope: ReviewScope,
+) {
+  const { start, end } = reportWorkWeekRange(dateString);
+  const employeeWhere = await getReviewableEmployeeWhere(scope);
+  const startDate = parseReportDate(start);
+  const endDate = parseReportDate(end);
+  const { employee, reports } = await prisma.$transaction(async (tx) => {
+    const employee = await tx.user.findFirst({
+      where: {
+        ...employeeWhere,
+        id: employeeId,
+      },
+      select: dashboardUserSelect,
+    });
+
+    if (!employee) {
+      return { employee: null, reports: [] };
+    }
+
+    const reports = await tx.dailyReport.findMany({
+      where: {
+        userId: employeeId,
+        status: "SUBMITTED",
+        reportDate: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      orderBy: { reportDate: "asc" },
+      include: dashboardReportInclude(scope),
+    });
+
+    return { employee, reports };
+  });
+
+  if (!employee) {
+    throw new HttpError(404, "Employee not found.");
+  }
+
+  return {
+    employee,
+    weekStart: start,
+    weekEnd: end,
+    reports,
+  };
 }
 
 export async function listReportHistory(userId: string, limit = 30) {

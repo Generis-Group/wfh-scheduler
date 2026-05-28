@@ -35,7 +35,7 @@ import {
   serverDataFreshEvent,
   serverDataStaleEvent,
 } from "@/lib/client-cache-invalidation";
-import { clampReportDateToToday } from "@/lib/dates";
+import { clampReportDateToToday, todayDateString } from "@/lib/dates";
 import { cn, initials } from "@/lib/utils";
 import generisLogo from "@/images/Generis_logo.png";
 
@@ -58,6 +58,11 @@ type PendingNavigation = {
   activeKey: NavKey | null;
   pageKind: PageLoadingKind | null;
 };
+
+const reportDateStorageKey = "generis.lastReportDate";
+const reportDateSavedOnStorageKey = "generis.lastReportDateSavedOn";
+const reviewDateStorageKey = "generis.lastReviewDate";
+const reviewDateSavedOnStorageKey = "generis.lastReviewDateSavedOn";
 
 const employeeNav: NavItem[] = [
   {
@@ -190,19 +195,27 @@ export function ReferenceAppShell({
       return;
     }
 
-    const routeReportDate = pathname === "/" ? routeDateParam : null;
-    const storedDate = window.localStorage.getItem("generis.lastReportDate");
+    const routeReportDate =
+      pathname === "/" ? routeDateParam || todayDateString() : null;
+    const storedDate = window.localStorage.getItem(reportDateStorageKey);
+    const storedSavedOn = window.localStorage.getItem(
+      reportDateSavedOnStorageKey,
+    );
     const nextReportDate = resolveLastReportDate(
       pathname,
       routeReportDate,
       storedDate,
+      storedSavedOn,
     );
 
     if (routeReportDate) {
-      window.localStorage.setItem(
-        "generis.lastReportDate",
-        clampReportDateToToday(routeReportDate),
+      persistRememberedDate(
+        reportDateStorageKey,
+        reportDateSavedOnStorageKey,
+        routeReportDate,
       );
+    } else if (!nextReportDate) {
+      clearRememberedDate(reportDateStorageKey, reportDateSavedOnStorageKey);
     }
 
     setLastReportDate(nextReportDate);
@@ -213,19 +226,27 @@ export function ReferenceAppShell({
       return;
     }
 
-    const routeReviewDate = pathname === "/review" ? routeDateParam : null;
-    const storedDate = window.localStorage.getItem("generis.lastReviewDate");
+    const routeReviewDate =
+      pathname === "/review" ? routeDateParam || todayDateString() : null;
+    const storedDate = window.localStorage.getItem(reviewDateStorageKey);
+    const storedSavedOn = window.localStorage.getItem(
+      reviewDateSavedOnStorageKey,
+    );
     const nextReviewDate = resolveLastReviewDate(
       pathname,
       routeReviewDate,
       storedDate,
+      storedSavedOn,
     );
 
     if (routeReviewDate) {
-      window.localStorage.setItem(
-        "generis.lastReviewDate",
-        clampReportDateToToday(routeReviewDate),
+      persistRememberedDate(
+        reviewDateStorageKey,
+        reviewDateSavedOnStorageKey,
+        routeReviewDate,
       );
+    } else if (!nextReviewDate) {
+      clearRememberedDate(reviewDateStorageKey, reviewDateSavedOnStorageKey);
     }
 
     setLastReviewDate(nextReviewDate);
@@ -660,9 +681,7 @@ function getLogoHref(
   lastReviewDate?: string | null,
 ) {
   if (variant === "admin") {
-    return lastReviewDate
-      ? `/review?date=${clampReportDateToToday(lastReviewDate)}`
-      : "/review";
+    return lastReviewDate ? `/review?date=${lastReviewDate}` : "/review";
   }
 
   return "/";
@@ -670,14 +689,28 @@ function getLogoHref(
 
 function getNavHref(item: NavItem, dates: RememberedDates) {
   if (item.key === "report" && dates.lastReportDate) {
-    return `/?date=${clampReportDateToToday(dates.lastReportDate)}`;
+    return `/?date=${dates.lastReportDate}`;
   }
 
   if (item.key === "review" && dates.lastReviewDate) {
-    return `/review?date=${clampReportDateToToday(dates.lastReviewDate)}`;
+    return `/review?date=${dates.lastReviewDate}`;
   }
 
   return item.href;
+}
+
+function persistRememberedDate(
+  dateStorageKey: string,
+  savedOnStorageKey: string,
+  date: string,
+) {
+  window.localStorage.setItem(dateStorageKey, clampReportDateToToday(date));
+  window.localStorage.setItem(savedOnStorageKey, todayDateString());
+}
+
+function clearRememberedDate(dateStorageKey: string, savedOnStorageKey: string) {
+  window.localStorage.removeItem(dateStorageKey);
+  window.localStorage.removeItem(savedOnStorageKey);
 }
 
 function resetContentScroll(element: HTMLDivElement | null) {
@@ -736,24 +769,37 @@ export function resolveLastReportDate(
   pathname: string | null,
   routeReportDate?: string | null,
   storedReportDate?: string | null,
+  storedReportDateSavedOn?: string | null,
 ) {
   if ((pathname || "/") === "/" && routeReportDate) {
     return clampReportDateToToday(routeReportDate);
   }
 
-  return storedReportDate ? clampReportDateToToday(storedReportDate) : null;
+  return resolveFreshRememberedDate(storedReportDate, storedReportDateSavedOn);
 }
 
 export function resolveLastReviewDate(
   pathname: string | null,
   routeReviewDate?: string | null,
   storedReviewDate?: string | null,
+  storedReviewDateSavedOn?: string | null,
 ) {
   if ((pathname || "/") === "/review" && routeReviewDate) {
     return clampReportDateToToday(routeReviewDate);
   }
 
-  return storedReviewDate ? clampReportDateToToday(storedReviewDate) : null;
+  return resolveFreshRememberedDate(storedReviewDate, storedReviewDateSavedOn);
+}
+
+function resolveFreshRememberedDate(
+  storedDate?: string | null,
+  storedDateSavedOn?: string | null,
+) {
+  if (!storedDate || storedDateSavedOn !== todayDateString()) {
+    return null;
+  }
+
+  return clampReportDateToToday(storedDate);
 }
 
 export function ReferencePanel({

@@ -132,3 +132,13 @@ export const reviewDigestSchema = z.object({
     })
     .optional(),
 });
+
+export const reportReminderSchema = z.object({
+  date: dateStringSchema,
+  userId: z.string().min(1),
+});
+
+export const weeklyReportQuerySchema = z.object({
+  date: dateStringSchema,
+  userId: z.string().min(1),
+});

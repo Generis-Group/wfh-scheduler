@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  CalendarRange,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -47,6 +48,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
 import {
+  addReportDateDays,
   clampReportDateToToday,
   reportDayEnd,
   todayDateString,
@@ -105,6 +107,28 @@ type Row = {
   report: DashboardReport | null;
 };
 
+type WeeklyReportData = {
+  employee: DashboardUser;
+  weekStart: string | Date;
+  weekEnd: string | Date;
+  reports: DashboardReport[];
+};
+
+type WeeklyReportState =
+  | {
+      status: "loading";
+      employee: DashboardUser;
+    }
+  | {
+      status: "ready";
+      data: WeeklyReportData;
+    }
+  | {
+      status: "error";
+      employee: DashboardUser;
+      message: string;
+    };
+
 type EmployeeStatusFilter = "ALL" | "SUBMITTED" | "MISSING";
 type EmployeeRowStatus = DashboardReport["status"] | "MISSING";
 type EmployeeSortKey =
@@ -161,6 +185,37 @@ function formatShortDate(value?: string | Date) {
     day: "numeric",
     year: "numeric",
   }).format(date);
+}
+
+function formatWeekdayShortDate(value?: string | Date) {
+  const date = value ? dateOnlyDisplayDate(value) : null;
+
+  if (!date) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function formatWeekRange(start?: string | Date, end?: string | Date) {
+  return `${formatShortDate(start)} - ${formatShortDate(end)}`;
+}
+
+function reportWeekDates(start: string | Date, end: string | Date) {
+  const dates: string[] = [];
+  let cursor = dateInputValue(start);
+  const endDate = dateInputValue(end);
+
+  while (cursor <= endDate) {
+    dates.push(cursor);
+    cursor = addReportDateDays(cursor, 1);
+  }
+
+  return dates;
 }
 
 function formatTimestamp(value?: string | Date | null) {
@@ -320,8 +375,12 @@ function dashboardFlags(row: Row, date: string) {
   return flags;
 }
 
+function userLabel(user: DashboardUser) {
+  return user.name ?? user.email ?? "Employee";
+}
+
 function employeeLabel(row: Row) {
-  return row.user.name ?? row.user.email ?? "Employee";
+  return userLabel(row.user);
 }
 
 function employeeStatusFilterValue(row: Row): EmployeeRowStatus {
@@ -627,8 +686,11 @@ export function ReviewerDashboard({
   const [activeReportUserId, setActiveReportUserId] = useState<string | null>(
     null,
   );
+  const [weeklyReportState, setWeeklyReportState] =
+    useState<WeeklyReportState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSendingDigest, setIsSendingDigest] = useState(false);
+  const [remindingUserId, setRemindingUserId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState<EmployeeStatusFilter>("ALL");
@@ -732,8 +794,10 @@ export function ReviewerDashboard({
   useEffect(() => {
     setItems(rows);
     setActiveReportUserId(null);
+    setWeeklyReportState(null);
     setSelectedReportIds([]);
     setBlockedOpenUserId(null);
+    setRemindingUserId(null);
     setPage(1);
     pendingDateRef.current = null;
     setPendingDateControl(null);
@@ -933,6 +997,32 @@ export function ReviewerDashboard({
     setActiveReportUserId(row.user.id);
   }
 
+  async function openWeeklyReport(row: Row) {
+    setNotice(null);
+    setActiveReportUserId(null);
+    setWeeklyReportState({ status: "loading", employee: row.user });
+
+    const response = await fetch(
+      `/api/review/weekly-report?userId=${encodeURIComponent(
+        row.user.id,
+      )}&date=${encodeURIComponent(currentReviewDate)}`,
+    );
+    const body = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const message = body.error ?? "Unable to generate weekly report.";
+      setWeeklyReportState({
+        status: "error",
+        employee: row.user,
+        message,
+      });
+      setNotice(message);
+      return;
+    }
+
+    setWeeklyReportState({ status: "ready", data: body.weeklyReport });
+  }
+
   function nudgeUnavailableReport(row: Row) {
     setBlockedOpenUserId(row.user.id);
 
@@ -983,6 +1073,51 @@ export function ReviewerDashboard({
         : `Email digest sent to ${recipients} reviewer/admin recipient${recipients === 1 ? "" : "s"}.`,
     );
     setIsSendingDigest(false);
+  }
+
+  async function sendReportReminder(row: Row) {
+    if (remindingUserId) {
+      return;
+    }
+
+    setNotice(null);
+    setRemindingUserId(row.user.id);
+
+    try {
+      const response = await fetch("/api/review/report-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: row.user.id,
+          date: currentReviewDate,
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setNotice(body.error ?? "Unable to send report reminder.");
+        return;
+      }
+
+      const employee =
+        body.employee?.name ?? body.employee?.email ?? employeeLabel(row);
+
+      if (body.emailDelivery?.status === "SENT") {
+        setNotice(`Reminder emailed to ${employee}.`);
+        return;
+      }
+
+      if (body.emailDelivery?.status === "SKIPPED") {
+        setNotice(
+          body.emailDelivery.reason ?? "Reminder email was skipped.",
+        );
+        return;
+      }
+
+      setNotice(body.emailDelivery?.error ?? "Reminder email failed.");
+    } finally {
+      setRemindingUserId(null);
+    }
   }
 
   async function setReadState(row: Row, read: boolean) {
@@ -1055,13 +1190,28 @@ export function ReviewerDashboard({
       ),
     );
     markServerDataStale();
-    setNotice("Comment added.");
+    setNotice(
+      result.emailDelivery?.status === "SENT"
+        ? "Comment added and emailed to the employee."
+        : "Comment added.",
+    );
     return true;
   }
 
   return (
     <>
-      {activeRow ? (
+      {weeklyReportState ? (
+        <WeeklyReportReviewPage
+          state={weeklyReportState}
+          onBack={() => setWeeklyReportState(null)}
+          onPrint={() => {
+            window.print();
+            setNotice(
+              "Use the browser print dialog to save this weekly report as PDF.",
+            );
+          }}
+        />
+      ) : activeRow ? (
         <ReportReviewPage
           row={activeRow}
           date={date}
@@ -1227,7 +1377,7 @@ export function ReviewerDashboard({
               </div>
             </div>
             <div className="overflow-x-auto px-3">
-              <table className="w-full min-w-[980px] text-xs">
+              <table className="w-full min-w-[1080px] text-xs">
                 <thead>
                   <tr className="border-b border-[#e5eaf2] text-left text-[10px] font-semibold uppercase tracking-[0.02em] text-[#64748b] dark:border-[#263a55] dark:text-muted-foreground">
                     <th className="w-[36px] px-2 py-2">
@@ -1306,7 +1456,7 @@ export function ReviewerDashboard({
                         onSort={toggleEmployeeSort}
                       />
                     </th>
-                    <th className="w-[10%] px-2 py-2 text-center">Action</th>
+                    <th className="w-[14%] px-2 py-2 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1328,6 +1478,7 @@ export function ReviewerDashboard({
                           : "No report has been submitted yet";
                       const unavailablePulse =
                         blockedOpenUserId === row.user.id;
+                      const reminderPending = remindingUserId === row.user.id;
                       const flags = canReview ? dashboardFlags(row, date) : [];
                       const unread =
                         canReview &&
@@ -1430,42 +1581,65 @@ export function ReviewerDashboard({
                             {formatTimestamp(row.report?.submittedAt)}
                           </td>
                           <td className="px-2 py-2.5 text-center">
-                            {canReview ? (
+                            <div className="flex items-center justify-center gap-1.5">
+                              {canReview ? (
+                                <Button
+                                  variant="outline"
+                                  className="h-8 rounded-[7px] px-3 text-xs text-[#2563eb]"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    openReport(row);
+                                  }}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                >
+                                  Review
+                                </Button>
+                              ) : (
+                                <>
+                                  <span
+                                    className={cn(
+                                      "inline-flex h-6 w-6 items-center justify-center rounded-full text-[#64748b] opacity-0 transition-opacity dark:text-muted-foreground",
+                                      unavailablePulse &&
+                                        "reference-lock-nudge bg-[#eef2f7] opacity-100 dark:bg-white/10",
+                                    )}
+                                    aria-hidden="true"
+                                  >
+                                    <Lock className="h-3.5 w-3.5" />
+                                  </span>
+                                  <Button
+                                    variant="outline"
+                                    className="h-8 rounded-[7px] px-2.5 text-xs text-[#2563eb]"
+                                    title={blockedReason}
+                                    disabled={remindingUserId !== null}
+                                    aria-label={`Send reminder to ${employeeLabel(row)}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void sendReportReminder(row);
+                                    }}
+                                    onKeyDown={(event) => event.stopPropagation()}
+                                  >
+                                    {reminderPending ? (
+                                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Mail className="mr-1.5 h-3.5 w-3.5" />
+                                    )}
+                                    {reminderPending ? "Sending" : "Remind"}
+                                  </Button>
+                                </>
+                              )}
                               <Button
                                 variant="outline"
-                                className="h-8 rounded-[7px] px-3 text-xs text-[#2563eb]"
+                                className="h-8 rounded-[7px] px-2.5 text-xs text-[#2563eb]"
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  openReport(row);
+                                  void openWeeklyReport(row);
                                 }}
                                 onKeyDown={(event) => event.stopPropagation()}
                               >
-                                Review
+                                <CalendarRange className="mr-1.5 h-3.5 w-3.5" />
+                                Week
                               </Button>
-                            ) : (
-                              <div className="inline-flex items-center justify-center gap-1.5">
-                                <span
-                                  className={cn(
-                                    "inline-flex h-6 w-6 items-center justify-center rounded-full text-[#64748b] opacity-0 transition-opacity dark:text-muted-foreground",
-                                    unavailablePulse &&
-                                      "reference-lock-nudge bg-[#eef2f7] opacity-100 dark:bg-white/10",
-                                  )}
-                                  aria-hidden="true"
-                                >
-                                  <Lock className="h-3.5 w-3.5" />
-                                </span>
-                                <Button
-                                  variant="outline"
-                                  className="h-8 rounded-[7px] px-3 text-xs text-[#64748b]"
-                                  disabled
-                                  title={blockedReason}
-                                >
-                                  {row.report?.status === "DRAFT"
-                                    ? "Draft"
-                                    : "Remind (coming soon)"}
-                                </Button>
-                              </div>
-                            )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1631,6 +1805,198 @@ function Avatar({ name }: { name?: string | null }) {
   );
 }
 
+function WeeklyReportReviewPage({
+  state,
+  onBack,
+  onPrint,
+}: {
+  state: WeeklyReportState;
+  onBack: () => void;
+  onPrint: () => void;
+}) {
+  if (state.status !== "ready") {
+    return (
+      <main className="reference-page">
+        <button
+          className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+          onClick={onBack}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to review dashboard
+        </button>
+        <ReportSurface className="flex min-h-[260px] items-center justify-center">
+          <div className="text-center">
+            {state.status === "loading" ? (
+              <>
+                <Loader2 className="mx-auto h-7 w-7 animate-spin text-[#2563eb]" />
+                <h1 className="mt-4 text-lg font-semibold text-[#101828] dark:text-foreground">
+                  Generating weekly report
+                </h1>
+                <p className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
+                  {userLabel(state.employee)}
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-lg font-semibold text-[#101828] dark:text-foreground">
+                  Unable to generate weekly report
+                </h1>
+                <p className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
+                  {state.message}
+                </p>
+              </>
+            )}
+          </div>
+        </ReportSurface>
+      </main>
+    );
+  }
+
+  const { data } = state;
+  const reports = [...data.reports].sort(
+    (first, second) =>
+      dateInputValue(first.reportDate ?? data.weekStart).localeCompare(
+        dateInputValue(second.reportDate ?? data.weekStart),
+      ),
+  );
+  const weekDates = reportWeekDates(data.weekStart, data.weekEnd);
+  const reportsByDate = new Map(
+    reports.map((report) => [
+      dateInputValue(report.reportDate ?? data.weekStart),
+      report,
+    ]),
+  );
+  const submittedCount = reports.length;
+  const expectedDays = weekDates.length;
+  const weeklyActivities: ReportPdfActivity[] = reports.flatMap((report) =>
+    includedActivities(report).map((activity) => ({
+      id: `${report.id}:${activity.id}`,
+      title: activity.title,
+      source: activity.source,
+      sourceLabel: `${formatWeekdayShortDate(
+        report.reportDate,
+      )} - ${reportActivitySourceLabel(activity.source)}`,
+      duration: formatReportDuration(activity.durationMinutes),
+      note: activity.employeeNote || activity.status || "-",
+      status: activity.status,
+    })),
+  );
+  const weeklyComments: ReportPdfComment[] = reports.flatMap((report) =>
+    visibleReviewComments(report).map((comment) => ({
+      id: `${report.id}:${comment.id}`,
+      body: comment.body,
+      meta: `${formatShortDate(report.reportDate)} - ${formatTimestamp(
+        comment.createdAt,
+      )} by ${comment.author.name ?? comment.author.email ?? "Review team"}`,
+    })),
+  );
+  const activityReferences = Object.fromEntries(
+    reports.flatMap((report) =>
+      report.activities.map((activity) => [
+        activity.id,
+        {
+          href: activity.sourceUrl,
+          source: activity.source,
+          title: activity.title,
+        },
+      ]),
+    ),
+  );
+
+  return (
+    <ReportPdfDocument
+      eyebrow="Generis Weekly Report"
+      title="Weekly Report"
+      subtitle={
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span>{userLabel(data.employee)}</span>
+          <span aria-hidden="true">-</span>
+          <span>{formatWeekRange(data.weekStart, data.weekEnd)}</span>
+        </div>
+      }
+      status={{
+        label: `${submittedCount}/${expectedDays} submitted`,
+        tone:
+          submittedCount === expectedDays
+            ? "green"
+            : submittedCount > 0
+              ? "orange"
+              : "red",
+      }}
+      meta={[
+        { label: "Department", value: userDepartmentLabel(data.employee) },
+        { label: "Week", value: formatWeekRange(data.weekStart, data.weekEnd) },
+        {
+          label: "Submitted days",
+          value: `${submittedCount}/${expectedDays}`,
+        },
+        { label: "Activities", value: weeklyActivities.length },
+      ]}
+      summary={
+        <div className="space-y-3">
+          {weekDates.map((weekDate) => {
+            const report = reportsByDate.get(weekDate);
+
+            return (
+              <div
+                key={weekDate}
+                className="rounded-[8px] bg-[#f8fafc] p-3 ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
+              >
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-[#111827] dark:text-foreground">
+                    {formatWeekdayShortDate(weekDate)}
+                  </h3>
+                  <ReportStatusBadge
+                    status={report ? "Submitted" : "Missing"}
+                    className="px-2.5 py-1 text-[11px] font-semibold"
+                  />
+                </div>
+                {report ? (
+                  <SummaryRenderer
+                    value={report.summary}
+                    activityReferences={activityReferences}
+                    emptyText="No summary recorded."
+                  />
+                ) : (
+                  <p className="text-sm text-[#667085] dark:text-muted-foreground">
+                    No submitted report.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      }
+      activities={weeklyActivities}
+      comments={weeklyComments}
+      backControl={
+        <button
+          className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+          onClick={onBack}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to review dashboard
+        </button>
+      }
+      actions={
+        <Button
+          className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold text-white hover:bg-[#1d4ed8]"
+          onClick={onPrint}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Download PDF
+        </Button>
+      }
+      footer={
+        <>
+          Generated from submitted daily reports for{" "}
+          {formatWeekRange(data.weekStart, data.weekEnd)}.
+        </>
+      }
+    />
+  );
+}
+
 function ReportReviewPage({
   row,
   date,
@@ -1710,10 +2076,14 @@ function ReportReviewPage({
           <span>{formatShortDate(report?.reportDate ?? date)}</span>
         </div>
       }
-      status={{
-        label: currentStatus,
-        tone: reportPdfStatusTone(currentStatus),
-      }}
+      status={
+        currentStatus === "Submitted"
+          ? undefined
+          : {
+              label: currentStatus,
+              tone: reportPdfStatusTone(currentStatus),
+            }
+      }
       meta={[
         { label: "Department", value: userDepartmentLabel(row.user) },
         {

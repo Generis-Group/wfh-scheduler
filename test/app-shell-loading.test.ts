@@ -4,7 +4,13 @@ import fs from "node:fs";
 import path from "node:path";
 
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockPathname, mockRouterPrefetch, mockRouterPush, mockSearchParams } =
@@ -84,12 +90,11 @@ vi.mock("@/components/theme-toggle", () => ({
 
 import {
   activeNavKey,
-  resolveLastReportDate,
-  resolveLastReviewDate,
   ReferenceAppShell,
   shellPageKindFromHref,
 } from "@/components/reports/reference-shell";
 import { loadingKindFromHref } from "@/components/reports/page-loading-skeleton";
+import { todayDateString } from "@/lib/dates";
 
 const root = process.cwd();
 
@@ -122,16 +127,27 @@ function walkFiles(directory: string): string[] {
 
 function renderReferenceShell(
   children: React.ReactNode = "Current page content",
+  variant: "employee" | "admin" = "employee",
 ) {
   return render(
     React.createElement(ReferenceAppShell, {
-      variant: "employee",
+      variant,
       displayName: "Test User",
       userEmail: "test@example.com",
-      userRole: "Employee",
+      userRole: variant === "admin" ? "Admin" : "Employee",
       mustChangePassword: false,
       children: React.createElement("div", null, children),
     }),
+  );
+}
+
+function uniqueLinkHrefs(name: string) {
+  return Array.from(
+    new Set(
+      screen
+        .getAllByRole("link", { name })
+        .map((link) => link.getAttribute("href")),
+    ),
   );
 }
 
@@ -243,24 +259,54 @@ describe("authenticated app shell loading boundaries", () => {
     ).toBe("true");
   });
 
-  it("prefers the daily route date before falling back to the saved report date", () => {
-    expect(resolveLastReportDate("/", "2026-05-21", "2026-05-20")).toBe(
-      "2026-05-21",
-    );
-    expect(resolveLastReportDate("/reports", null, "2026-05-20")).toBe(
-      "2026-05-20",
-    );
-    expect(resolveLastReportDate("/", null, null)).toBeNull();
+  it("ignores stale saved dashboard dates so the server resolves today", () => {
+    window.localStorage.setItem("generis.lastReportDate", "2026-05-20");
+    window.localStorage.setItem("generis.lastReviewDate", "2026-05-20");
+    mockPathname.current = "/reports";
+
+    renderReferenceShell();
+
+    expect(uniqueLinkHrefs("Daily")).toEqual(["/"]);
+
+    cleanup();
+    mockPathname.current = "/admin";
+
+    renderReferenceShell("Current page content", "admin");
+
+    expect(uniqueLinkHrefs("Review")).toEqual(["/review"]);
+    expect(uniqueLinkHrefs("Generis")).toEqual(["/review"]);
   });
 
-  it("prefers the review route date before falling back to the saved review date", () => {
-    expect(resolveLastReviewDate("/review", "2026-05-19", "2026-05-18")).toBe(
-      "2026-05-19",
+  it("persists fresh dashboard dates across shell navigation", async () => {
+    window.localStorage.setItem("generis.lastReportDate", "2026-05-20");
+    window.localStorage.setItem(
+      "generis.lastReportDateSavedOn",
+      todayDateString(),
     );
-    expect(resolveLastReviewDate("/admin", null, "2026-05-18")).toBe(
-      "2026-05-18",
+    mockPathname.current = "/reports";
+
+    renderReferenceShell();
+
+    await waitFor(() => {
+      expect(uniqueLinkHrefs("Daily")).toEqual(["/?date=2026-05-20"]);
+    });
+
+    cleanup();
+    window.localStorage.setItem("generis.lastReviewDate", "2026-05-19");
+    window.localStorage.setItem(
+      "generis.lastReviewDateSavedOn",
+      todayDateString(),
     );
-    expect(resolveLastReviewDate("/review", null, null)).toBeNull();
+    mockPathname.current = "/admin";
+
+    renderReferenceShell("Current page content", "admin");
+
+    await waitFor(() => {
+      expect(uniqueLinkHrefs("Review")).toEqual(["/review?date=2026-05-19"]);
+      expect(uniqueLinkHrefs("Generis")).toEqual([
+        "/review?date=2026-05-19",
+      ]);
+    });
   });
 
   it("keeps desktop scrolling inside the page content pane", () => {

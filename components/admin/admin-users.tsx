@@ -54,6 +54,36 @@ type UserPatch = Partial<User> & {
   departmentIds?: string[];
 };
 
+type EmailDelivery =
+  | {
+      status: "SENT";
+      providerMessageId?: string | null;
+    }
+  | {
+      status: "SKIPPED";
+      reason?: string;
+    }
+  | {
+      status: "FAILED";
+      error?: string;
+    };
+
+function emailDeliveryMessage(emailDelivery?: EmailDelivery | null) {
+  if (!emailDelivery) {
+    return "Email delivery status is unavailable.";
+  }
+
+  if (emailDelivery.status === "SENT") {
+    return "The temporary password was emailed to the user.";
+  }
+
+  if (emailDelivery.status === "SKIPPED") {
+    return `${emailDelivery.reason ?? "Email was not sent."} Copy the password below.`;
+  }
+
+  return `${emailDelivery.error ?? "Email delivery failed."} Copy the password below.`;
+}
+
 export function AdminUsers({
   initialUsers,
   initialDepartments,
@@ -74,6 +104,7 @@ export function AdminUsers({
   const [temporaryCredentials, setTemporaryCredentials] = useState<{
     email: string;
     password: string;
+    emailDelivery?: EmailDelivery | null;
   } | null>(null);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [creatingDepartment, setCreatingDepartment] = useState(false);
@@ -114,8 +145,13 @@ export function AdminUsers({
       setTemporaryCredentials({
         email: data.user.email,
         password: data.temporaryPassword,
+        emailDelivery: data.emailDelivery,
       });
-      setMessage("User created with a temporary password.");
+      setMessage(
+        data.emailDelivery?.status === "SENT"
+          ? "User created and temporary password emailed."
+          : "User created. Copy the temporary password below.",
+      );
     } catch {
       setMessage("Unable to create user. Check your connection and try again.");
     } finally {
@@ -274,9 +310,14 @@ export function AdminUsers({
       setTemporaryCredentials({
         email: user.email ?? "",
         password: data.temporaryPassword,
+        emailDelivery: data.emailDelivery,
       });
       markServerDataStale();
-      setMessage("Temporary password created.");
+      setMessage(
+        data.emailDelivery?.status === "SENT"
+          ? "Temporary password emailed."
+          : "Temporary password created. Copy it below.",
+      );
     } catch {
       setMessage(
         "Unable to reset password. Check your connection and try again.",
@@ -347,9 +388,8 @@ export function AdminUsers({
                   Temporary sign-in password
                 </div>
                 <p className="mt-1 text-[#475569] dark:text-muted-foreground">
-                  Give this password to{" "}
-                  {temporaryCredentials.email || "the user"}. They will be asked
-                  to change it after signing in.
+                  {emailDeliveryMessage(temporaryCredentials.emailDelivery)}
+                  {" "}They will be asked to change it after signing in.
                 </p>
                 <div className="mt-3 grid gap-2 min-[760px]:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)]">
                   <div className="rounded-[8px] bg-white px-3 py-2 ring-1 ring-[#dbe5f4] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
