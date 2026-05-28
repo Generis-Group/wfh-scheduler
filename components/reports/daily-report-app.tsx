@@ -68,11 +68,8 @@ import { clampReportDateToToday, todayDateString } from "@/lib/dates";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
 import {
-  extractBlockerLines,
   removeSummaryActivityReferences,
   summaryActivityReferenceHref,
-  stripLegacyBlockerPrefixes,
-  uniqueLines,
 } from "@/lib/summary-format";
 import { cn } from "@/lib/utils";
 
@@ -102,7 +99,6 @@ type Report = {
     | "OUT_OF_OFFICE"
     | "UNKNOWN";
   summary: string;
-  blockers: string;
   status: "DRAFT" | "SUBMITTED";
   submittedAt?: string | Date | null;
   updatedAt?: string | Date | null;
@@ -146,7 +142,6 @@ const syncProviderSources: Record<SyncProviderKey, ActivitySource> = {
 
 type ReportPayload = {
   summary: string;
-  blockers: string;
   workLocation: WorkLocation;
   activityUpdates: Array<{
     id: string;
@@ -298,15 +293,7 @@ function setTransparentDragImage(dataTransfer: DataTransfer) {
 }
 
 function editorSummaryForReport(report: Report) {
-  return stripLegacyBlockerPrefixes(report.summary);
-}
-
-function blockersForReport(report: Report) {
-  return uniqueLines(
-    [report.blockers, extractBlockerLines(report.summary)]
-      .filter(Boolean)
-      .join("\n"),
-  );
+  return report.summary;
 }
 
 function isNewManualActivity(activity: Activity) {
@@ -315,14 +302,12 @@ function isNewManualActivity(activity: Activity) {
 
 function buildReportPayload(
   summary: string,
-  blockers: string,
   workLocation: WorkLocation,
   activities: Activity[],
   deletedActivityIds: string[],
 ): ReportPayload {
   return {
     summary,
-    blockers,
     workLocation,
     activityUpdates: activities
       .filter((activity) => !isNewManualActivity(activity))
@@ -351,7 +336,6 @@ function draftPayloadSignature(reportDate: string, payload: ReportPayload) {
 function hasMeaningfulDraftPayload(payload: ReportPayload) {
   return Boolean(
     payload.summary.trim() ||
-    payload.blockers.trim() ||
     payload.workLocation !== "UNKNOWN" ||
     payload.activityUpdates.length > 0 ||
     payload.deletedActivityIds.length > 0 ||
@@ -373,17 +357,14 @@ export function DailyReportApp({
   const router = useRouter();
   const reportDate = dateInputValue(date);
   const initialSummary = editorSummaryForReport(initialReport);
-  const initialBlockers = blockersForReport(initialReport);
   const initialPayload = buildReportPayload(
     initialSummary,
-    initialBlockers,
     initialReport.workLocation,
     initialReport.activities,
     [],
   );
   const [report, setReport] = useState(initialReport);
   const [summary, setSummary] = useState(() => initialSummary);
-  const [blockers, setBlockers] = useState(() => initialBlockers);
   const [workLocation, setWorkLocation] = useState<WorkLocation>(
     initialReport.workLocation,
   );
@@ -462,10 +443,8 @@ export function DailyReportApp({
 
   useEffect(() => {
     const nextSummary = editorSummaryForReport(initialReport);
-    const nextBlockers = blockersForReport(initialReport);
     const nextPayload = buildReportPayload(
       nextSummary,
-      nextBlockers,
       initialReport.workLocation,
       initialReport.activities,
       [],
@@ -493,7 +472,6 @@ export function DailyReportApp({
 
     setReport(initialReport);
     setSummary(nextSummary);
-    setBlockers(nextBlockers);
     setWorkLocation(initialReport.workLocation);
     setActivities(initialReport.activities);
     setDeletedActivityIds([]);
@@ -632,7 +610,6 @@ export function DailyReportApp({
   function removeSummaryReferencesForActivity(activityId: string) {
     const snapshot = summaryEditorRef.current?.getSnapshot() ?? {
       summary,
-      blockers,
     };
     const nextSummary = removeSummaryActivityReferences(
       snapshot.summary,
@@ -643,7 +620,7 @@ export function DailyReportApp({
       return;
     }
 
-    const nextSnapshot = { ...snapshot, summary: nextSummary };
+    const nextSnapshot = { summary: nextSummary };
     summaryEditorRef.current?.setSnapshot(nextSnapshot);
     handleSummaryChange(nextSnapshot);
   }
@@ -670,10 +647,9 @@ export function DailyReportApp({
   }, []);
 
   const draftSnapshotFor = useCallback(
-    (summaryValue: string, blockersValue: string): AutoDraftSnapshot => {
+    (summaryValue: string): AutoDraftSnapshot => {
       const payload = buildReportPayload(
         summaryValue,
-        blockersValue,
         workLocation,
         activities,
         deletedActivityIds,
@@ -701,10 +677,7 @@ export function DailyReportApp({
 
   const handleSummaryChange = useCallback(
     (snapshot: SummarySnapshot) => {
-      const nextSnapshot = draftSnapshotFor(
-        snapshot.summary,
-        snapshot.blockers,
-      );
+      const nextSnapshot = draftSnapshotFor(snapshot.summary);
 
       latestDraftRef.current = nextSnapshot;
 
@@ -717,9 +690,6 @@ export function DailyReportApp({
       startTransition(() => {
         setSummary((current) =>
           current === snapshot.summary ? current : snapshot.summary,
-        );
-        setBlockers((current) =>
-          current === snapshot.blockers ? current : snapshot.blockers,
         );
       });
     },
@@ -822,22 +792,20 @@ export function DailyReportApp({
     ({ syncState = true }: { syncState?: boolean } = {}) => {
       const editorSnapshot = summaryEditorRef.current?.getSnapshot();
       const currentSummary = editorSnapshot?.summary ?? summary;
-      const currentBlockers = editorSnapshot?.blockers ?? blockers;
-      const snapshot = draftSnapshotFor(currentSummary, currentBlockers);
+      const snapshot = draftSnapshotFor(currentSummary);
 
       if (
         syncState &&
         editorSnapshot &&
-        (currentSummary !== summary || currentBlockers !== blockers)
+        currentSummary !== summary
       ) {
         setSummary(currentSummary);
-        setBlockers(currentBlockers);
       }
 
       latestDraftRef.current = snapshot;
       return snapshot;
     },
-    [blockers, draftSnapshotFor, summary],
+    [draftSnapshotFor, summary],
   );
 
   function applySavedReport(
@@ -872,10 +840,8 @@ export function DailyReportApp({
     }
 
     const nextSummary = editorSummaryForReport(nextReport);
-    const nextBlockers = blockersForReport(nextReport);
     const nextPayload = buildReportPayload(
       nextSummary,
-      nextBlockers,
       nextReport.workLocation,
       nextReport.activities,
       [],
@@ -895,14 +861,10 @@ export function DailyReportApp({
 
     setReport(nextReport);
     setSummary(nextSummary);
-    setBlockers(nextBlockers);
     setActivities(nextReport.activities);
     setDeletedActivityIds([]);
     setWorkLocation(nextReport.workLocation);
-    summaryEditorRef.current?.setSnapshot({
-      summary: nextSummary,
-      blockers: nextBlockers,
-    });
+    summaryEditorRef.current?.setSnapshot({ summary: nextSummary });
   }
 
   const draftSaveRequest = useCallback(
@@ -1093,14 +1055,15 @@ export function DailyReportApp({
       }
 
       const nextReport = (await submitResponse.json()).report as Report;
+      const submittedSummary =
+        summaryEditorRef.current?.getSnapshot().summary ?? summary;
       applySavedReport(
         nextReport,
         true,
         draftPayloadSignature(
           reportDate,
           buildReportPayload(
-            summary,
-            blockers,
+            submittedSummary,
             workLocation,
             activities,
             deletedActivityIds,
@@ -1156,14 +1119,13 @@ export function DailyReportApp({
         ...reportRef.current,
         id: "",
         summary: "",
-        blockers: "",
         workLocation: "UNKNOWN" as WorkLocation,
         status: "DRAFT",
         activities: [],
         submittedAt: null,
         updatedAt: null,
       };
-      const clearedPayload = buildReportPayload("", "", "UNKNOWN", [], []);
+      const clearedPayload = buildReportPayload("", "UNKNOWN", [], []);
 
       reportRef.current = clearedReport;
       lastSavedSignatureRef.current = draftPayloadSignature(
@@ -1180,11 +1142,10 @@ export function DailyReportApp({
 
       setReport(clearedReport);
       setSummary("");
-      setBlockers("");
       setWorkLocation("UNKNOWN");
       setActivities([]);
       setDeletedActivityIds([]);
-      summaryEditorRef.current?.setSnapshot({ summary: "", blockers: "" });
+      summaryEditorRef.current?.setSnapshot({ summary: "" });
       markServerDataStale();
       setAutoSaveStatus("saved");
       setMessage("Draft deleted.");
@@ -1444,7 +1405,6 @@ export function DailyReportApp({
   const workItemCount = visibleActivities.length;
   const currentPayload = buildReportPayload(
     summary,
-    blockers,
     workLocation,
     activities,
     deletedActivityIds,
@@ -2089,7 +2049,6 @@ export function DailyReportApp({
             <SummaryEditor
               ref={summaryEditorRef}
               initialSummary={editorSummaryForReport(initialReport)}
-              initialBlockers={blockersForReport(initialReport)}
               resetKey={`${date}:${initialReport.id}:${initialReport.updatedAt ?? ""}`}
               activityReferences={activityReferences}
               onChange={handleSummaryChange}

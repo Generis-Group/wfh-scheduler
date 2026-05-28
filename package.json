@@ -23,7 +23,6 @@
     "@prisma/client": "6.19.0",
     "@radix-ui/react-slot": "1.2.4",
     "@tiptap/core": "^3.23.5",
-    "@tiptap/extension-highlight": "^3.23.5",
     "@tiptap/extension-placeholder": "^3.23.5",
     "@tiptap/react": "^3.23.5",
     "@tiptap/starter-kit": "^3.23.5",

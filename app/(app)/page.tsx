@@ -55,7 +55,6 @@ export default async function HomePage({
         reportDate: date,
         workLocation: "UNKNOWN" as const,
         summary: "",
-        blockers: "",
         status: "DRAFT" as const,
         submittedAt: null,
         updatedAt: null,

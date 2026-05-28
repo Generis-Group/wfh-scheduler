@@ -24,14 +24,6 @@ type ChangedActivityUpdate = {
   existing: ExistingActivityUpdate;
 };
 
-function extractBlockerLines(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.match(/^\s*blockers?:\s*(.+?)\s*$/i)?.[1]?.trim())
-    .filter((line): line is string => Boolean(line))
-    .join("\n");
-}
-
 const userIdentitySelect = {
   id: true,
   name: true,
@@ -72,7 +64,6 @@ const editorReportSelect = {
   reportDate: true,
   workLocation: true,
   summary: true,
-  blockers: true,
   status: true,
   submittedAt: true,
   updatedAt: true
@@ -252,7 +243,6 @@ export async function createReportRevision(reportId: string, editedById: string)
         report: {
           workLocation: report.workLocation,
           summary: report.summary,
-          blockers: report.blockers,
           status: report.status,
           submittedAt: report.submittedAt?.toISOString()
         },
@@ -266,20 +256,9 @@ export async function createReportRevision(reportId: string, editedById: string)
   });
 }
 
-function reportBlockersInput(input: UpdateReportInput) {
-  if (input.blockers !== undefined) {
-    return input.blockers;
-  }
-
-  return input.summary === undefined ? undefined : extractBlockerLines(input.summary);
-}
-
 function reportFieldChanges(report: Awaited<ReturnType<typeof getReportById>>, input: UpdateReportInput) {
-  const blockers = reportBlockersInput(input);
-
   return {
     summary: input.summary !== undefined && input.summary !== report.summary,
-    blockers: blockers !== undefined && blockers !== report.blockers,
     workLocation: input.workLocation !== undefined && input.workLocation !== report.workLocation
   };
 }
@@ -344,14 +323,9 @@ export async function updateReport(reportId: string, editedById: string, input: 
 
   await prisma.$transaction(async (tx) => {
     const reportData: Prisma.DailyReportUpdateInput = {};
-    const blockers = reportBlockersInput(input);
 
     if (fieldChanges.summary) {
       reportData.summary = input.summary;
-    }
-
-    if (fieldChanges.blockers) {
-      reportData.blockers = blockers;
     }
 
     if (fieldChanges.workLocation) {
@@ -606,10 +580,7 @@ export async function listReportHistory(userId: string, limit = 30) {
 }
 
 async function getDashboardMetricsForWhere(reportDate: Date, employeeWhere: Prisma.UserWhereInput) {
-  const trendStart = new Date(reportDate);
-  trendStart.setUTCDate(trendStart.getUTCDate() - 6);
-
-  const { users, submitted, activities, blockers, blockerTrendRows } = await prisma.$transaction(async (tx) => {
+  const { users, submitted, activities } = await prisma.$transaction(async (tx) => {
     const users = await tx.user.count({ where: employeeWhere });
     const submitted = await tx.dailyReport.count({ where: { reportDate, status: "SUBMITTED", user: employeeWhere } });
     const activities = await tx.activityItem.groupBy({
@@ -617,45 +588,13 @@ async function getDashboardMetricsForWhere(reportDate: Date, employeeWhere: Pris
       where: { reportDate, selected: true, staleAt: null, user: employeeWhere },
       _count: true
     });
-    const blockers = await tx.dailyReport.count({
-      where: {
-        reportDate,
-        blockers: { not: "" },
-        user: employeeWhere
-      }
-    });
-    const blockerTrendRows = await tx.dailyReport.groupBy({
-      by: ["reportDate"],
-      where: {
-        reportDate: {
-          gte: trendStart,
-          lte: reportDate
-        },
-        blockers: { not: "" },
-        user: employeeWhere
-      },
-      _count: true
-    });
 
-    return { users, submitted, activities, blockers, blockerTrendRows };
-  });
-  const blockerCounts = new Map(blockerTrendRows.map((row) => [row.reportDate.toISOString().slice(0, 10), row._count]));
-  const blockerTrend = Array.from({ length: 7 }, (_, index) => {
-    const day = new Date(trendStart);
-    day.setUTCDate(trendStart.getUTCDate() + index);
-    const date = day.toISOString().slice(0, 10);
-
-    return {
-      date,
-      count: blockerCounts.get(date) ?? 0
-    };
+    return { users, submitted, activities };
   });
 
   return {
     users,
     submitted,
-    blockers,
-    blockerTrend,
     sourceMix: activities.map((activity) => ({
       source: activity.source,
       count: activity._count

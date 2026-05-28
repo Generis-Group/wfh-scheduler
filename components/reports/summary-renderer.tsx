@@ -1,10 +1,8 @@
 import type { ReactNode } from "react";
 
 import {
-  lineItems,
   normalizeSummaryActivitySource,
   normalizeSummaryLinkHref,
-  splitBlockerText,
   summaryActivityReferenceIdFromHref,
   summaryActivityReferenceSource,
   summaryLinkAt,
@@ -15,7 +13,6 @@ import { cn } from "@/lib/utils";
 
 type SummaryRendererProps = {
   value?: string | null;
-  blockers?: string | null;
   activityReferences?: SummaryActivityReferenceMap;
   emptyText?: string;
   className?: string;
@@ -32,18 +29,6 @@ export { summaryPlainText };
 function markdownListLevel(whitespace: string) {
   const columns = whitespace.split("").reduce((total, character) => total + (character === "\t" ? 2 : 1), 0);
   return Math.floor(columns / 2);
-}
-
-function renderPlainText(value: string, blockerItems: string[], keyPrefix: string) {
-  return splitBlockerText(value, blockerItems).map((segment, index) =>
-    segment.blocker ? (
-      <mark key={`${keyPrefix}-mark-${index}`} className="summary-blocker-mark">
-        {segment.text}
-      </mark>
-    ) : (
-      <span key={`${keyPrefix}-text-${index}`}>{segment.text}</span>
-    )
-  );
 }
 
 function resolvedActivityReferenceHref(
@@ -144,7 +129,6 @@ function nextSummaryLinkIndex(value: string, startIndex: number) {
 
 function renderInline(
   value: string,
-  blockerItems: string[],
   keyPrefix: string,
   activityReferences?: SummaryActivityReferenceMap,
 ): ReactNode[] {
@@ -158,7 +142,6 @@ function renderInline(
       const label = resolvedActivityReferenceLabel(link, activityReferences);
       const children = renderInline(
         label,
-        blockerItems,
         `${keyPrefix}-link-${index}`,
         activityReferences,
       );
@@ -183,7 +166,6 @@ function renderInline(
           <strong key={`${keyPrefix}-strong-${index}`} className="font-semibold">
             {renderInline(
               value.slice(index + 2, close),
-              blockerItems,
               `${keyPrefix}-strong-${index}`,
               activityReferences,
             )}
@@ -202,7 +184,6 @@ function renderInline(
           <em key={`${keyPrefix}-em-${index}`}>
             {renderInline(
               value.slice(index + 1, close),
-              blockerItems,
               `${keyPrefix}-em-${index}`,
               activityReferences,
             )}
@@ -222,7 +203,11 @@ function renderInline(
       nextMarker = index + 1;
     }
 
-    nodes.push(...renderPlainText(value.slice(index, nextMarker), blockerItems, `${keyPrefix}-plain-${index}`));
+    nodes.push(
+      <span key={`${keyPrefix}-text-${index}`}>
+        {value.slice(index, nextMarker)}
+      </span>,
+    );
     index = nextMarker;
   }
 
@@ -234,7 +219,6 @@ function renderMarkdownList(
   startIndex: number,
   level: number,
   ordered: boolean,
-  blockerItems: string[],
   keyPrefix: string,
   activityReferences?: SummaryActivityReferenceMap,
 ) {
@@ -252,7 +236,6 @@ function renderMarkdownList(
     const children: ReactNode[] = [
       ...renderInline(
         line.content,
-        blockerItems,
         `${keyPrefix}-item-${index}`,
         activityReferences,
       ),
@@ -265,7 +248,6 @@ function renderMarkdownList(
         index,
         lines[index].level,
         lines[index].ordered,
-        blockerItems,
         `${keyPrefix}-nested-${index}`,
         activityReferences,
       );
@@ -293,7 +275,6 @@ function renderMarkdownList(
 function renderMarkdownListBlock(
   lines: string[],
   startIndex: number,
-  blockerItems: string[],
   keyPrefix: string,
   activityReferences?: SummaryActivityReferenceMap,
 ) {
@@ -324,7 +305,6 @@ function renderMarkdownListBlock(
       listIndex,
       listLines[listIndex].level,
       listLines[listIndex].ordered,
-      blockerItems,
       `${keyPrefix}-list-${listIndex}`,
       activityReferences,
     );
@@ -337,7 +317,6 @@ function renderMarkdownListBlock(
 
 function renderBlocks(
   value: string,
-  blockerItems: string[],
   activityReferences?: SummaryActivityReferenceMap,
 ) {
   const lines = value.split("\n");
@@ -351,7 +330,6 @@ function renderBlocks(
       const rendered = renderMarkdownListBlock(
         lines,
         index,
-        blockerItems,
         `block-${index}`,
         activityReferences,
       );
@@ -366,7 +344,6 @@ function renderBlocks(
         <h3 key={`heading-${index}`} className="my-0 text-xl font-normal leading-7 text-[#111827] dark:text-foreground">
           {renderInline(
             heading[1],
-            blockerItems,
             `heading-${index}`,
             activityReferences,
           )}
@@ -390,7 +367,6 @@ function renderBlocks(
         quoteLines.push(
           ...renderInline(
             nextQuote[1],
-            blockerItems,
             `quote-${index}`,
             activityReferences,
           ),
@@ -410,7 +386,6 @@ function renderBlocks(
         {line ? (
           renderInline(
             line,
-            blockerItems,
             `paragraph-${index}`,
             activityReferences,
           )
@@ -427,7 +402,6 @@ function renderBlocks(
 
 export function SummaryRenderer({
   value,
-  blockers,
   activityReferences,
   emptyText = "No summary entered.",
   className,
@@ -438,5 +412,5 @@ export function SummaryRenderer({
     return <p className={cn("text-sm text-[#667085] dark:text-muted-foreground", className)}>{emptyText}</p>;
   }
 
-  return <div className={cn("space-y-1 text-sm leading-6 text-[#111827] dark:text-foreground", className)}>{renderBlocks(value ?? "", lineItems(blockers), activityReferences)}</div>;
+  return <div className={cn("space-y-1 text-sm leading-6 text-[#111827] dark:text-foreground", className)}>{renderBlocks(value ?? "", activityReferences)}</div>;
 }

@@ -164,7 +164,6 @@ model DailyReport {
   reportDate   DateTime        @db.Date
   workLocation WorkLocation    @default(UNKNOWN)
   summary      String          @default("") @db.Text
-  blockers     String          @default("") @db.Text
   status       ReportStatus    @default(DRAFT)
   submittedAt  DateTime?
   createdAt    DateTime        @default(now())

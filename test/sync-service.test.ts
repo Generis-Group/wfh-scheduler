@@ -810,7 +810,6 @@ describe("sync service pagination", () => {
       reportDate: new Date("2026-05-14T00:00:00.000Z"),
       workLocation: "OFFICE",
       summary: "Submitted summary",
-      blockers: "",
       status: "SUBMITTED",
       submittedAt: new Date("2026-05-14T20:00:00.000Z"),
       activities: [{ id: "activity-old", selected: true, employeeNote: null }]

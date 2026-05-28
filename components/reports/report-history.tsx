@@ -8,21 +8,17 @@ import {
   ArrowLeft,
   ArrowUpDown,
   CalendarDays,
-  CheckCircle2,
   ChevronDown,
   Download,
   Edit3,
   ExternalLink,
   FileText,
-  ListChecks,
   Loader2,
-  MessageCircle,
   MoreVertical,
   Plus,
   Search,
   Send,
   Trash2,
-  UserRound,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -31,6 +27,11 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
 import { EmptyReferenceState } from "@/components/reports/reference-shell";
+import {
+  ReportPdfDocument,
+  type ReportPdfActivity,
+  type ReportPdfComment,
+} from "@/components/reports/report-pdf";
 import {
   SummaryRenderer,
   summaryPlainText,
@@ -67,7 +68,6 @@ type HistoryReport = {
   status: "DRAFT" | "SUBMITTED";
   workLocation: string;
   summary: string;
-  blockers: string;
   submittedAt?: string | Date | null;
   updatedAt?: string | Date | null;
   user?: {
@@ -113,10 +113,6 @@ function formatReportDate(value: string | Date) {
     day: "numeric",
     year: "numeric",
   }).format(date);
-}
-
-function formatReportTitle(value: string | Date) {
-  return `${formatReportDate(value)} Report`;
 }
 
 function formatWeekday(value: string | Date) {
@@ -166,10 +162,6 @@ function editedAfterDate(report: HistoryReport) {
   });
 }
 
-function sourceLabel(source?: string | null) {
-  return source ? titleCase(source) : "Activity";
-}
-
 function reportDepartmentLabel(report: HistoryReport) {
   const departments =
     report.user?.departments
@@ -212,53 +204,6 @@ function statusTone(report: HistoryReport): "green" | "orange" | "neutral" {
   }
 
   return "neutral";
-}
-
-function activityStatusTone(
-  status?: string | null,
-): "green" | "orange" | "blue" | "neutral" {
-  const normalized = status?.toLowerCase() ?? "";
-
-  if (
-    normalized.includes("done") ||
-    normalized.includes("complete") ||
-    normalized.includes("accepted")
-  ) {
-    return "green";
-  }
-
-  if (normalized.includes("progress")) {
-    return "blue";
-  }
-
-  if (normalized.includes("todo") || normalized.includes("draft")) {
-    return "orange";
-  }
-
-  return "neutral";
-}
-
-function activityStatusLabel(activity: HistoryActivity) {
-  if (
-    activity.source === "GOOGLE_TASKS" &&
-    activity.status?.toLowerCase() === "completed"
-  ) {
-    return null;
-  }
-
-  return activity.status || "No status";
-}
-
-function sourceIcon(source?: string | null) {
-  if (source === "GOOGLE_CALENDAR") {
-    return <CalendarDays className="h-4 w-4" />;
-  }
-
-  if (source === "GOOGLE_TASKS") {
-    return <CheckCircle2 className="h-4 w-4" />;
-  }
-
-  return <FileText className="h-4 w-4" />;
 }
 
 function getInitialOpenedId() {
@@ -315,7 +260,6 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
       const matchesQuery =
         !normalizedQuery ||
         report.summary.toLowerCase().includes(normalizedQuery) ||
-        report.blockers.toLowerCase().includes(normalizedQuery) ||
         report.activities.some((activity) =>
           activity.title.toLowerCase().includes(normalizedQuery),
         );
@@ -906,227 +850,131 @@ function OpenedReportView({
   );
   const departmentLabel = reportDepartmentLabel(report);
   const comments = visibleReviewComments(report);
+  const pdfActivities: ReportPdfActivity[] = includedActivities.map(
+    (activity) => ({
+      id: activity.id,
+      title: activity.title,
+      source: activity.source,
+      duration: formatDuration(activity.durationMinutes),
+      note: activity.employeeNote,
+      status:
+        activity.source === "GOOGLE_TASKS" &&
+        activity.status?.toLowerCase() === "completed"
+          ? null
+          : activity.status,
+    }),
+  );
+  const pdfComments: ReportPdfComment[] = comments.map((comment) => ({
+    id: comment.id,
+    body: comment.body,
+    meta: `${formatTimestamp(comment.createdAt)} by ${
+      comment.author?.name ?? comment.author?.email ?? "Review team"
+    }`,
+  }));
+  const latestRevision = report.revisions[0];
+  const currentStatusLabel = statusLabel(report);
 
   return (
-    <main className="reference-page report-pdf-page !pb-4 !pt-3">
-      <div className="report-pdf-document mx-auto max-w-[1120px]">
+    <ReportPdfDocument
+      eyebrow="Generis Daily Report"
+      title="Daily Report"
+      subtitle={formatReportDate(report.reportDate)}
+      status={
+        currentStatusLabel === "Submitted"
+          ? undefined
+          : {
+              label: currentStatusLabel,
+              tone: statusTone(report),
+            }
+      }
+      meta={[
+        { label: "Department", value: departmentLabel },
+        { label: "Location", value: titleCase(report.workLocation) },
+        { label: "Submitted", value: formatTimestamp(report.submittedAt) },
+        { label: "Last updated", value: formatTimestamp(report.updatedAt) },
+      ]}
+      summary={
+        <SummaryRenderer
+          value={report.summary}
+          activityReferences={activityReferences}
+          emptyText="No summary recorded."
+        />
+      }
+      activities={pdfActivities}
+      comments={pdfComments}
+      backControl={
         <button
-          className="report-pdf-back mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+          className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
           onClick={onBack}
         >
           <ArrowLeft className="h-4 w-4" />
           Back to reports
         </button>
-
-        <div className="report-pdf-header mb-4 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="report-pdf-print-only text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">
-              Generis Daily Report
-            </p>
-            <h1 className="text-[26px] font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">
-              {formatReportTitle(report.reportDate)}
-            </h1>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <StatusPill tone={statusTone(report)}>
-                {statusLabel(report)}
-              </StatusPill>
-              <StatusPill tone="blue">
-                {titleCase(report.workLocation)}
-              </StatusPill>
-            </div>
-          </div>
-          <div className="report-pdf-actions flex flex-wrap gap-3">
+      }
+      actions={
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            className="h-10 rounded-[8px] bg-white px-4 text-sm font-medium ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
+            disabled={isPending}
+            onClick={onEdit}
+          >
+            <Edit3 className="mr-2 h-4 w-4" />
+            Edit
+          </Button>
+          {report.status === "DRAFT" ? (
             <Button
               variant="outline"
-              className="h-10 rounded-[8px] bg-white px-5 text-sm font-medium ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
+              className="h-10 rounded-[8px] bg-white px-4 text-sm font-semibold text-[#b42318] ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
               disabled={isPending}
-              onClick={onEdit}
+              onClick={onDelete}
             >
-              <Edit3 className="mr-2 h-4 w-4" />
-              Edit
+              {isDeleting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              {isDeleting ? "Deleting..." : "Delete draft"}
             </Button>
-            {report.status === "DRAFT" ? (
-              <Button
-                variant="outline"
-                className="h-10 rounded-[8px] bg-white px-5 text-sm font-semibold text-[#b42318] ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
-                disabled={isPending}
-                onClick={onDelete}
-              >
-                {isDeleting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="mr-2 h-4 w-4" />
-                )}
-                {isDeleting ? "Deleting..." : "Delete draft"}
-              </Button>
-            ) : null}
-            {report.status === "DRAFT" ? (
-              <Button
-                className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold hover:bg-[#1d4ed8]"
-                disabled={isPending}
-                onClick={onSubmit}
-              >
-                {isSubmitting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="mr-2 h-4 w-4" />
-                )}
-                {isSubmitting ? "Submitting..." : "Submit draft"}
-              </Button>
-            ) : null}
+          ) : null}
+          {report.status === "DRAFT" ? (
             <Button
-              className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold hover:bg-[#1d4ed8]"
+              className="h-10 rounded-[8px] bg-[#2563eb] px-4 text-sm font-semibold hover:bg-[#1d4ed8]"
               disabled={isPending}
-              onClick={onDownload}
+              onClick={onSubmit}
             >
-              <Download className="mr-2 h-4 w-4" />
-              Download PDF
+              {isSubmitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              {isSubmitting ? "Submitting..." : "Submit draft"}
             </Button>
-          </div>
+          ) : null}
+          <Button
+            className="h-10 rounded-[8px] bg-[#2563eb] px-4 text-sm font-semibold hover:bg-[#1d4ed8]"
+            disabled={isPending}
+            onClick={() => onDownload()}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Download PDF
+          </Button>
         </div>
-
-        <section className="report-pdf-card mb-3 grid rounded-[10px] bg-white ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[900px]:grid-cols-4">
-          <Metric
-            icon={<CalendarDays className="h-4 w-4" />}
-            label="Submitted"
-            value={formatTimestamp(report.submittedAt)}
-          />
-          <Metric
-            icon={<ClockIcon />}
-            label="Last saved"
-            value={formatTimestamp(report.updatedAt)}
-          />
-          <Metric
-            icon={<ListChecks className="h-4 w-4" />}
-            label="Included activities"
-            value={String(includedActivities.length)}
-          />
-          <Metric
-            icon={<UserRound className="h-4 w-4" />}
-            label="Department"
-            value={departmentLabel}
-          />
-        </section>
-
-        <ReportSection title="1. Summary">
-          <SummaryRenderer
-            value={report.summary}
-            blockers={report.blockers}
-            activityReferences={activityReferences}
-          />
-        </ReportSection>
-
-        <ReportSection
-          title={`2. Included activities (${includedActivities.length})`}
-        >
-          {includedActivities.length === 0 ? (
-            <p className="text-sm text-[#667085] dark:text-muted-foreground">
-              No activities included.
-            </p>
-          ) : (
-            <div className="overflow-hidden rounded-[8px] ring-1 ring-[#e1e6ef] dark:ring-[#263a55]">
-              {includedActivities.map((activity) => {
-                const statusLabel = activityStatusLabel(activity);
-
-                return (
-                  <div
-                    key={activity.id}
-                    className="grid gap-3 border-b border-[#e8ecf3] bg-white px-3 py-2.5 last:border-b-0 dark:border-[#263a55] dark:bg-[#101d2e] min-[820px]:grid-cols-[40px_minmax(0,1fr)_180px_150px_80px] min-[820px]:items-center"
-                  >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#f4f7fb] text-[#475467] dark:bg-white/[0.05] dark:text-muted-foreground">
-                      {sourceIcon(activity.source)}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-[#111827] dark:text-foreground">
-                        {activity.title || "Untitled activity"}
-                      </div>
-                      <div className="mt-1 truncate text-xs text-[#667085] dark:text-muted-foreground">
-                        {activity.employeeNote || "No note added."}
-                      </div>
-                    </div>
-                    <div className="text-xs text-[#667085] dark:text-muted-foreground">
-                      Source: {sourceLabel(activity.source)}
-                    </div>
-                    {statusLabel ? (
-                      <StatusPill tone={activityStatusTone(activity.status)}>
-                        {statusLabel}
-                      </StatusPill>
-                    ) : (
-                      <span aria-hidden="true" />
-                    )}
-                    <div className="text-right text-sm text-[#475467] dark:text-muted-foreground">
-                      {formatDuration(activity.durationMinutes)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </ReportSection>
-
-        <ReportSection title="3. Blockers">
-          <p className="whitespace-pre-wrap text-sm leading-6 text-[#111827] dark:text-foreground">
-            {report.blockers || "No blockers recorded."}
-          </p>
-        </ReportSection>
-
-        <ReportSection title="4. Review comments">
-          {comments.length ? (
-            <div className="space-y-2">
-              {comments.map((comment) => (
-                <div
-                  key={comment.id}
-                  className="flex gap-3 rounded-[8px] bg-[#eff6ff] p-2.5 ring-1 ring-[#bfdbfe] dark:bg-blue-400/10 dark:ring-blue-300/15"
-                >
-                  <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#2563eb]" />
-                  <div>
-                    <p className="text-sm leading-6 text-[#1f3b68] dark:text-blue-100">
-                      {comment.body}
-                    </p>
-                    <p className="mt-1 text-xs text-[#667085] dark:text-muted-foreground">
-                      {formatTimestamp(comment.createdAt)} by{" "}
-                      {departmentLabel === "No department"
-                        ? "Review team"
-                        : `${departmentLabel} review`}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-[#667085] dark:text-muted-foreground">
-              No review comments yet.
-            </p>
-          )}
-        </ReportSection>
-
-        <ReportSection title="5. Revision history">
-          {report.revisions.length ? (
-            <div className="space-y-2">
-              {report.revisions.map((revision) => (
-                <div
-                  key={revision.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] bg-[#f8fafc] px-3 py-2 text-sm dark:bg-white/[0.04]"
-                >
-                  <span className="font-medium text-[#111827] dark:text-foreground">
-                    {revision.editedBy?.name ??
-                      revision.editedBy?.email ??
-                      "User"}
-                  </span>
-                  <span className="text-xs text-[#667085] dark:text-muted-foreground">
-                    {formatTimestamp(revision.createdAt)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-[#667085] dark:text-muted-foreground">
-              No revisions recorded.
-            </p>
-          )}
-        </ReportSection>
-      </div>
-    </main>
+      }
+      footer={
+        latestRevision ? (
+          <>
+            {report.revisions.length} revision
+            {report.revisions.length === 1 ? "" : "s"}. Last edited{" "}
+            {formatTimestamp(latestRevision.createdAt)} by{" "}
+            {latestRevision.editedBy?.name ??
+              latestRevision.editedBy?.email ??
+              "User"}
+            .
+          </>
+        ) : null
+      }
+    />
   );
 }
 
@@ -1187,64 +1035,5 @@ function MenuButton({
       {icon}
       {children}
     </button>
-  );
-}
-
-function Metric({
-  icon,
-  label,
-  value,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="report-pdf-metric flex min-h-[64px] items-center gap-3 border-b border-[#e8ecf3] px-5 py-3 last:border-b-0 dark:border-[#263a55] min-[900px]:border-b-0 min-[900px]:border-r min-[900px]:last:border-r-0">
-      <span className="text-[#40516c] dark:text-muted-foreground">{icon}</span>
-      <div className="min-w-0">
-        <div className="text-sm font-semibold text-[#40516c] dark:text-muted-foreground">
-          {label}
-        </div>
-        <div className="mt-1 truncate text-sm text-[#667085] dark:text-muted-foreground">
-          {value}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ReportSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="report-pdf-card mb-2.5 rounded-[10px] bg-white p-4 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
-      <h2 className="mb-2.5 text-base font-semibold text-[#111827] dark:text-foreground">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg
-      className="h-4 w-4"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-    </svg>
   );
 }

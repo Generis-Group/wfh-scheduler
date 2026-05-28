@@ -86,4 +86,5 @@ describe("SummaryRenderer", () => {
     ).toBeTruthy();
     expect(screen.queryByText("Old task title")).toBeNull();
   });
+
 });

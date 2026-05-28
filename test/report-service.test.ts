@@ -30,7 +30,7 @@ describe.runIf(process.env.TEST_DATABASE_URL)("report revisions", () => {
     await prisma.user.delete({ where: { id: user.id } });
   });
 
-  it("derives blockers from the summary and only hard-deletes manual work items", async () => {
+  it("updates report fields and only hard-deletes manual work items", async () => {
     process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
     const { prisma } = await import("@/lib/prisma");
     const { ensureDailyReport, updateReport } = await import("@/lib/services/reports");
@@ -70,7 +70,7 @@ describe.runIf(process.env.TEST_DATABASE_URL)("report revisions", () => {
     });
 
     const updated = await updateReport(report!.id, user.id, {
-      summary: "Task: completed follow-up\nBlocker: waiting on approval",
+      summary: "Task: completed follow-up",
       activityUpdates: [
         { id: imported.id, selected: false, title: "Renamed imported issue" },
       ],
@@ -80,7 +80,7 @@ describe.runIf(process.env.TEST_DATABASE_URL)("report revisions", () => {
     const importedAfter = await prisma.activityItem.findUnique({ where: { id: imported.id } });
     const manualAfter = await prisma.activityItem.findUnique({ where: { id: manual.id } });
 
-    expect(updated?.blockers).toBe("waiting on approval");
+    expect(updated?.summary).toBe("Task: completed follow-up");
     expect(importedAfter?.selected).toBe(false);
     expect(importedAfter?.title).toBe("Renamed imported issue");
     expect(manualAfter).toBeNull();

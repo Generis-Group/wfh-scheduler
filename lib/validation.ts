@@ -17,7 +17,6 @@ export const reportQuerySchema = z.object({
 
 export const updateReportSchema = z.object({
   summary: z.string().max(8000).optional(),
-  blockers: z.string().max(8000).optional(),
   workLocation: z
     .enum(["OFFICE", "WFH", "HYBRID", "PTO", "OUT_OF_OFFICE", "UNKNOWN"])
     .optional(),

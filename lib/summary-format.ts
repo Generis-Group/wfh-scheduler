@@ -1,8 +1,3 @@
-export type TextSegment = {
-  text: string;
-  blocker: boolean;
-};
-
 export type SummaryLinkMatch = {
   label: string;
   href: string;
@@ -42,39 +37,6 @@ const summaryActivitySources = new Set<SummaryActivitySource>([
   "MANUAL",
   "UNKNOWN",
 ]);
-
-export function extractBlockerLines(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.match(/^\s*blockers?:\s*(.*)$/i)?.[1])
-    .filter((line): line is string => line !== undefined && line.trim().length > 0)
-    .join("\n");
-}
-
-export function stripLegacyBlockerPrefixes(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.match(/^\s*blockers?:\s*(.*)$/i)?.[1] ?? line)
-    .join("\n");
-}
-
-export function uniqueLines(value: string) {
-  return Array.from(
-    new Set(
-      value
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-    )
-  ).join("\n");
-}
-
-export function lineItems(value?: string | null) {
-  return (value ?? "")
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
 
 export function normalizeSummaryLinkHref(value?: string | null) {
   const trimmed = value?.trim();
@@ -353,55 +315,6 @@ export function summaryPlainText(value?: string | null, emptyText = "No summary 
   return text || emptyText;
 }
 
-export function splitBlockerText(value: string, blockerItems: string[]): TextSegment[] {
-  const blockers = blockerItems
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .sort((left, right) => right.length - left.length);
-
-  if (blockers.length === 0 || value.length === 0) {
-    return [{ text: value, blocker: false }];
-  }
-
-  const lowerValue = value.toLowerCase();
-  const lowerBlockers = blockers.map((blocker) => ({ value: blocker, lower: blocker.toLowerCase() }));
-  const segments: TextSegment[] = [];
-  let index = 0;
-
-  while (index < value.length) {
-    let nextMatch: { start: number; blocker: string } | null = null;
-
-    for (const blocker of lowerBlockers) {
-      const start = lowerValue.indexOf(blocker.lower, index);
-
-      if (start === -1) {
-        continue;
-      }
-
-      if (!nextMatch || start < nextMatch.start || (start === nextMatch.start && blocker.value.length > nextMatch.blocker.length)) {
-        nextMatch = { start, blocker: blocker.value };
-      }
-    }
-
-    if (!nextMatch) {
-      segments.push({ text: value.slice(index), blocker: false });
-      break;
-    }
-
-    if (nextMatch.start > index) {
-      segments.push({ text: value.slice(index, nextMatch.start), blocker: false });
-    }
-
-    segments.push({
-      text: value.slice(nextMatch.start, nextMatch.start + nextMatch.blocker.length),
-      blocker: true
-    });
-    index = nextMatch.start + nextMatch.blocker.length;
-  }
-
-  return segments.length ? segments : [{ text: value, blocker: false }];
-}
-
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -429,7 +342,6 @@ function activityReferenceLabelFromMeta(
 
 function renderInlineSummaryHtml(
   text: string,
-  blockerItems: string[],
   activityReferences?: SummaryActivityReferenceMap,
 ): string {
   const nodes: string[] = [];
@@ -467,7 +379,6 @@ function renderInlineSummaryHtml(
         nodes.push(
           `<strong>${renderInlineSummaryHtml(
             text.slice(index + 2, close),
-            blockerItems,
             activityReferences,
           )}</strong>`,
         );
@@ -483,7 +394,6 @@ function renderInlineSummaryHtml(
         nodes.push(
           `<em>${renderInlineSummaryHtml(
             text.slice(index + 1, close),
-            blockerItems,
             activityReferences,
           )}</em>`,
         );
@@ -501,12 +411,7 @@ function renderInlineSummaryHtml(
       nextMarker = index + 1;
     }
 
-    const plainText = text.slice(index, nextMarker);
-
-    splitBlockerText(plainText, blockerItems).forEach((segment) => {
-      const escapedText = escapeHtml(segment.text);
-      nodes.push(segment.blocker ? `<mark class="summary-blocker-mark">${escapedText}</mark>` : escapedText);
-    });
+    nodes.push(escapeHtml(text.slice(index, nextMarker)));
     index = nextMarker;
   }
 
@@ -523,7 +428,6 @@ function renderMarkdownList(
   startIndex: number,
   level: number,
   ordered: boolean,
-  blockerItems: string[],
   activityReferences?: SummaryActivityReferenceMap,
 ) {
   const tagName = ordered ? "ol" : "ul";
@@ -539,7 +443,6 @@ function renderMarkdownList(
 
     html += `<li>${renderInlineSummaryHtml(
       line.content,
-      blockerItems,
       activityReferences,
     )}`;
     index += 1;
@@ -550,7 +453,6 @@ function renderMarkdownList(
         index,
         lines[index].level,
         lines[index].ordered,
-        blockerItems,
         activityReferences,
       );
       html += nested.html;
@@ -568,7 +470,6 @@ function renderMarkdownList(
 function renderMarkdownListBlock(
   lines: string[],
   startIndex: number,
-  blockerItems: string[],
   activityReferences?: SummaryActivityReferenceMap,
 ) {
   const listLines: MarkdownListLine[] = [];
@@ -598,7 +499,6 @@ function renderMarkdownListBlock(
       listIndex,
       listLines[listIndex].level,
       listLines[listIndex].ordered,
-      blockerItems,
       activityReferences,
     );
     html += rendered.html;
@@ -610,7 +510,6 @@ function renderMarkdownListBlock(
 
 export function markdownToSummaryHtml(
   value: string,
-  blockerItems: string[],
   activityReferences?: SummaryActivityReferenceMap,
 ) {
   if (!value) {
@@ -628,7 +527,6 @@ export function markdownToSummaryHtml(
       const rendered = renderMarkdownListBlock(
         lines,
         index,
-        blockerItems,
         activityReferences,
       );
       html.push(rendered.html);
@@ -641,7 +539,6 @@ export function markdownToSummaryHtml(
       html.push(
         `<h2>${renderInlineSummaryHtml(
           heading[1],
-          blockerItems,
           activityReferences,
         )}</h2>`,
       );
@@ -660,7 +557,6 @@ export function markdownToSummaryHtml(
         quoteLines.push(
           renderInlineSummaryHtml(
             nextQuote[1],
-            blockerItems,
             activityReferences,
           ),
         );
@@ -674,7 +570,6 @@ export function markdownToSummaryHtml(
       line
         ? `<p>${renderInlineSummaryHtml(
             line,
-            blockerItems,
             activityReferences,
           )}</p>`
         : "<p></p>",

@@ -16,7 +16,6 @@ import {
   Loader2,
   Lock,
   Mail,
-  TriangleAlert,
 } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 
@@ -26,9 +25,14 @@ import {
   type ReportDateControl,
 } from "@/components/reports/report-date-switcher";
 import {
+  ReportPdfDocument,
+  type ReportPdfActivity,
+  type ReportPdfComment,
+  type ReportPdfStatusTone,
+} from "@/components/reports/report-pdf";
+import {
   formatReportDuration,
   reportActivitySourceLabel,
-  ReportActivitySourceIcon,
   ReportPageHeader,
   ReportSearchField,
   ReportStatusBadge,
@@ -84,7 +88,6 @@ type DashboardReport = {
   status: "DRAFT" | "SUBMITTED";
   workLocation: string;
   summary: string;
-  blockers: string;
   submittedAt?: string | Date | null;
   updatedAt?: string | Date | null;
   activities: DashboardActivity[];
@@ -126,8 +129,6 @@ type EmployeeTableControls = {
 type Metrics = {
   users: number;
   submitted: number;
-  blockers: number;
-  blockerTrend: Array<{ date: string; count: number }>;
   sourceMix: Array<{ source: string; count: number }>;
 };
 
@@ -196,17 +197,6 @@ function editedAfterDate(report: DashboardReport | null, date: string) {
   );
 }
 
-function hasBlockers(report: DashboardReport | null) {
-  return Boolean(report?.blockers?.trim());
-}
-
-function blockerItems(report: DashboardReport | null) {
-  return (report?.blockers ?? "")
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 function includedActivities(report: DashboardReport | null) {
   return report?.activities.filter((activity) => activity.selected) ?? [];
 }
@@ -233,6 +223,22 @@ function reportStatus(row: Row, date: string) {
   }
 
   return "Submitted";
+}
+
+function reportPdfStatusTone(status: string): ReportPdfStatusTone {
+  if (status === "Missing") {
+    return "red";
+  }
+
+  if (status === "Draft") {
+    return "orange";
+  }
+
+  if (status === "Submitted") {
+    return "green";
+  }
+
+  return "neutral";
 }
 
 function userDepartmentLabel(user: DashboardUser) {
@@ -280,38 +286,12 @@ function isUnreadForReviewer(
   return Boolean(changedAt && readAt < changedAt);
 }
 
-function reportSubtitle(row: Row | null, reviewerId?: string | null) {
-  if (!row?.report) {
-    return "No report submitted";
-  }
-
-  const unread = isUnreadForReviewer(row.report, reviewerId);
-
-  if (unread && reportReadReceipt(row.report, reviewerId)) {
-    return "Unread since last edit";
-  }
-
-  if (unread) {
-    return "Unread";
-  }
-
-  return "Read";
-}
-
 function dashboardFlags(row: Row, date: string) {
   if (!row.report) {
     return [];
   }
 
   const flags: Array<{ key: string; icon: ReactNode; label: string }> = [];
-
-  if (hasBlockers(row.report)) {
-    flags.push({
-      key: "blockers",
-      icon: <TriangleAlert className="h-4 w-4" />,
-      label: "Blockers",
-    });
-  }
 
   if (row.report.activities.length > 0) {
     flags.push({
@@ -736,9 +716,6 @@ export function ReviewerDashboard({
     (row) =>
       canReviewReport(row) && isUnreadForReviewer(row.report, reviewerId),
   ).length;
-  const blockers = filteredItems.filter(
-    (row) => canReviewReport(row) && hasBlockers(row.report),
-  ).length;
   const lateEdits = filteredItems.filter(
     (row) =>
       canReviewReport(row) &&
@@ -865,7 +842,6 @@ export function ReviewerDashboard({
       lastEdited: canReviewReport(row)
         ? formatTimestamp(row.report?.updatedAt)
         : "",
-      blockers: canReviewReport(row) && hasBlockers(row.report) ? "Yes" : "No",
       activities: canReviewReport(row)
         ? includedActivities(row.report).length
         : 0,
@@ -879,7 +855,6 @@ export function ReviewerDashboard({
       "workLocation",
       "submittedAt",
       "lastEdited",
-      "blockers",
       "activities",
     ];
     const csv = [
@@ -1090,7 +1065,6 @@ export function ReviewerDashboard({
         <ReportReviewPage
           row={activeRow}
           date={date}
-          reviewerId={reviewerId}
           onBack={() => setActiveReportUserId(null)}
           onAddComment={(body) => addComment(activeRow, body)}
           onPrint={() => {
@@ -1104,7 +1078,7 @@ export function ReviewerDashboard({
         <main className="reference-page">
           <ReportPageHeader
             title="Review Dashboard"
-            description="Track report coverage, blockers, and submissions across the team."
+            description="Track report coverage and submissions across the team."
           />
 
           <ReportSurface className="mb-3">
@@ -1164,36 +1138,37 @@ export function ReviewerDashboard({
 
               <div className="flex flex-wrap items-center gap-2">
                 <CompactMetric label="Unread" value={unread} tone="blue" />
-                <CompactMetric label="Blockers" value={blockers} tone="red" />
                 <CompactMetric label="Late" value={lateEdits} tone="purple" />
               </div>
             </div>
           </ReportSurface>
 
           <ReportSurface padded={false}>
-            <div className="flex flex-wrap items-center justify-between gap-3 p-3">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="grid gap-3 p-3 min-[1180px]:grid-cols-[minmax(360px,0.9fr)_minmax(0,1fr)] min-[1180px]:items-center">
+              <div className="flex min-w-0 items-center gap-3">
                 <h2 className="text-lg font-semibold text-[#101828] dark:text-foreground">
                   Employee Reports
                 </h2>
-                {selectedRows.length > 0 ? (
-                  <div className="flex items-center gap-2 rounded-[9px] bg-[#f4f8ff] px-2 py-1.5 ring-1 ring-[#dbe7f5] dark:bg-blue-400/10 dark:ring-blue-300/15">
-                    <span className="px-1 text-xs font-semibold text-[#475467] dark:text-muted-foreground">
-                      {selectedRows.length} selected
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 rounded-[7px] bg-white px-3 text-xs dark:bg-[#0b1523]"
-                      onClick={markSelectedUnread}
-                    >
-                      Mark as unread
-                    </Button>
-                  </div>
-                ) : null}
+                <div className="min-h-9 min-w-0 flex-1">
+                  {selectedRows.length > 0 ? (
+                    <div className="inline-flex h-9 max-w-full items-center gap-2 rounded-[9px] bg-[#f4f8ff] px-2 py-1.5 ring-1 ring-[#dbe7f5] dark:bg-blue-400/10 dark:ring-blue-300/15">
+                      <span className="shrink-0 px-1 text-xs font-semibold text-[#475467] dark:text-muted-foreground">
+                        {selectedRows.length} selected
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 shrink-0 rounded-[7px] bg-white px-3 text-xs dark:bg-[#0b1523]"
+                        onClick={markSelectedUnread}
+                      >
+                        Mark as unread
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
-              <div className="flex w-full flex-wrap items-center gap-2 min-[760px]:w-auto">
+              <div className="flex w-full flex-wrap items-center gap-2 min-[760px]:w-auto min-[1180px]:justify-end">
                 <ReportSearchField
                   value={search}
                   onValueChange={(value) => {
@@ -1208,7 +1183,7 @@ export function ReviewerDashboard({
                 <Select
                   value={departmentFilter}
                   onChange={(event) => setDepartmentFilter(event.target.value)}
-                  className="h-9 w-full rounded-[7px] bg-white text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] min-[560px]:w-[180px] dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55]"
+                  className="h-10 w-full min-[560px]:w-[240px]"
                   aria-label="Filter by department"
                 >
                   <option value="ALL">All departments</option>
@@ -1432,8 +1407,6 @@ export function ReviewerDashboard({
                                     title={flag.label}
                                     className={cn(
                                       "inline-flex h-6 w-6 items-center justify-center rounded-full border bg-white [&_svg]:h-3.5 [&_svg]:w-3.5 dark:bg-[#0b1523]",
-                                      flag.key === "blockers" &&
-                                        "border-red-200 text-[#ef4444] dark:border-red-300/25",
                                       flag.key === "activities" &&
                                         "border-blue-200 text-[#2563eb] dark:border-blue-300/25",
                                       flag.key === "edited" &&
@@ -1510,7 +1483,7 @@ export function ReviewerDashboard({
                     setPageSize(Number(event.target.value));
                     setPage(1);
                   }}
-                  className="h-10 w-20 rounded-[7px] bg-white dark:bg-[#0b1523]"
+                  className="h-10 w-28"
                 >
                   <option value="10">10</option>
                   <option value="25">25</option>
@@ -1645,14 +1618,12 @@ function Avatar({ name }: { name?: string | null }) {
 function ReportReviewPage({
   row,
   date,
-  reviewerId,
   onBack,
   onAddComment,
   onPrint,
 }: {
   row: Row;
   date: string;
-  reviewerId?: string | null;
   onBack: () => void;
   onAddComment: (body: string) => Promise<boolean>;
   onPrint: () => void;
@@ -1673,22 +1644,28 @@ function ReportReviewPage({
       ),
     [report?.activities],
   );
-  const blockers = blockerItems(report);
-  const unread = isUnreadForReviewer(report, reviewerId);
   const comments = visibleReviewComments(report);
-  const commentPageSize = 3;
   const [commentBody, setCommentBody] = useState("");
-  const [commentPage, setCommentPage] = useState(1);
   const [isAddingComment, setIsAddingComment] = useState(false);
-  const commentPageCount = Math.max(
-    1,
-    Math.ceil(comments.length / commentPageSize),
-  );
-  const currentCommentPage = Math.min(commentPage, commentPageCount);
-  const pagedComments = comments.slice(
-    (currentCommentPage - 1) * commentPageSize,
-    currentCommentPage * commentPageSize,
-  );
+  const currentStatus = reportStatus(row, date);
+  const pdfActivities: ReportPdfActivity[] = activities.map((activity) => ({
+    id: activity.id,
+    title: activity.title,
+    source: activity.source,
+    sourceLabel: reportActivitySourceLabel(activity.source),
+    duration: formatReportDuration(activity.durationMinutes),
+    note: activity.employeeNote,
+    status: activity.status,
+  }));
+  const pdfComments: ReportPdfComment[] = comments.map((comment) => ({
+    id: comment.id,
+    body: comment.body,
+    meta: `${formatTimestamp(comment.createdAt)} by ${
+      comment.author.name ?? comment.author.email ?? "Review team"
+    }`,
+  }));
+  const revisions = report?.revisions ?? [];
+  const latestRevision = revisions[0];
 
   async function handleCommentSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1707,227 +1684,59 @@ function ReportReviewPage({
   }
 
   return (
-    <main className="reference-page report-pdf-page report-pdf-document mx-auto max-w-[1120px]">
-      <button
-        className="report-pdf-back mb-5 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
-        onClick={onBack}
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to review dashboard
-      </button>
-
-      <div className="report-pdf-header mb-5 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="report-pdf-print-only text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">
-            Generis Employee Report
-          </p>
-          <h1 className="text-[30px] font-semibold leading-tight tracking-normal text-[#101828] dark:text-foreground">
-            {row.user.name ?? row.user.email ?? "Employee"} -{" "}
-            {formatShortDate(report?.reportDate ?? date)} Report
-          </h1>
-          <div className="mt-4 flex flex-wrap items-center gap-5 text-sm text-[#101828] dark:text-foreground">
-            <span className="inline-flex items-center gap-3">
-              <span
-                className={cn(
-                  "h-3.5 w-3.5 rounded-full",
-                  unread ? "bg-[#2563eb]" : "bg-[#cbd5e1] dark:bg-[#475569]",
-                )}
-              />
-              {reportSubtitle(row, reviewerId)}
-            </span>
-            <ReportStatusBadge
-              status={report ? reportStatus(row, date) : "Missing"}
-              className="px-4 py-1.5 text-sm font-semibold"
-            />
-          </div>
+    <ReportPdfDocument
+      eyebrow="Generis Daily Report"
+      title="Daily Report"
+      subtitle={
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span>{employeeLabel(row)}</span>
+          <span aria-hidden="true">-</span>
+          <span>{formatShortDate(report?.reportDate ?? date)}</span>
         </div>
-        <div className="report-pdf-actions flex gap-3">
-          <Button
-            className="h-12 rounded-[8px] bg-[#2563eb] px-6 text-white hover:bg-[#1d4ed8]"
-            onClick={onPrint}
-            disabled={!report}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Download PDF
-          </Button>
-        </div>
-      </div>
-
-      <section className="report-pdf-card mb-4 grid gap-0 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55] md:grid-cols-4 md:divide-x md:divide-[#d8dee8] md:dark:divide-[#263a55]">
-        <ReportMetric
-          label="Submitted"
-          value={formatTimestamp(report?.submittedAt)}
+      }
+      status={{
+        label: currentStatus,
+        tone: reportPdfStatusTone(currentStatus),
+      }}
+      meta={[
+        { label: "Department", value: userDepartmentLabel(row.user) },
+        {
+          label: "Location",
+          value: report ? titleCase(report.workLocation) : "-",
+        },
+        { label: "Submitted", value: formatTimestamp(report?.submittedAt) },
+        { label: "Last updated", value: formatTimestamp(report?.updatedAt) },
+      ]}
+      summary={
+        <SummaryRenderer
+          value={report?.summary ?? ""}
+          activityReferences={activityReferences}
+          emptyText="No summary recorded."
         />
-        <ReportMetric
-          label="Last edited"
-          value={formatTimestamp(report?.updatedAt)}
-        />
-        <ReportMetric
-          label="Department"
-          value={userDepartmentLabel(row.user)}
-        />
-        <ReportMetric
-          label="Location"
-          value={report ? titleCase(report.workLocation) : "-"}
-        />
-      </section>
-
-      <section className="report-pdf-card mb-4 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-        <h2 className="mb-3 text-xl font-semibold text-[#101828] dark:text-foreground">
-          Summary
-        </h2>
-        <div className="report-pdf-scroll max-h-[190px] overflow-y-auto rounded-[8px] border border-[#d8dee8] bg-white px-4 py-4 text-sm leading-6 text-[#101828] dark:border-[#263a55] dark:bg-[#0b1523] dark:text-foreground">
-          <SummaryRenderer
-            value={report?.summary}
-            blockers={report?.blockers}
-            activityReferences={activityReferences}
-            emptyText="No summary recorded."
-          />
-        </div>
-      </section>
-
-      <div className="mb-4 grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
-        <section className="report-pdf-card rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-          <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">
-            Included activities ({activities.length})
-          </h2>
-          <div className="report-pdf-scroll mt-2 max-h-[250px] overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#e5eaf2] text-left text-xs font-semibold text-[#64748b] dark:border-[#263a55] dark:text-muted-foreground">
-                  <th className="py-2 pr-4">Activity</th>
-                  <th className="w-36 py-2 pr-4">Source</th>
-                  <th className="w-28 py-2">Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activities.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="py-6">
-                      <EmptyReferenceState>
-                        No activities included.
-                      </EmptyReferenceState>
-                    </td>
-                  </tr>
-                ) : (
-                  activities.map((activity) => (
-                    <tr
-                      key={activity.id}
-                      className="border-b border-[#e5eaf2] last:border-b-0 dark:border-[#263a55]"
-                    >
-                      <td className="py-2 pr-4">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <ReportActivitySourceIcon source={activity.source} />
-                          <span className="truncate font-medium text-[#101828] dark:text-foreground">
-                            {activity.title || "Untitled activity"}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-2 pr-4 text-[#344054] dark:text-muted-foreground">
-                        {reportActivitySourceLabel(activity.source)}
-                      </td>
-                      <td className="py-2 text-[#101828] dark:text-foreground">
-                        {formatReportDuration(activity.durationMinutes)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="report-pdf-card rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-          <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">
-            Blockers ({blockers.length})
-          </h2>
-          <div className="report-pdf-scroll mt-4 max-h-[250px] overflow-y-auto">
-            {blockers.length === 0 ? (
-              <EmptyReferenceState>No blockers recorded.</EmptyReferenceState>
-            ) : (
-              <div className="divide-y divide-[#e5eaf2] dark:divide-[#263a55]">
-                {blockers.map((blocker, index) => (
-                  <div
-                    key={`${blocker}-${index}`}
-                    className="flex gap-4 py-4 first:pt-0"
-                  >
-                    <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-[#ef4444]" />
-                    <div>
-                      <div className="font-medium text-[#101828] dark:text-foreground">
-                        {blocker}
-                      </div>
-                      <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
-                        Reported by the employee in their daily summary.
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      <section className="report-pdf-card mb-4 rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">
-            Review comments
-          </h2>
-          <span className="text-sm font-medium text-[#667085] dark:text-muted-foreground">
-            {comments.length} comment{comments.length === 1 ? "" : "s"}
-          </span>
-        </div>
-
-        <div className="report-pdf-screen-only mt-4 space-y-3">
-          {comments.length ? (
-            <ReviewCommentCards comments={pagedComments} />
-          ) : (
-            <EmptyReferenceState>No review comments yet.</EmptyReferenceState>
-          )}
-        </div>
-        <div className="report-pdf-print-only mt-4 space-y-3">
-          {comments.length ? (
-            <ReviewCommentCards comments={comments} />
-          ) : (
-            <EmptyReferenceState>No review comments yet.</EmptyReferenceState>
-          )}
-        </div>
-
-        {comments.length > commentPageSize ? (
-          <div className="report-pdf-hide mt-4 flex items-center justify-between border-t border-[#e5eaf2] pt-3 text-sm text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">
-            <span>
-              Page {currentCommentPage} of {commentPageCount}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setCommentPage(Math.max(1, currentCommentPage - 1))
-                }
-                disabled={currentCommentPage === 1}
-              >
-                Previous
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setCommentPage(
-                    Math.min(commentPageCount, currentCommentPage + 1),
-                  )
-                }
-                disabled={currentCommentPage === commentPageCount}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        <form className="report-pdf-hide mt-4" onSubmit={handleCommentSubmit}>
+      }
+      activities={pdfActivities}
+      comments={pdfComments}
+      backControl={
+        <button
+          className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+          onClick={onBack}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to review dashboard
+        </button>
+      }
+      actions={
+        <Button
+          className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold text-white hover:bg-[#1d4ed8]"
+          onClick={onPrint}
+          disabled={!report}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Download PDF
+        </Button>
+      }
+      screenExtras={
+        <form onSubmit={handleCommentSubmit}>
           <Textarea
             value={commentBody}
             onChange={(event) => setCommentBody(event.target.value)}
@@ -1944,72 +1753,19 @@ function ReportReviewPage({
             </Button>
           </div>
         </form>
-      </section>
-
-      <section className="report-pdf-card rounded-[12px] bg-white p-6 shadow-[0_8px_28px_rgba(15,23,42,0.07)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]">
-        <h2 className="text-xl font-semibold text-[#101828] dark:text-foreground">
-          Revision history
-        </h2>
-        {report?.revisions.length ? (
-          <div className="mt-3 divide-y divide-[#e5eaf2] dark:divide-[#263a55]">
-            {report.revisions.map((revision) => (
-              <div
-                key={revision.id}
-                className="flex items-center justify-between gap-4 py-3 text-sm"
-              >
-                <div className="flex items-center gap-3">
-                  <Edit3 className="h-4 w-4 text-[#8b5cf6]" />
-                  <span className="font-medium text-[#101828] dark:text-foreground">
-                    Edited after report date
-                  </span>
-                </div>
-                <span className="text-[#667085] dark:text-muted-foreground">
-                  {formatTimestamp(revision.createdAt)} by{" "}
-                  {revision.editedBy.name ?? revision.editedBy.email ?? "User"}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-[#475467] dark:text-muted-foreground">
-            No revisions recorded yet.
-          </p>
-        )}
-      </section>
-    </main>
-  );
-}
-
-function ReviewCommentCards({ comments }: { comments: DashboardComment[] }) {
-  return (
-    <>
-      {comments.map((comment) => (
-        <div
-          key={comment.id}
-          className="rounded-[10px] bg-[#f6f9fd] px-4 py-3 ring-1 ring-[#e5eaf2] dark:bg-[#0b1523] dark:ring-[#263a55]"
-        >
-          <p className="whitespace-pre-wrap text-sm leading-6 text-[#101828] dark:text-foreground">
-            {comment.body}
-          </p>
-          <p className="mt-2 text-xs font-medium text-[#667085] dark:text-muted-foreground">
-            {formatTimestamp(comment.createdAt)} by{" "}
-            {comment.author.name ?? comment.author.email ?? "Review team"}
-          </p>
-        </div>
-      ))}
-    </>
-  );
-}
-
-function ReportMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="report-pdf-metric px-2 py-3 md:px-6 md:first:pl-0">
-      <div className="text-sm font-semibold text-[#475467] dark:text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-3 text-base font-medium text-[#101828] dark:text-foreground">
-        {value}
-      </div>
-    </div>
+      }
+      footer={
+        latestRevision ? (
+          <>
+            {revisions.length} revision{revisions.length === 1 ? "" : "s"}.
+            Last edited {formatTimestamp(latestRevision.createdAt)} by{" "}
+            {latestRevision.editedBy.name ??
+              latestRevision.editedBy.email ??
+              "User"}
+            .
+          </>
+        ) : null
+      }
+    />
   );
 }

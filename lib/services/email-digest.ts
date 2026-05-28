@@ -19,7 +19,6 @@ type DigestReport = {
   reportDate?: string | Date;
   status: "DRAFT" | "SUBMITTED";
   workLocation: string;
-  blockers: string;
   submittedAt?: string | Date | null;
   updatedAt?: string | Date | null;
   activities: Array<{ selected: boolean; source?: string | null }>;
@@ -59,10 +58,6 @@ function toDate(value?: string | Date | null) {
 
 function displayName(row: DigestRow) {
   return row.user.name ?? row.user.email ?? "Unassigned employee";
-}
-
-function hasBlockers(report: DigestReport | null) {
-  return Boolean(report?.blockers?.trim());
 }
 
 export function isReportLate(report: DigestReport | null, date: string) {
@@ -123,7 +118,6 @@ export function buildReviewDigest({
   const submittedRows = filteredRows.filter((row) => row.report?.status === "SUBMITTED");
   const draftRows = filteredRows.filter((row) => row.report?.status === "DRAFT");
   const missingRows = filteredRows.filter((row) => !row.report);
-  const blockerRows = filteredRows.filter((row) => hasBlockers(row.report));
   const lateRows = filteredRows.filter((row) => isReportLate(row.report, date));
   const editedRows = filteredRows.filter((row) => isReportEditedAfterDate(row.report, date));
   const expectedCount = filteredRows.length;
@@ -140,12 +134,10 @@ export function buildReviewDigest({
     `Coverage: ${submittedRows.length}/${expectedCount} submitted (${coverage}%)`,
     `Drafts: ${draftRows.length}`,
     `Missing: ${missingRows.length}`,
-    `With blockers: ${blockerRows.length}`,
     `Late: ${lateRows.length}`,
     `Edited after date: ${editedRows.length}`,
     "",
     missingRows.length ? `Missing reports: ${missingRows.map(displayName).join(", ")}` : "Missing reports: none",
-    blockerRows.length ? `Reports with blockers: ${blockerRows.map(displayName).join(", ")}` : "Reports with blockers: none",
     lateRows.length || editedRows.length
       ? `Late/edited reports: ${[...new Set([...lateRows, ...editedRows].map(displayName))].join(", ")}`
       : "Late/edited reports: none",
@@ -163,12 +155,10 @@ export function buildReviewDigest({
         ${metricRow("Coverage", `${submittedRows.length}/${expectedCount} submitted (${coverage}%)`)}
         ${metricRow("Drafts", draftRows.length.toString())}
         ${metricRow("Missing", missingRows.length.toString())}
-        ${metricRow("With blockers", blockerRows.length.toString())}
         ${metricRow("Late", lateRows.length.toString())}
         ${metricRow("Edited after date", editedRows.length.toString())}
       </table>
       ${personList("Missing reports", missingRows)}
-      ${personList("Reports with blockers", blockerRows)}
       ${personList("Late or edited reports", [...new Map([...lateRows, ...editedRows].map((row) => [row.user.id, row])).values()])}
       <p style="margin-top: 20px;">
         <a href="${escapeAttribute(reviewUrl)}" style="display: inline-block; background: #2563eb; color: #ffffff; padding: 10px 14px; border-radius: 6px; text-decoration: none; font-weight: 600;">Open review dashboard</a>
@@ -185,7 +175,6 @@ export function buildReviewDigest({
       submitted: submittedRows.length,
       drafts: draftRows.length,
       missing: missingRows.length,
-      blockers: blockerRows.length,
       late: lateRows.length,
       edited: editedRows.length
     },

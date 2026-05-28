@@ -65,7 +65,7 @@ vi.mock("@/components/theme-toggle", async () => {
 
 vi.mock("@/components/reports/summary-editor", async () => {
   const ReactModule = await vi.importActual<typeof import("react")>("react");
-  type Snapshot = { summary: string; blockers: string };
+  type Snapshot = { summary: string };
 
   return {
     summaryActivityReferenceDragType:
@@ -73,12 +73,10 @@ vi.mock("@/components/reports/summary-editor", async () => {
     SummaryEditor: ReactModule.forwardRef(function MockSummaryEditor(
       {
         initialSummary,
-        initialBlockers,
         resetKey,
         onChange,
       }: {
         initialSummary: string;
-        initialBlockers: string;
         resetKey: string;
         onChange: (snapshot: Snapshot) => void;
       },
@@ -86,7 +84,6 @@ vi.mock("@/components/reports/summary-editor", async () => {
     ) {
       const [snapshot, setSnapshot] = ReactModule.useState<Snapshot>({
         summary: initialSummary,
-        blockers: initialBlockers,
       });
       const snapshotRef = ReactModule.useRef(snapshot);
       const onChangeRef = ReactModule.useRef(onChange);
@@ -96,11 +93,11 @@ vi.mock("@/components/reports/summary-editor", async () => {
       }, [onChange]);
 
       ReactModule.useEffect(() => {
-        const next = { summary: initialSummary, blockers: initialBlockers };
+        const next = { summary: initialSummary };
         snapshotRef.current = next;
         setSnapshot(next);
         onChangeRef.current(next);
-      }, [initialSummary, initialBlockers, resetKey]);
+      }, [initialSummary, resetKey]);
 
       ReactModule.useImperativeHandle(ref, () => ({
         getSnapshot: () => snapshotRef.current,
@@ -135,7 +132,6 @@ const emptyReport: DailyReportProps["initialReport"] = {
   reportDate: "2026-05-20",
   workLocation: "UNKNOWN" as const,
   summary: "",
-  blockers: "",
   status: "DRAFT" as const,
   submittedAt: null,
   updatedAt: null,

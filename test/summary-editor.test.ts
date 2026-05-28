@@ -67,30 +67,6 @@ function setCursorAfterText(editor: Editor, value: string) {
   editor.commands.setTextSelection(position);
 }
 
-function setSelectionForText(editor: Editor, value: string) {
-  let position: number | null = null;
-
-  editor.state.doc.descendants((node, pos) => {
-    const index = node.text?.indexOf(value) ?? -1;
-
-    if (index === -1) {
-      return true;
-    }
-
-    position = pos + index;
-    return false;
-  });
-
-  if (position === null) {
-    throw new Error(`Unable to find text: ${value}`);
-  }
-
-  editor.commands.setTextSelection({
-    from: position,
-    to: position + value.length,
-  });
-}
-
 function pressEditorKey(
   editor: Editor,
   key: string,
@@ -114,7 +90,6 @@ function renderSummaryEditor() {
   return render(
     React.createElement(SummaryEditor, {
       initialSummary: "",
-      initialBlockers: "",
       resetKey: "test",
       onChange: vi.fn(),
     }),
@@ -131,7 +106,6 @@ function renderSummaryEditorWithSummary(
     ...render(
       React.createElement(SummaryEditor, {
         initialSummary,
-        initialBlockers: "",
         resetKey: "test",
         activityReferences,
         onChange,
@@ -164,9 +138,7 @@ describe("SummaryEditor", () => {
     expect(screen.getByRole("button", { name: "Italic" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Bulleted list" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Numbered list" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Mark blocker" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Quote" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Blocker highlight" })).toBeNull();
   });
 
   test("updates toolbar state after toolbar commands", async () => {
@@ -178,14 +150,12 @@ describe("SummaryEditor", () => {
     const heading = screen.getByRole("button", { name: "Heading" });
     const bullet = screen.getByRole("button", { name: "Bulleted list" });
     const numbered = screen.getByRole("button", { name: "Numbered list" });
-    const blocker = screen.getByRole("button", { name: "Mark blocker" });
 
     expect(bold.getAttribute("aria-pressed")).toBe("false");
     expect(italic.getAttribute("aria-pressed")).toBe("false");
     expect(heading.getAttribute("aria-pressed")).toBe("false");
     expect(bullet.getAttribute("aria-pressed")).toBe("false");
     expect(numbered.getAttribute("aria-pressed")).toBe("false");
-    expect(blocker.getAttribute("aria-pressed")).toBe("false");
 
     fireEvent.click(bold);
 
@@ -219,11 +189,6 @@ describe("SummaryEditor", () => {
       expect(numbered.getAttribute("aria-pressed")).toBe("true");
     });
 
-    fireEvent.click(blocker);
-
-    await waitFor(() => {
-      expect(blocker.getAttribute("aria-pressed")).toBe("true");
-    });
   });
 
   test("serializes links as markdown", () => {
@@ -426,61 +391,4 @@ describe("SummaryEditor", () => {
     });
   });
 
-  test("derives blockers from explicit blocker lines", () => {
-    const editor = createEditor("<p>Blocker: waiting on approval</p>");
-
-    expect(readEditorSnapshot(editor)).toEqual({
-      summary: "Blocker: waiting on approval",
-      blockers: "waiting on approval",
-    });
-  });
-
-  test("derives blockers from marked text", () => {
-    const editor = createEditor(
-      '<p>Waiting on <mark class="summary-blocker-mark">approval</mark></p>',
-    );
-
-    expect(readEditorSnapshot(editor)).toEqual({
-      summary: "Waiting on approval",
-      blockers: "approval",
-    });
-  });
-
-  test("derives blockers from legacy marked text", () => {
-    const editor = createEditor(
-      '<p>Waiting on <mark class="summary-blocker-highlight">approval</mark></p>',
-    );
-
-    expect(readEditorSnapshot(editor)).toEqual({
-      summary: "Waiting on approval",
-      blockers: "approval",
-    });
-  });
-
-  test("blocker can be selected as a tool for new text", () => {
-    const editor = createEditor("<p></p>");
-
-    runSummaryEditorCommand(editor, "blocker");
-    expect(getSummaryToolbarState(editor)).toMatchObject({ blocker: true });
-
-    editor.commands.insertContent("waiting on design");
-
-    expect(readEditorSnapshot(editor)).toEqual({
-      summary: "waiting on design",
-      blockers: "waiting on design",
-    });
-  });
-
-  test("blocker applies to selected text", () => {
-    const editor = createEditor("<p>Waiting on approval</p>");
-
-    setSelectionForText(editor, "approval");
-    runSummaryEditorCommand(editor, "blocker");
-
-    expect(getSummaryToolbarState(editor)).toMatchObject({ blocker: true });
-    expect(readEditorSnapshot(editor)).toEqual({
-      summary: "Waiting on approval",
-      blockers: "approval",
-    });
-  });
 });

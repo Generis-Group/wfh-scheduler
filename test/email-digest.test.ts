@@ -64,7 +64,6 @@ describe("review email digest", () => {
       reportDate: "2026-05-14",
       status: "SUBMITTED" as const,
       workLocation: "WFH",
-      blockers: "",
       submittedAt: "2026-05-15T03:30:00.000Z",
       updatedAt: "2026-05-15T03:30:00.000Z",
       activities: [],
@@ -75,7 +74,7 @@ describe("review email digest", () => {
     expect(isReportEditedAfterDate(report, "2026-05-14")).toBe(true);
   });
 
-  it("builds a concise digest for submitted, draft, missing, blocker, late, and edited reports", async () => {
+  it("builds a concise digest for submitted, draft, missing, late, and edited reports", async () => {
     const { buildReviewDigest } = await import("@/lib/services/email-digest");
     const digest = buildReviewDigest({
       date: "2026-05-14",
@@ -89,7 +88,6 @@ describe("review email digest", () => {
             reportDate: "2026-05-14",
             status: "SUBMITTED",
             workLocation: "HYBRID",
-            blockers: "",
             submittedAt: "2026-05-14T18:00:00.000Z",
             updatedAt: "2026-05-14T18:00:00.000Z",
             activities: [{ selected: true, source: "JIRA" }],
@@ -103,7 +101,6 @@ describe("review email digest", () => {
             reportDate: "2026-05-14",
             status: "DRAFT",
             workLocation: "WFH",
-            blockers: "Waiting on an answer",
             submittedAt: null,
             updatedAt: "2026-05-14T19:00:00.000Z",
             activities: [],
@@ -117,7 +114,6 @@ describe("review email digest", () => {
             reportDate: "2026-05-14",
             status: "SUBMITTED",
             workLocation: "OFFICE",
-            blockers: "",
             submittedAt: "2026-05-15T04:30:00.000Z",
             updatedAt: "2026-05-15T04:30:00.000Z",
             activities: [],
@@ -136,13 +132,11 @@ describe("review email digest", () => {
       submitted: 2,
       drafts: 1,
       missing: 1,
-      blockers: 1,
       late: 1,
       edited: 1
     });
     expect(digest.text).toContain("Open review dashboard: https://reports.generisgp.com/review?date=2026-05-14");
     expect(digest.text).toContain("Missing reports: Missing Employee");
-    expect(digest.text).toContain("Reports with blockers: Draft Employee");
     expect(digest.text).toContain("Late/edited reports: Late Employee");
   });
 

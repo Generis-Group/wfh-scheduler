@@ -11,7 +11,6 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import { mergeAttributes, Node as TiptapNode } from "@tiptap/core";
-import Highlight from "@tiptap/extension-highlight";
 import LinkExtension from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -27,8 +26,6 @@ import {
 
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  extractBlockerLines,
-  lineItems,
   markdownToSummaryHtml,
   normalizeSummaryActivitySource,
   normalizeSummaryLinkHref,
@@ -37,7 +34,6 @@ import {
   summaryActivityReferenceSource,
   type SummaryActivityReferenceMap,
   type SummaryActivitySource,
-  uniqueLines,
 } from "@/lib/summary-format";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +49,6 @@ export type SummaryActivityReferenceDragPayload = {
 
 export type SummarySnapshot = {
   summary: string;
-  blockers: string;
 };
 
 export type SummaryEditorHandle = {
@@ -63,7 +58,6 @@ export type SummaryEditorHandle = {
 
 type SummaryEditorProps = {
   initialSummary: string;
-  initialBlockers: string;
   resetKey: string;
   activityReferences?: SummaryActivityReferenceMap;
   onChange: (snapshot: SummarySnapshot) => void;
@@ -78,7 +72,6 @@ type SummaryToolbarState = {
   italic: boolean;
   bullet: boolean;
   numbered: boolean;
-  blocker: boolean;
 };
 
 type ActivityReferenceInsertionTarget = {
@@ -97,8 +90,7 @@ export type SummaryEditorCommand =
   | "bold"
   | "italic"
   | "bulletList"
-  | "orderedList"
-  | "blocker";
+  | "orderedList";
 
 const inactiveToolbarState: SummaryToolbarState = {
   heading: false,
@@ -106,10 +98,9 @@ const inactiveToolbarState: SummaryToolbarState = {
   italic: false,
   bullet: false,
   numbered: false,
-  blocker: false,
 };
 
-const preservedInlineMarkTypes = ["bold", "italic", "highlight"] as const;
+const preservedInlineMarkTypes = ["bold", "italic"] as const;
 
 function activityReferenceLabel(value?: string | null) {
   return (
@@ -295,39 +286,15 @@ function editorToMarkdown(editor: Editor) {
     .trimEnd();
 }
 
-function blockerMarksFromEditor(editor: Editor) {
-  return Array.from(
-    editor.view.dom.querySelectorAll<HTMLElement>(
-      "mark.summary-blocker-mark, mark.summary-blocker-highlight",
-    ),
-  )
-    .map((mark) => mark.textContent?.trim() ?? "")
-    .filter(Boolean)
-    .join("\n");
-}
-
 export function readEditorSnapshot(editor: Editor): SummarySnapshot {
-  const summary = editorToMarkdown(editor);
-
-  return {
-    summary,
-    blockers: uniqueLines(
-      [extractBlockerLines(summary), blockerMarksFromEditor(editor)]
-        .filter(Boolean)
-        .join("\n"),
-    ),
-  };
+  return { summary: editorToMarkdown(editor) };
 }
 
 function summaryHtml(
   snapshot: SummarySnapshot,
   activityReferences?: SummaryActivityReferenceMap,
 ) {
-  return markdownToSummaryHtml(
-    snapshot.summary,
-    lineItems(snapshot.blockers),
-    activityReferences,
-  );
+  return markdownToSummaryHtml(snapshot.summary, activityReferences);
 }
 
 function summaryToolbarStatesEqual(
@@ -339,8 +306,7 @@ function summaryToolbarStatesEqual(
     first.bold === second.bold &&
     first.italic === second.italic &&
     first.bullet === second.bullet &&
-    first.numbered === second.numbered &&
-    first.blocker === second.blocker
+    first.numbered === second.numbered
   );
 }
 
@@ -505,7 +471,6 @@ export function getSummaryToolbarState(editor: Editor): SummaryToolbarState {
     italic: markIsActiveAtCursor(editor, "italic"),
     bullet: editor.isActive("bulletList"),
     numbered: editor.isActive("orderedList"),
-    blocker: markIsActiveAtCursor(editor, "highlight"),
   };
 }
 
@@ -570,8 +535,6 @@ export function runSummaryEditorCommand(
       return editor.chain().focus().toggleBold().run();
     case "italic":
       return editor.chain().focus().toggleItalic().run();
-    case "blocker":
-      return editor.chain().focus().toggleHighlight().run();
     default:
       return false;
   }
@@ -676,11 +639,6 @@ export const summaryEditorExtensions = [
       target: "_blank",
     },
   }),
-  Highlight.configure({
-    HTMLAttributes: {
-      class: "summary-blocker-mark",
-    },
-  }),
   Placeholder.configure({
     placeholder: "What did you work on today?",
   }),
@@ -758,7 +716,6 @@ const SummaryEditorComponent = forwardRef<
 >(function SummaryEditor(
   {
     initialSummary,
-    initialBlockers,
     resetKey,
     activityReferences,
     onChange,
@@ -771,7 +728,6 @@ const SummaryEditorComponent = forwardRef<
   const activityReferencesRef = useRef(activityReferences);
   const fallbackSnapshotRef = useRef<SummarySnapshot>({
     summary: initialSummary,
-    blockers: initialBlockers,
   });
   const [toolbarState, setToolbarState] =
     useState<SummaryToolbarState>(inactiveToolbarState);
@@ -806,7 +762,6 @@ const SummaryEditorComponent = forwardRef<
     extensions: summaryEditorExtensions,
     content: summaryHtml({
       summary: initialSummary,
-      blockers: initialBlockers,
     }, activityReferences),
     immediatelyRender: false,
     editorProps: {
@@ -890,7 +845,6 @@ const SummaryEditorComponent = forwardRef<
   useEffect(() => {
     fallbackSnapshotRef.current = {
       summary: initialSummary,
-      blockers: initialBlockers,
     };
 
     if (!editor) {
@@ -899,9 +853,8 @@ const SummaryEditorComponent = forwardRef<
 
     setEditorSnapshot(editor, {
       summary: initialSummary,
-      blockers: initialBlockers,
     });
-  }, [editor, initialSummary, initialBlockers, resetKey, setEditorSnapshot]);
+  }, [editor, initialSummary, resetKey, setEditorSnapshot]);
 
   useEffect(() => {
     if (!editor) {
@@ -985,19 +938,6 @@ const SummaryEditorComponent = forwardRef<
           onClick={() => runCommand("orderedList")}
         >
           <ListOrdered className="h-4 w-4" />
-        </SummaryToolbarButton>
-        <SummaryToolbarButton
-          active={toolbarState.blocker}
-          disabled={!editor}
-          label="Mark blocker"
-          title="Mark selected text as a blocker"
-          className="text-[#d92d20] hover:bg-[#fff1f0] hover:text-[#912018] dark:text-red-300 dark:hover:bg-red-400/10 dark:hover:text-red-100"
-          activeClassName="bg-[#fff1f0] text-[#b42318] ring-1 ring-[#fda29b] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/25"
-          onClick={() => runCommand("blocker")}
-        >
-          <span aria-hidden="true" className="text-[17px] font-bold leading-none">
-            !
-          </span>
         </SummaryToolbarButton>
       </div>
       {editor ? (
