@@ -3,10 +3,12 @@ import { revalidateTag, unstable_cache } from "next/cache";
 
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
+import { hasUserRole } from "@/lib/roles";
 
 export type ReviewScope = {
   userId: string;
-  role: UserRole;
+  role?: UserRole;
+  roles?: UserRole[];
 };
 
 export const departmentMembershipInclude = {
@@ -26,6 +28,7 @@ export const departmentMembershipSelect = {
   departments: {
     select: {
       departmentId: true,
+      role: true,
       department: {
         select: {
           id: true,
@@ -52,19 +55,24 @@ function slugifyDepartmentName(name: string) {
 
 export function departmentNames(
   user?: {
-    departments?: Array<{ department?: { name: string } | null }>;
-  } | null
+    departments?: Array<{ role?: UserRole | null; department?: { name: string } | null }>;
+  } | null,
+  role?: UserRole
 ) {
-  return user?.departments?.map((membership) => membership.department?.name).filter((name): name is string => Boolean(name)) ?? [];
+  return user?.departments
+    ?.filter((membership) => !role || membership.role === role)
+    .map((membership) => membership.department?.name)
+    .filter((name): name is string => Boolean(name)) ?? [];
 }
 
 export function departmentLabel(
   user?: {
-    departments?: Array<{ department?: { name: string } | null }>;
+    departments?: Array<{ role?: UserRole | null; department?: { name: string } | null }>;
   } | null,
-  fallback = "No department"
+  fallback = "No department",
+  role?: UserRole
 ) {
-  const names = departmentNames(user);
+  const names = departmentNames(user, role);
 
   if (names.length === 0) {
     return fallback;
@@ -125,15 +133,15 @@ export async function createDepartment(name: string) {
 
 export async function getReviewableEmployeeWhere(scope?: ReviewScope): Promise<Prisma.UserWhereInput> {
   const base: Prisma.UserWhereInput = {
-    role: "EMPLOYEE",
+    roles: { has: "EMPLOYEE" },
     status: { not: "DISABLED" }
   };
 
-  if (!scope || scope.role === "ADMIN") {
+  if (!scope || hasUserRole(scope, "ADMIN")) {
     return base;
   }
 
-  if (scope.role !== "REVIEWER") {
+  if (!hasUserRole(scope, "REVIEWER")) {
     return {
       ...base,
       id: scope.userId
@@ -145,6 +153,7 @@ export async function getReviewableEmployeeWhere(scope?: ReviewScope): Promise<P
     select: {
       reviewerAllDepartments: true,
       departments: {
+        where: { role: "REVIEWER" },
         select: {
           departmentId: true
         }
@@ -169,6 +178,7 @@ export async function getReviewableEmployeeWhere(scope?: ReviewScope): Promise<P
     ...base,
     departments: {
       some: {
+        role: "EMPLOYEE",
         departmentId: { in: departmentIds }
       }
     }
@@ -176,11 +186,11 @@ export async function getReviewableEmployeeWhere(scope?: ReviewScope): Promise<P
 }
 
 export async function canReviewEmployee(scope: ReviewScope, employeeId: string) {
-  if (scope.role === "ADMIN") {
+  if (hasUserRole(scope, "ADMIN")) {
     return true;
   }
 
-  if (scope.role !== "REVIEWER") {
+  if (!hasUserRole(scope, "REVIEWER")) {
     return scope.userId === employeeId;
   }
 

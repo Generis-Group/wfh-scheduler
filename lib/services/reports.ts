@@ -33,6 +33,7 @@ const userIdentitySelect = {
 const reportUserSelect = {
   ...userIdentitySelect,
   role: true,
+  roles: true,
   status: true,
   ...departmentMembershipSelect
 };
@@ -40,6 +41,7 @@ const reportUserSelect = {
 const dashboardUserSelect = {
   ...userIdentitySelect,
   role: true,
+  roles: true,
   status: true,
   ...departmentMembershipSelect
 };

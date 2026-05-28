@@ -71,6 +71,7 @@ model User {
   emailVerified        DateTime?
   image                String?
   role                 UserRole                 @default(EMPLOYEE)
+  roles                UserRole[]               @default([EMPLOYEE])
   status               UserStatus               @default(INVITED)
   passwordHash         String?
   mustChangePassword   Boolean                  @default(false)
@@ -103,12 +104,14 @@ model UserDepartment {
   id           String     @id @default(cuid())
   userId       String
   departmentId String
+  role         UserRole   @default(EMPLOYEE)
   createdAt    DateTime   @default(now())
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, departmentId])
+  @@unique([userId, departmentId, role])
   @@index([departmentId])
+  @@index([role, departmentId])
 }
 
 model Account {

@@ -6,7 +6,7 @@ export type PageLoadingKind =
   | "daily"
   | "reports"
   | "review"
-  | "employees"
+  | "admin"
   | "settings";
 
 function LoadingBar({ className = "" }: { className?: string }) {
@@ -148,7 +148,7 @@ function ReviewSkeleton() {
   );
 }
 
-function EmployeesSkeleton() {
+function AdminSkeleton() {
   return (
     <>
       <LoadingHeader titleWidth="w-40" subtitleWidth="w-96" />
@@ -198,7 +198,7 @@ function SettingsSkeleton() {
 
 export function loadingKindFromHref(
   href: string,
-  fallbackVariant: "employee" | "admin" = "employee",
+  fallbackVariant: "employee" | "reviewer" | "admin" = "employee",
 ): PageLoadingKind {
   const path = href.split("#")[0].split("?")[0] || "/";
 
@@ -211,7 +211,7 @@ export function loadingKindFromHref(
   }
 
   if (path.endsWith("/admin") || path.endsWith("/employees")) {
-    return "employees";
+    return "admin";
   }
 
   if (path.endsWith("/account")) {
@@ -239,7 +239,7 @@ export function PageLoadingSkeleton({
       {kind === "daily" ? <DailySkeleton /> : null}
       {kind === "reports" ? <ReportsSkeleton /> : null}
       {kind === "review" ? <ReviewSkeleton /> : null}
-      {kind === "employees" ? <EmployeesSkeleton /> : null}
+      {kind === "admin" ? <AdminSkeleton /> : null}
       {kind === "settings" ? <SettingsSkeleton /> : null}
     </main>
   );

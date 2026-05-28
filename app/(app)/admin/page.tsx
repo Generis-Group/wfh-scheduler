@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminUsers } from "@/components/admin/admin-users";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { hasUserRole } from "@/lib/roles";
 import { serialize } from "@/lib/serializers";
 import { adminUserSelect } from "@/lib/services/admin";
 import { getCompanySettings } from "@/lib/services/company-settings";
@@ -23,7 +24,7 @@ export default async function AdminPage() {
     redirect("/change-password");
   }
 
-  if (session.user.role !== "ADMIN") {
+  if (!hasUserRole(session.user, "ADMIN")) {
     redirect("/");
   }
 

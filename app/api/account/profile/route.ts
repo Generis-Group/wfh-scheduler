@@ -18,6 +18,7 @@ export async function PATCH(request: Request) {
         email: user.email,
         image: user.image,
         role: user.role,
+        roles: user.roles,
         mustChangePassword: user.mustChangePassword
       }
     });

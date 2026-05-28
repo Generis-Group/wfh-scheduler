@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/access";
 import { handleRouteError, json } from "@/lib/http";
+import { normalizeUserRoles } from "@/lib/roles";
 import { sendReviewDigest } from "@/lib/services/email-digest";
 import { reviewDigestSchema } from "@/lib/validation";
 
@@ -11,7 +12,7 @@ export async function POST(request: Request) {
       date: input.date,
       trigger: "MANUAL",
       filters: input.filters,
-      scope: { userId: session.user.id, role: session.user.role }
+      scope: { userId: session.user.id, roles: normalizeUserRoles(session.user) }
     });
 
     return json({

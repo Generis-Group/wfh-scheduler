@@ -12,6 +12,7 @@ import { getOptionalEnv } from "@/lib/env";
 import { getOAuthProviderConfig } from "@/lib/oauth-config";
 import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
 import { prisma } from "@/lib/prisma";
+import { normalizeUserRoles, primaryUserRole } from "@/lib/roles";
 
 const oauthConfig = getOAuthProviderConfig();
 
@@ -109,7 +110,8 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
           image: user.image,
-          role: user.role,
+          role: primaryUserRole(user),
+          roles: normalizeUserRoles(user),
           status: user.status,
           mustChangePassword: user.mustChangePassword
         };
@@ -174,7 +176,8 @@ export const authOptions: NextAuthOptions = {
       token.name = dbUser.name;
       token.email = dbUser.email;
       token.picture = imageSafeForSessionCookie(dbUser.image);
-      token.role = dbUser.role;
+      token.roles = normalizeUserRoles(dbUser);
+      token.role = primaryUserRole(dbUser);
       token.status = dbUser.status;
       token.mustChangePassword = dbUser.mustChangePassword;
 
@@ -187,6 +190,7 @@ export const authOptions: NextAuthOptions = {
         session.user.email = token.email ?? null;
         session.user.image = token.picture ?? null;
         session.user.role = token.role;
+        session.user.roles = token.roles?.length ? token.roles : [token.role];
         session.user.status = token.status;
         session.user.mustChangePassword = Boolean(token.mustChangePassword);
       }

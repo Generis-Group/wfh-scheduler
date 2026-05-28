@@ -9,12 +9,12 @@ import {
 import { ReferenceAppShell } from "@/components/reports/reference-shell";
 
 function fallbackVariant(pathname: string | null) {
-  if (
-    pathname?.startsWith("/review") ||
-    pathname?.startsWith("/admin") ||
-    pathname?.startsWith("/coo")
-  ) {
+  if (pathname?.startsWith("/admin")) {
     return "admin";
+  }
+
+  if (pathname?.startsWith("/review") || pathname?.startsWith("/coo")) {
+    return "reviewer";
   }
 
   return "employee";
@@ -29,7 +29,13 @@ export function AppShellLoadingFallback() {
     <ReferenceAppShell
       variant={variant}
       displayName=""
-      userRole={variant === "admin" ? "Reviewer" : "Employee"}
+      userRole={
+        variant === "admin"
+          ? "Admin"
+          : variant === "reviewer"
+            ? "Reviewer"
+            : "Employee"
+      }
       mustChangePassword={false}
       profileLoading
     >

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { ReportHistory } from "@/components/reports/report-history";
 import { auth } from "@/lib/auth";
+import { hasUserRole } from "@/lib/roles";
 import { serialize } from "@/lib/serializers";
 import { listReportHistory } from "@/lib/services/reports";
 
@@ -26,7 +27,7 @@ export default async function ReportsPage({
     redirect("/change-password");
   }
 
-  if (session.user.role !== "EMPLOYEE") {
+  if (!hasUserRole(session.user, "EMPLOYEE")) {
     redirect("/review");
   }
 

@@ -39,7 +39,9 @@ import { clampReportDateToToday, todayDateString } from "@/lib/dates";
 import { cn, initials } from "@/lib/utils";
 import generisLogo from "@/images/Generis_logo.png";
 
-type NavKey = "report" | "reports" | "review" | "employees" | "settings";
+type ShellVariant = "employee" | "reviewer" | "admin";
+
+type NavKey = "report" | "reports" | "review" | "admin" | "settings";
 
 type NavItem = {
   href: string;
@@ -88,6 +90,23 @@ const employeeNav: NavItem[] = [
   },
 ];
 
+const reviewerNav: NavItem[] = [
+  {
+    href: "/review",
+    label: "Review",
+    icon: BarChart3,
+    key: "review",
+    prefetch: "eager",
+  },
+  {
+    href: "/settings",
+    label: "Settings",
+    icon: Settings,
+    key: "settings",
+    prefetch: "intent",
+  },
+];
+
 const adminNav: NavItem[] = [
   {
     href: "/review",
@@ -98,9 +117,9 @@ const adminNav: NavItem[] = [
   },
   {
     href: "/admin",
-    label: "Employees",
+    label: "Admin",
     icon: Users,
-    key: "employees",
+    key: "admin",
     prefetch: "intent",
   },
   {
@@ -119,22 +138,24 @@ export function ReferenceAppShell({
   userEmail,
   profileImage,
   userRole,
+  userRoles,
   mustChangePassword,
   profileLoading = false,
 }: {
   children: ReactNode;
-  variant: "employee" | "admin";
+  variant: ShellVariant;
   displayName: string;
   userEmail?: string | null;
   profileImage?: string | null;
   userRole: string;
+  userRoles?: string[] | null;
   mustChangePassword: boolean;
   profileLoading?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const nav = variant === "admin" ? adminNav : employeeNav;
+  const nav = navForRoles(userRoles, variant);
   const active = activeNavKey(pathname);
   const [profileOpen, setProfileOpen] = useState(false);
   const [lastReportDate, setLastReportDate] = useState<string | null>(null);
@@ -154,8 +175,15 @@ export function ReferenceAppShell({
     () => ({ lastReportDate, lastReviewDate }),
     [lastReportDate, lastReviewDate],
   );
-  const logoHref = getLogoHref(variant, lastReviewDate);
+  const logoHref = getLogoHref(userRoles, variant, lastReviewDate);
   const mobileLogoHref = logoHref;
+  const logoActiveKey = hasShellRole(userRoles, variant, "EMPLOYEE")
+    ? "report"
+    : "review";
+  const canUseDaily = hasShellRole(userRoles, variant, "EMPLOYEE");
+  const canUseReview =
+    hasShellRole(userRoles, variant, "REVIEWER") ||
+    hasShellRole(userRoles, variant, "ADMIN");
   const hasStalePrefetchedData = serverDataVersion !== freshServerDataVersion;
   const navigationPending = pendingNavigation !== null;
   const visibleActive = pendingNavigation?.activeKey ?? active;
@@ -191,7 +219,7 @@ export function ReferenceAppShell({
   }, []);
 
   useEffect(() => {
-    if (variant !== "employee") {
+    if (!canUseDaily) {
       return;
     }
 
@@ -219,10 +247,10 @@ export function ReferenceAppShell({
     }
 
     setLastReportDate(nextReportDate);
-  }, [pathname, routeDateParam, variant]);
+  }, [canUseDaily, pathname, routeDateParam]);
 
   useEffect(() => {
-    if (variant !== "admin") {
+    if (!canUseReview) {
       return;
     }
 
@@ -250,7 +278,7 @@ export function ReferenceAppShell({
     }
 
     setLastReviewDate(nextReviewDate);
-  }, [pathname, routeDateParam, variant]);
+  }, [canUseReview, pathname, routeDateParam]);
 
   useEffect(() => {
     setPendingNavigation(null);
@@ -405,7 +433,7 @@ export function ReferenceAppShell({
             href={logoHref}
             {...routeLinkProps(
               logoHref,
-              variant === "admin" ? "review" : "report",
+              logoActiveKey,
             )}
             className="reference-sidebar-logo-link flex h-9 w-10 items-center justify-center overflow-hidden rounded-[9px] transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
             aria-label="Generis home"
@@ -425,7 +453,7 @@ export function ReferenceAppShell({
             href={logoHref}
             {...routeLinkProps(
               logoHref,
-              variant === "admin" ? "review" : "report",
+              logoActiveKey,
             )}
             className="reference-sidebar-logo-link flex items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
           >
@@ -485,7 +513,7 @@ export function ReferenceAppShell({
                 href={mobileLogoHref}
                 {...routeLinkProps(
                   mobileLogoHref,
-                  variant === "admin" ? "review" : "report",
+                  logoActiveKey,
                 )}
                 className="flex shrink-0 items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
               >
@@ -662,11 +690,53 @@ export function ReferenceAppShell({
   );
 }
 
+function rolesFromShell(userRoles: string[] | null | undefined, variant: ShellVariant) {
+  const fallbackRoles =
+    variant === "admin"
+      ? ["ADMIN"]
+      : variant === "reviewer"
+        ? ["REVIEWER"]
+        : ["EMPLOYEE"];
+  const roles = userRoles?.length ? userRoles : fallbackRoles;
+
+  return new Set(roles);
+}
+
+function hasShellRole(
+  userRoles: string[] | null | undefined,
+  variant: ShellVariant,
+  role: "EMPLOYEE" | "REVIEWER" | "ADMIN",
+) {
+  return rolesFromShell(userRoles, variant).has(role);
+}
+
+function navForRoles(userRoles: string[] | null | undefined, variant: ShellVariant) {
+  const roles = rolesFromShell(userRoles, variant);
+  const nav: NavItem[] = [];
+
+  if (roles.has("EMPLOYEE")) {
+    nav.push(...employeeNav.filter((item) => item.key !== "settings"));
+  }
+
+  if (roles.has("REVIEWER") || roles.has("ADMIN")) {
+    nav.push(...reviewerNav.filter((item) => item.key !== "settings"));
+  }
+
+  if (roles.has("ADMIN")) {
+    nav.push(...adminNav.filter((item) => item.key === "admin"));
+  }
+
+  nav.push(employeeNav.find((item) => item.key === "settings")!);
+
+  return nav;
+}
+
 function getLogoHref(
-  variant: "employee" | "admin",
+  userRoles: string[] | null | undefined,
+  variant: ShellVariant,
   lastReviewDate?: string | null,
 ) {
-  if (variant === "admin") {
+  if (!hasShellRole(userRoles, variant, "EMPLOYEE")) {
     return lastReviewDate ? `/review?date=${lastReviewDate}` : "/review";
   }
 
@@ -719,7 +789,7 @@ export function activeNavKey(pathname: string | null): NavKey {
   }
 
   if (path.startsWith("/admin")) {
-    return "employees";
+    return "admin";
   }
 
   if (path.startsWith("/settings") || path.startsWith("/account")) {
@@ -731,7 +801,7 @@ export function activeNavKey(pathname: string | null): NavKey {
 
 export function shellPageKindFromHref(
   href: string,
-  variant: "employee" | "admin" = "employee",
+  variant: ShellVariant = "employee",
 ) {
   const path = href.split("#")[0].split("?")[0] || "/";
 

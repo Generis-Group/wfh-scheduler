@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { isGenerisEmail, normalizeEmail } from "@/lib/auth-domain";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
+import { hasUserRole, normalizeUserRoles, primaryUserRole } from "@/lib/roles";
 import type { EmailDelivery } from "@/lib/email";
 import { sendTemporaryPasswordEmail } from "@/lib/services/account-emails";
 import { createDepartment as createDepartmentRecord, departmentMembershipSelect } from "@/lib/services/departments";
@@ -21,6 +22,7 @@ export const adminUserSelect = {
   email: true,
   name: true,
   role: true,
+  roles: true,
   status: true,
   reviewerAllDepartments: true,
   ...departmentMembershipSelect
@@ -28,6 +30,44 @@ export const adminUserSelect = {
 
 function generateTemporaryPassword() {
   return crypto.randomBytes(12).toString("base64url");
+}
+
+function uniqueIds(ids?: string[]) {
+  return [...new Set(ids ?? [])];
+}
+
+function resolveLegacyDepartmentIds(input: {
+  roles?: CreateUserInput["roles"] | UpdateUserInput["roles"];
+  role?: CreateUserInput["role"] | UpdateUserInput["role"];
+  departmentIds?: string[];
+  employeeDepartmentIds?: string[];
+  reviewerDepartmentIds?: string[];
+}) {
+  const roles = normalizeUserRoles({
+    role: input.role ?? "EMPLOYEE",
+    roles: input.roles,
+  });
+  const hasEmployee = roles.includes("EMPLOYEE");
+  const hasReviewer = roles.includes("REVIEWER");
+
+  if (input.employeeDepartmentIds !== undefined || input.reviewerDepartmentIds !== undefined) {
+    return {
+      employeeDepartmentIds: input.employeeDepartmentIds,
+      reviewerDepartmentIds: input.reviewerDepartmentIds,
+    };
+  }
+
+  if (!input.departmentIds) {
+    return {
+      employeeDepartmentIds: undefined,
+      reviewerDepartmentIds: undefined,
+    };
+  }
+
+  return {
+    employeeDepartmentIds: hasEmployee ? input.departmentIds : undefined,
+    reviewerDepartmentIds: hasReviewer && !hasEmployee ? input.departmentIds : undefined,
+  };
 }
 
 async function deliverTemporaryPasswordEmail({
@@ -58,21 +98,34 @@ export async function createAppUser(input: CreateUserInput) {
 
   const temporaryPassword = input.temporaryPassword ?? generateTemporaryPassword();
   const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+  const roles = normalizeUserRoles({ role: input.role ?? "EMPLOYEE", roles: input.roles });
+  const role = primaryUserRole({ roles });
+  const { employeeDepartmentIds, reviewerDepartmentIds } = resolveLegacyDepartmentIds(input);
+  const employeeIds = roles.includes("EMPLOYEE") ? uniqueIds(employeeDepartmentIds) : [];
+  const reviewerIds = roles.includes("REVIEWER") ? uniqueIds(reviewerDepartmentIds) : [];
 
   const user = await prisma.user.create({
     data: {
       email,
       name: input.name,
-      role: input.role,
+      role,
+      roles,
       status: input.status,
       passwordHash,
       mustChangePassword: true,
-      reviewerAllDepartments: input.role === "REVIEWER" ? Boolean(input.reviewerAllDepartments) : false,
-      departments: input.departmentIds?.length
+      reviewerAllDepartments: roles.includes("REVIEWER") ? Boolean(input.reviewerAllDepartments) : false,
+      departments: employeeIds.length || reviewerIds.length
         ? {
-            create: input.departmentIds.map((departmentId) => ({
-              departmentId
-            }))
+            create: [
+              ...employeeIds.map((departmentId) => ({
+                departmentId,
+                role: "EMPLOYEE" as const
+              })),
+              ...reviewerIds.map((departmentId) => ({
+                departmentId,
+                role: "REVIEWER" as const
+              }))
+            ]
           }
         : undefined
     },
@@ -89,28 +142,77 @@ export async function createAppUser(input: CreateUserInput) {
 }
 
 export async function updateAppUser(userId: string, input: UpdateUserInput) {
-  const { departmentIds, reviewerAllDepartments, role, ...userInput } = input;
+  const { departmentIds, employeeDepartmentIds, reviewerDepartmentIds, reviewerAllDepartments, role, roles, ...userInput } = input;
 
   return prisma.$transaction(async (tx) => {
+    const existingUser = await tx.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        role: true,
+        roles: true,
+        reviewerAllDepartments: true
+      }
+    });
+    const rolesChanged = roles !== undefined || role !== undefined;
+    const nextRoles = rolesChanged ? normalizeUserRoles({ role, roles }) : normalizeUserRoles(existingUser);
+    const canBeReviewer = nextRoles.includes("REVIEWER");
+    const legacyDepartmentIds = resolveLegacyDepartmentIds({
+      roles: nextRoles,
+      role: primaryUserRole({ roles: nextRoles }),
+      departmentIds,
+      employeeDepartmentIds,
+      reviewerDepartmentIds,
+    });
+    const nextReviewerAllDepartments = canBeReviewer
+      ? reviewerAllDepartments ?? existingUser.reviewerAllDepartments
+      : false;
+
     const user = await tx.user.update({
       where: { id: userId },
       data: {
         ...userInput,
-        role,
-        reviewerAllDepartments: role && role !== "REVIEWER" ? false : reviewerAllDepartments
+        role: primaryUserRole({ roles: nextRoles }),
+        roles: nextRoles,
+        reviewerAllDepartments: nextReviewerAllDepartments
       }
     });
 
-    if (departmentIds) {
+    if (legacyDepartmentIds.employeeDepartmentIds !== undefined || !hasUserRole({ roles: nextRoles }, "EMPLOYEE")) {
       await tx.userDepartment.deleteMany({
-        where: { userId }
+        where: { userId, role: "EMPLOYEE" }
       });
 
-      if (departmentIds.length > 0) {
+      const nextEmployeeDepartmentIds = hasUserRole({ roles: nextRoles }, "EMPLOYEE")
+        ? uniqueIds(legacyDepartmentIds.employeeDepartmentIds)
+        : [];
+
+      if (nextEmployeeDepartmentIds.length > 0) {
         await tx.userDepartment.createMany({
-          data: departmentIds.map((departmentId) => ({
+          data: nextEmployeeDepartmentIds.map((departmentId) => ({
             userId,
-            departmentId
+            departmentId,
+            role: "EMPLOYEE"
+          })),
+          skipDuplicates: true
+        });
+      }
+    }
+
+    if (legacyDepartmentIds.reviewerDepartmentIds !== undefined || !canBeReviewer) {
+      await tx.userDepartment.deleteMany({
+        where: { userId, role: "REVIEWER" }
+      });
+
+      const nextReviewerDepartmentIds = canBeReviewer
+        ? uniqueIds(legacyDepartmentIds.reviewerDepartmentIds)
+        : [];
+
+      if (nextReviewerDepartmentIds.length > 0) {
+        await tx.userDepartment.createMany({
+          data: nextReviewerDepartmentIds.map((departmentId) => ({
+            userId,
+            departmentId,
+            role: "REVIEWER"
           })),
           skipDuplicates: true
         });

@@ -1,4 +1,4 @@
-import { assertCanAccessReport, requireRole } from "@/lib/access";
+import { assertCanReviewReport, requireRole } from "@/lib/access";
 import { revalidateReportRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
 import { sendReportCommentEmail } from "@/lib/services/report-comment-emails";
@@ -16,7 +16,7 @@ export async function POST(request: Request, { params }: Context) {
     const session = await requireRole(["REVIEWER", "ADMIN"]);
     const input = commentSchema.parse(await request.json());
     const existingReport = await getReportById(params.id);
-    await assertCanAccessReport(session, existingReport);
+    await assertCanReviewReport(session, existingReport);
     const report = await addReportComment(params.id, session.user.id, input.body);
     const emailDelivery = await sendReportCommentEmail({
       report,

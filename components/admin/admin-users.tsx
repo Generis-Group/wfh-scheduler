@@ -16,7 +16,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -27,15 +26,19 @@ import {
 } from "@/components/ui/table";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
 
+type UserRole = "EMPLOYEE" | "REVIEWER" | "ADMIN";
+
 type User = {
   id: string;
   email?: string | null;
   name?: string | null;
-  role: "EMPLOYEE" | "REVIEWER" | "ADMIN";
+  role: UserRole;
+  roles?: UserRole[];
   status: "INVITED" | "ACTIVE" | "DISABLED";
   reviewerAllDepartments?: boolean;
   departments?: Array<{
     departmentId: string;
+    role?: UserRole | null;
     department: Department;
   }>;
 };
@@ -52,6 +55,8 @@ type CompanySettings = {
 
 type UserPatch = Partial<User> & {
   departmentIds?: string[];
+  employeeDepartmentIds?: string[];
+  reviewerDepartmentIds?: string[];
 };
 
 type EmailDelivery =
@@ -84,6 +89,41 @@ function emailDeliveryMessage(emailDelivery?: EmailDelivery | null) {
   return `${emailDelivery.error ?? "Email delivery failed."} Copy the password below.`;
 }
 
+const roleOptions: Array<{ value: UserRole; label: string }> = [
+  { value: "EMPLOYEE", label: "Employee" },
+  { value: "REVIEWER", label: "Reviewer" },
+  { value: "ADMIN", label: "Admin" },
+];
+
+function rolesForUser(user: Pick<User, "role" | "roles">) {
+  const source = user.roles?.length ? user.roles : [user.role];
+  const roles = roleOptions
+    .map((option) => option.value)
+    .filter((role) => source.includes(role));
+
+  return roles.length ? roles : (["EMPLOYEE"] as UserRole[]);
+}
+
+function hasRole(user: Pick<User, "role" | "roles">, role: UserRole) {
+  return rolesForUser(user).includes(role);
+}
+
+function primaryRole(roles: UserRole[]) {
+  if (roles.includes("ADMIN")) {
+    return "ADMIN";
+  }
+
+  if (roles.includes("REVIEWER")) {
+    return "REVIEWER";
+  }
+
+  return "EMPLOYEE";
+}
+
+function membershipRole(membership: { role?: UserRole | null }) {
+  return membership.role ?? "EMPLOYEE";
+}
+
 export function AdminUsers({
   initialUsers,
   initialDepartments,
@@ -98,7 +138,7 @@ export function AdminUsers({
   const [settings, setSettings] = useState(initialSettings);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<User["role"]>("EMPLOYEE");
+  const [roles, setRoles] = useState<UserRole[]>(["EMPLOYEE"]);
   const [newDepartmentName, setNewDepartmentName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [temporaryCredentials, setTemporaryCredentials] = useState<{
@@ -127,7 +167,7 @@ export function AdminUsers({
       const response = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, role, status: "ACTIVE" }),
+        body: JSON.stringify({ name, email, roles, status: "ACTIVE" }),
       });
 
       const data = await response.json();
@@ -141,7 +181,7 @@ export function AdminUsers({
       markServerDataStale();
       setName("");
       setEmail("");
-      setRole("EMPLOYEE");
+      setRoles(["EMPLOYEE"]);
       setTemporaryCredentials({
         email: data.user.email,
         password: data.temporaryPassword,
@@ -229,23 +269,38 @@ export function AdminUsers({
     }
   }
 
-  function departmentIdsForUser(user: User) {
-    return user.departments?.map((membership) => membership.departmentId) ?? [];
+  function departmentIdsForUser(user: User, role: "EMPLOYEE" | "REVIEWER") {
+    return (
+      user.departments
+        ?.filter((membership) => membershipRole(membership) === role)
+        .map((membership) => membership.departmentId) ?? []
+    );
   }
 
   async function toggleUserDepartment(
     user: User,
     departmentId: string,
+    role: "EMPLOYEE" | "REVIEWER",
     checked: boolean,
   ) {
-    const currentIds = departmentIdsForUser(user);
+    const currentIds = departmentIdsForUser(user, role);
     const departmentIds = checked
       ? [...new Set([...currentIds, departmentId])]
       : currentIds.filter((id) => id !== departmentId);
-    const nextDepartments = departments
+    const nextRoleDepartments = departments
       .filter((department) => departmentIds.includes(department.id))
-      .map((department) => ({ departmentId: department.id, department }));
+      .map((department) => ({
+        departmentId: department.id,
+        role,
+        department,
+      }));
     const previousDepartments = user.departments ?? [];
+    const nextDepartments = [
+      ...previousDepartments.filter(
+        (membership) => membershipRole(membership) !== role,
+      ),
+      ...nextRoleDepartments,
+    ];
 
     setUsers((current) =>
       current.map((item) =>
@@ -258,7 +313,8 @@ export function AdminUsers({
       ),
     );
     const saved = await updateUser(user, {
-      departmentIds,
+      [role === "EMPLOYEE" ? "employeeDepartmentIds" : "reviewerDepartmentIds"]:
+        departmentIds,
       departments: nextDepartments,
     });
 
@@ -276,15 +332,47 @@ export function AdminUsers({
     }
   }
 
-  function departmentSummary(user: User) {
-    if (user.role === "REVIEWER" && user.reviewerAllDepartments) {
+  function roleDepartmentSummary(user: User, role: "EMPLOYEE" | "REVIEWER") {
+    if (role === "REVIEWER" && user.reviewerAllDepartments) {
       return "All departments";
     }
 
     const names =
-      user.departments?.map((membership) => membership.department.name) ?? [];
+      user.departments
+        ?.filter((membership) => membershipRole(membership) === role)
+        .map((membership) => membership.department.name) ?? [];
 
     return names.length ? names.join(", ") : "No departments";
+  }
+
+  async function toggleUserRole(user: User, role: UserRole, checked: boolean) {
+    const currentRoles = rolesForUser(user);
+    const nextRoles = checked
+      ? [...new Set([...currentRoles, role])]
+      : currentRoles.filter((item) => item !== role);
+
+    if (nextRoles.length === 0) {
+      setMessage("Each user needs at least one role.");
+      return;
+    }
+
+    await updateUser(user, {
+      roles: nextRoles,
+      role: primaryRole(nextRoles),
+      reviewerAllDepartments: nextRoles.includes("REVIEWER")
+        ? user.reviewerAllDepartments
+        : false,
+    });
+  }
+
+  function toggleCreateRole(role: UserRole, checked: boolean) {
+    setRoles((currentRoles) => {
+      const nextRoles = checked
+        ? [...new Set([...currentRoles, role])]
+        : currentRoles.filter((item) => item !== role);
+
+      return nextRoles.length ? nextRoles : currentRoles;
+    });
   }
 
   async function resetPassword(user: User) {
@@ -372,10 +460,10 @@ export function AdminUsers({
       <main className="reference-page">
         <div className="reference-page-header">
           <div>
-            <h1 className="reference-title">Employees</h1>
+            <h1 className="reference-title">Admin</h1>
             <p className="reference-subtitle">
-              Manage invite-only access, credentials users, and Jira reporting
-              filters.
+              Manage employees, reviewers, admins, departments, and reporting
+              settings.
             </p>
           </div>
         </div>
@@ -437,7 +525,7 @@ export function AdminUsers({
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
+                    <TableHead>Roles</TableHead>
                     <TableHead>Departments</TableHead>
                     <TableHead>Password</TableHead>
                   </TableRow>
@@ -458,72 +546,98 @@ export function AdminUsers({
                         <TableCell>{user.name ?? "-"}</TableCell>
                         <TableCell>{user.email}</TableCell>
                         <TableCell>
-                          <Select
-                            value={user.role}
-                            onChange={(event) => {
-                              const nextRole = event.target
-                                .value as User["role"];
-                              updateUser(user, {
-                                role: nextRole,
-                                reviewerAllDepartments:
-                                  nextRole === "REVIEWER"
-                                    ? user.reviewerAllDepartments
-                                    : false,
-                              });
-                            }}
-                          >
-                            <option value="EMPLOYEE">Employee</option>
-                            <option value="REVIEWER">Reviewer</option>
-                            <option value="ADMIN">Admin</option>
-                          </Select>
-                        </TableCell>
-                        <TableCell className="min-w-[260px]">
-                          <div className="space-y-2">
-                            <div className="text-xs text-[#64748b] dark:text-muted-foreground">
-                              {departmentSummary(user)}
-                            </div>
-                            {user.role === "REVIEWER" ? (
-                              <label className="flex items-center gap-2 text-xs font-medium text-[#334155] dark:text-muted-foreground">
+                          <div className="grid gap-1.5">
+                            {roleOptions.map((option) => (
+                              <label
+                                key={option.value}
+                                className="flex items-center gap-2 text-xs font-medium text-[#334155] dark:text-muted-foreground"
+                              >
                                 <Checkbox
-                                  checked={Boolean(user.reviewerAllDepartments)}
+                                  checked={hasRole(user, option.value)}
                                   onChange={(event) =>
-                                    updateUser(user, {
-                                      reviewerAllDepartments:
-                                        event.target.checked,
-                                    })
+                                    toggleUserRole(
+                                      user,
+                                      option.value,
+                                      event.target.checked,
+                                    )
                                   }
                                 />
-                                Can review all departments
+                                {option.label}
                               </label>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="min-w-[260px]">
+                          <div className="space-y-4">
+                            {hasRole(user, "EMPLOYEE") ? (
+                              <DepartmentChecklist
+                                title="Employee departments"
+                                summary={roleDepartmentSummary(
+                                  user,
+                                  "EMPLOYEE",
+                                )}
+                                departments={departments}
+                                selectedIds={departmentIdsForUser(
+                                  user,
+                                  "EMPLOYEE",
+                                )}
+                                emptyText="Create departments to assign employees."
+                                onToggle={(departmentId, checked) =>
+                                  toggleUserDepartment(
+                                    user,
+                                    departmentId,
+                                    "EMPLOYEE",
+                                    checked,
+                                  )
+                                }
+                              />
                             ) : null}
-                            <div className="grid gap-1">
-                              {departments.length === 0 ? (
-                                <span className="text-xs text-[#64748b] dark:text-muted-foreground">
-                                  Create departments to assign access.
-                                </span>
-                              ) : (
-                                departments.map((department) => (
-                                  <label
-                                    key={department.id}
-                                    className="flex items-center gap-2 text-xs text-[#334155] dark:text-muted-foreground"
-                                  >
-                                    <Checkbox
-                                      checked={departmentIdsForUser(
-                                        user,
-                                      ).includes(department.id)}
-                                      onChange={(event) =>
-                                        toggleUserDepartment(
-                                          user,
-                                          department.id,
+                            {hasRole(user, "REVIEWER") ? (
+                              <div className="space-y-2">
+                                <label className="flex items-center gap-2 text-xs font-medium text-[#334155] dark:text-muted-foreground">
+                                  <Checkbox
+                                    checked={Boolean(
+                                      user.reviewerAllDepartments,
+                                    )}
+                                    onChange={(event) =>
+                                      updateUser(user, {
+                                        reviewerAllDepartments:
                                           event.target.checked,
-                                        )
-                                      }
-                                    />
-                                    {department.name}
-                                  </label>
-                                ))
-                              )}
-                            </div>
+                                      })
+                                    }
+                                  />
+                                  Can review all departments
+                                </label>
+                                <DepartmentChecklist
+                                  title="Reviewer scope"
+                                  summary={roleDepartmentSummary(
+                                    user,
+                                    "REVIEWER",
+                                  )}
+                                  departments={departments}
+                                  selectedIds={departmentIdsForUser(
+                                    user,
+                                    "REVIEWER",
+                                  )}
+                                  emptyText="Create departments to scope reviewer access."
+                                  onToggle={(departmentId, checked) =>
+                                    toggleUserDepartment(
+                                      user,
+                                      departmentId,
+                                      "REVIEWER",
+                                      checked,
+                                    )
+                                  }
+                                />
+                              </div>
+                            ) : null}
+                            {!hasRole(user, "EMPLOYEE") &&
+                            !hasRole(user, "REVIEWER") ? (
+                              <span className="text-xs text-[#64748b] dark:text-muted-foreground">
+                                Admin-only users do not need department
+                                assignments.
+                              </span>
+                            ) : null}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -554,7 +668,7 @@ export function AdminUsers({
           <div className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Create user</CardTitle>
+                <CardTitle>Create team member</CardTitle>
                 <CardDescription>
                   Creates an active credentials account with a temporary
                   password.
@@ -581,18 +695,26 @@ export function AdminUsers({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="role">Role</Label>
-                    <Select
-                      id="role"
-                      value={role}
-                      onChange={(event) =>
-                        setRole(event.target.value as User["role"])
-                      }
-                    >
-                      <option value="EMPLOYEE">Employee</option>
-                      <option value="REVIEWER">Reviewer</option>
-                      <option value="ADMIN">Admin</option>
-                    </Select>
+                    <Label>Roles</Label>
+                    <div className="grid gap-2 rounded-[10px] border border-[#dbe5f4] bg-[#f8fafc] p-3 dark:border-[#263a55] dark:bg-[#0b1523]">
+                      {roleOptions.map((option) => (
+                        <label
+                          key={option.value}
+                          className="flex items-center gap-2 text-sm font-medium text-[#334155] dark:text-muted-foreground"
+                        >
+                          <Checkbox
+                            checked={roles.includes(option.value)}
+                            onChange={(event) =>
+                              toggleCreateRole(
+                                option.value,
+                                event.target.checked,
+                              )
+                            }
+                          />
+                          {option.label}
+                        </label>
+                      ))}
+                    </div>
                   </div>
                   <Button
                     className="w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
@@ -613,7 +735,8 @@ export function AdminUsers({
               <CardHeader>
                 <CardTitle>Departments</CardTitle>
                 <CardDescription>
-                  Create departments, then assign employees and reviewers above.
+                  Create departments, then assign employees and reviewer access
+                  above.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -709,5 +832,56 @@ export function AdminUsers({
       </main>
       <FixedToast message={message} onDismiss={() => setMessage(null)} />
     </>
+  );
+}
+
+function DepartmentChecklist({
+  title,
+  summary,
+  departments,
+  selectedIds,
+  emptyText,
+  onToggle,
+}: {
+  title: string;
+  summary: string;
+  departments: Department[];
+  selectedIds: string[];
+  emptyText: string;
+  onToggle: (departmentId: string, checked: boolean) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div>
+        <div className="text-xs font-semibold text-[#334155] dark:text-muted-foreground">
+          {title}
+        </div>
+        <div className="text-xs text-[#64748b] dark:text-muted-foreground">
+          {summary}
+        </div>
+      </div>
+      <div className="grid gap-1">
+        {departments.length === 0 ? (
+          <span className="text-xs text-[#64748b] dark:text-muted-foreground">
+            {emptyText}
+          </span>
+        ) : (
+          departments.map((department) => (
+            <label
+              key={department.id}
+              className="flex items-center gap-2 text-xs text-[#334155] dark:text-muted-foreground"
+            >
+              <Checkbox
+                checked={selectedIds.includes(department.id)}
+                onChange={(event) =>
+                  onToggle(department.id, event.target.checked)
+                }
+              />
+              {department.name}
+            </label>
+          ))
+        )}
+      </div>
+    </div>
   );
 }

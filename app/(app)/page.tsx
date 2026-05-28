@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { clampReportDateToToday } from "@/lib/dates";
 import { getOAuthProviderConfig } from "@/lib/oauth-config";
 import { prisma } from "@/lib/prisma";
+import { hasUserRole } from "@/lib/roles";
 import { serialize } from "@/lib/serializers";
 import { getDailyReportEditorData } from "@/lib/services/reports";
 
@@ -29,7 +30,7 @@ export default async function HomePage({
     redirect("/change-password");
   }
 
-  if (session.user.role === "REVIEWER" || session.user.role === "ADMIN") {
+  if (!hasUserRole(session.user, "EMPLOYEE")) {
     redirect("/review");
   }
 

@@ -11,6 +11,7 @@ vi.mock("@/lib/access", () => ({
     user: {
       id: "user-1",
       role: "EMPLOYEE",
+      roles: ["EMPLOYEE"],
       status: "ACTIVE"
     }
   })),
@@ -18,12 +19,14 @@ vi.mock("@/lib/access", () => ({
     user: {
       id: "admin-1",
       role: "ADMIN",
+      roles: ["ADMIN"],
       status: "ACTIVE"
     }
   })),
   assertCanAccessUser: vi.fn(),
   assertCanAccessUserData: vi.fn(),
   assertCanAccessReport: vi.fn(),
+  assertCanReviewReport: vi.fn(),
   assertCanMutateReport: vi.fn()
 }));
 
@@ -73,6 +76,7 @@ vi.mock("@/lib/services/admin", () => ({
     email: "employee@generisgp.com",
     image: null,
     role: "EMPLOYEE",
+    roles: ["EMPLOYEE"],
     status: "ACTIVE",
     mustChangePassword: false
   }))
@@ -157,6 +161,36 @@ describe("route contracts", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ report: { id: "report-1" } });
+  });
+
+  it("returns reviewer dashboard data for a multi-role reviewer date query", async () => {
+    const access = await import("@/lib/access");
+    const reports = await import("@/lib/services/reports");
+    const { GET } = await import("@/app/api/reports/route");
+    vi.mocked(access.requireSession).mockResolvedValueOnce({
+      user: {
+        id: "multi-role-1",
+        role: "REVIEWER",
+        roles: ["EMPLOYEE", "REVIEWER"],
+        status: "ACTIVE",
+        mustChangePassword: false,
+      },
+    } as Awaited<ReturnType<typeof access.requireSession>>);
+    vi.mocked(reports.getReviewDashboardData).mockClear();
+
+    const response = await GET(
+      new Request("http://localhost/api/reports?date=2026-05-13")
+    );
+
+    expect(response.status).toBe(200);
+    expect(reports.getReviewDashboardData).toHaveBeenCalledWith(
+      "2026-05-13",
+      { userId: "multi-role-1", roles: ["EMPLOYEE", "REVIEWER"] }
+    );
+    await expect(response.json()).resolves.toEqual({
+      reports: [],
+      metrics: { users: 1, submitted: 0, sourceMix: [] },
+    });
   });
 
   it("creates a report through autosave or submit requests", async () => {
@@ -336,8 +370,10 @@ describe("route contracts", () => {
   });
 
   it("emails an employee when a reviewer adds a report comment", async () => {
+    const access = await import("@/lib/access");
     const comments = await import("@/lib/services/report-comment-emails");
     const { POST } = await import("@/app/api/reports/[id]/comments/route");
+    vi.mocked(access.assertCanReviewReport).mockClear();
     vi.mocked(comments.sendReportCommentEmail).mockClear();
 
     const response = await POST(
@@ -349,6 +385,10 @@ describe("route contracts", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(access.assertCanReviewReport).toHaveBeenCalledWith(
+      expect.objectContaining({ user: expect.objectContaining({ id: "admin-1" }) }),
+      expect.objectContaining({ id: "report-1", userId: "user-1" })
+    );
     expect(comments.sendReportCommentEmail).toHaveBeenCalledWith({
       report: { id: "report-1" },
       commentBody: "Please add the client follow-up.",
@@ -405,7 +445,7 @@ describe("route contracts", () => {
     expect(reports.getWeeklyReportForEmployee).toHaveBeenCalledWith(
       "user-1",
       "2026-05-13",
-      { userId: "admin-1", role: "ADMIN" }
+      { userId: "admin-1", roles: ["ADMIN"] }
     );
     await expect(response.json()).resolves.toEqual({
       weeklyReport: {
@@ -436,7 +476,7 @@ describe("route contracts", () => {
     expect(reminders.sendReportReminderEmail).toHaveBeenCalledWith({
       userId: "user-1",
       date: "2026-05-13",
-      scope: { userId: "admin-1", role: "ADMIN" }
+      scope: { userId: "admin-1", roles: ["ADMIN"] }
     });
     await expect(response.json()).resolves.toEqual({
       employee: {
@@ -452,7 +492,9 @@ describe("route contracts", () => {
   });
 
   it("toggles reviewer report read state", async () => {
+    const access = await import("@/lib/access");
     const { PATCH } = await import("@/app/api/reports/[id]/read/route");
+    vi.mocked(access.assertCanReviewReport).mockClear();
     const response = await PATCH(
       new Request("http://localhost/api/reports/report-1/read", {
         method: "PATCH",
@@ -462,6 +504,10 @@ describe("route contracts", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(access.assertCanReviewReport).toHaveBeenCalledWith(
+      expect.objectContaining({ user: expect.objectContaining({ id: "admin-1" }) }),
+      expect.objectContaining({ id: "report-1", userId: "user-1" })
+    );
     await expect(response.json()).resolves.toEqual({ report: { id: "report-1", readReceipts: [{ reviewerId: "admin-1" }] } });
   });
 

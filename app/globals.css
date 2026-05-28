@@ -578,8 +578,13 @@
     display: none;
   }
 
+  .report-pdf-notes-panel {
+    max-height: min(44rem, calc(100vh - 7rem));
+    overflow: hidden;
+  }
+
   .report-pdf-comments-list {
-    max-height: 16.25rem;
+    max-height: min(30rem, 52vh);
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
@@ -647,6 +652,10 @@
     box-shadow: none !important;
     background: #ffffff !important;
     color: #111827 !important;
+  }
+
+  .report-pdf-layout {
+    display: block !important;
   }
 
   .report-pdf-print-only {

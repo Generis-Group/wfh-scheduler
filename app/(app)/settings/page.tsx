@@ -4,6 +4,7 @@ import { SettingsPanel } from "@/components/settings/settings-panel";
 import { auth } from "@/lib/auth";
 import { getOAuthProviderConfig } from "@/lib/oauth-config";
 import { prisma } from "@/lib/prisma";
+import { hasUserRole } from "@/lib/roles";
 import { serialize } from "@/lib/serializers";
 import { getCompanySettings } from "@/lib/services/company-settings";
 
@@ -30,6 +31,7 @@ export default async function SettingsPage() {
       email: true,
       image: true,
       role: true,
+      roles: true,
       mustChangePassword: true,
       passwordHash: true,
     },
@@ -43,7 +45,7 @@ export default async function SettingsPage() {
     redirect("/change-password");
   }
 
-  const canManageCompanySettings = user.role === "ADMIN";
+  const canManageCompanySettings = hasUserRole(user, "ADMIN");
   const [settings, accounts, companySetting] = await Promise.all([
     prisma.userIntegrationSettings.upsert({
       where: { userId: user.id },

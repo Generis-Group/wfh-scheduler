@@ -72,6 +72,7 @@ type HistoryReport = {
   updatedAt?: string | Date | null;
   user?: {
     departments?: Array<{
+      role?: string | null;
       department?: { name?: string | null } | null;
     }>;
   } | null;
@@ -165,6 +166,7 @@ function editedAfterDate(report: HistoryReport) {
 function reportDepartmentLabel(report: HistoryReport) {
   const departments =
     report.user?.departments
+      ?.filter((membership) => (membership.role ?? "EMPLOYEE") === "EMPLOYEE")
       ?.map((membership) => membership.department?.name)
       .filter(Boolean) ?? [];
   return departments.length ? departments.join(", ") : "No department";

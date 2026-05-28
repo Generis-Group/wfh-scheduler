@@ -19,6 +19,7 @@ async function main() {
     where: { email },
     update: {
       role: UserRole.ADMIN,
+      roles: [UserRole.ADMIN],
       status: UserStatus.ACTIVE,
       passwordHash,
       mustChangePassword: true,
@@ -28,6 +29,7 @@ async function main() {
       email,
       name: "Generis Admin",
       role: UserRole.ADMIN,
+      roles: [UserRole.ADMIN],
       status: UserStatus.ACTIVE,
       passwordHash,
       mustChangePassword: true,

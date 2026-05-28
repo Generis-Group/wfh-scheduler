@@ -128,14 +128,23 @@ function walkFiles(directory: string): string[] {
 
 function renderReferenceShell(
   children: React.ReactNode = "Current page content",
-  variant: "employee" | "admin" = "employee",
+  variant: "employee" | "reviewer" | "admin" = "employee",
+  userRoles?: string[],
 ) {
+  const userRole =
+    variant === "admin"
+      ? "Admin"
+      : variant === "reviewer"
+        ? "Reviewer"
+        : "Employee";
+
   return render(
     React.createElement(ReferenceAppShell, {
       variant,
       displayName: "Test User",
       userEmail: "test@example.com",
-      userRole: variant === "admin" ? "Admin" : "Employee",
+      userRole,
+      userRoles,
       mustChangePassword: false,
       children: React.createElement("div", null, children),
     }),
@@ -219,19 +228,19 @@ describe("authenticated app shell loading boundaries", () => {
     expect(activeNavKey("/history")).toBe("reports");
     expect(activeNavKey("/review")).toBe("review");
     expect(activeNavKey("/coo")).toBe("review");
-    expect(activeNavKey("/admin")).toBe("employees");
+    expect(activeNavKey("/admin")).toBe("admin");
     expect(activeNavKey("/settings")).toBe("settings");
     expect(activeNavKey("/account")).toBe("settings");
   });
 
   it("maps shell routes to stable destination skeletons", () => {
-    expect(loadingKindFromHref("/coo", "admin")).toBe("review");
+    expect(loadingKindFromHref("/coo", "reviewer")).toBe("review");
     expect(shellPageKindFromHref("/", "employee")).toBe("daily");
     expect(shellPageKindFromHref("/reports", "employee")).toBe("reports");
     expect(shellPageKindFromHref("/history", "employee")).toBe("reports");
-    expect(shellPageKindFromHref("/review", "admin")).toBe("review");
-    expect(shellPageKindFromHref("/coo", "admin")).toBe("review");
-    expect(shellPageKindFromHref("/admin", "admin")).toBe("employees");
+    expect(shellPageKindFromHref("/review", "reviewer")).toBe("review");
+    expect(shellPageKindFromHref("/coo", "reviewer")).toBe("review");
+    expect(shellPageKindFromHref("/admin", "admin")).toBe("admin");
     expect(shellPageKindFromHref("/settings#account", "employee")).toBe(
       "settings",
     );
@@ -259,6 +268,51 @@ describe("authenticated app shell loading boundaries", () => {
         .querySelector(".reference-content-scroll")
         ?.getAttribute("aria-busy"),
     ).toBe("true");
+  });
+
+  it("splits reviewer and admin navigation", () => {
+    renderReferenceShell("Current page content", "reviewer");
+
+    expect(screen.getAllByRole("link", { name: "Review" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "Admin" })).toBeNull();
+
+    cleanup();
+
+    renderReferenceShell("Current page content", "admin");
+
+    expect(screen.getAllByRole("link", { name: "Review" }).length).toBeGreaterThan(0);
+    expect(uniqueLinkHrefs("Admin")).toEqual(["/admin"]);
+  });
+
+  it("shows all relevant nav destinations for multi-role users", () => {
+    renderReferenceShell("Current page content", "employee", [
+      "EMPLOYEE",
+      "REVIEWER",
+      "ADMIN",
+    ]);
+
+    expect(uniqueLinkHrefs("Daily")).toEqual([`/?date=${todayDateString()}`]);
+    expect(uniqueLinkHrefs("Reports")).toEqual(["/reports"]);
+    expect(uniqueLinkHrefs("Review")).toEqual(["/review"]);
+    expect(uniqueLinkHrefs("Admin")).toEqual(["/admin"]);
+    expect(uniqueLinkHrefs("Settings")).toEqual(["/settings"]);
+  });
+
+  it("persists reviewer dates for multi-role employee shells", async () => {
+    mockPathname.current = "/review";
+    mockSearchParams.current = "date=2026-05-19";
+
+    renderReferenceShell("Current page content", "employee", [
+      "EMPLOYEE",
+      "REVIEWER",
+    ]);
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem("generis.lastReviewDate")).toBe(
+        "2026-05-19",
+      );
+      expect(uniqueLinkHrefs("Review")).toEqual(["/review?date=2026-05-19"]);
+    });
   });
 
   it("keeps the destination skeleton visible until the route commit arrives", () => {

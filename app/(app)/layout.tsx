@@ -6,20 +6,9 @@ import { AppShellLoadingFallback } from "@/components/reports/app-shell-loading-
 import { ReferenceAppShell } from "@/components/reports/reference-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { hasUserRole, roleListLabel } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
-
-function roleLabel(role?: string | null) {
-  if (role === "ADMIN") {
-    return "Admin";
-  }
-
-  if (role === "REVIEWER") {
-    return "Reviewer";
-  }
-
-  return "Employee";
-}
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
@@ -44,8 +33,12 @@ async function AuthenticatedAppShell({ children }: { children: ReactNode }) {
     redirect("/change-password");
   }
 
-  const isReviewer =
-    session.user.role === "REVIEWER" || session.user.role === "ADMIN";
+  let shellVariant: "employee" | "reviewer" | "admin" = "employee";
+
+  if (!hasUserRole(session.user, "EMPLOYEE")) {
+    shellVariant = hasUserRole(session.user, "ADMIN") ? "admin" : "reviewer";
+  }
+
   const shellUser = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { image: true },
@@ -53,11 +46,12 @@ async function AuthenticatedAppShell({ children }: { children: ReactNode }) {
 
   return (
     <ReferenceAppShell
-      variant={isReviewer ? "admin" : "employee"}
+      variant={shellVariant}
       displayName={session.user.name ?? session.user.email ?? "User"}
       userEmail={session.user.email}
       profileImage={shellUser?.image ?? session.user.image}
-      userRole={roleLabel(session.user.role)}
+      userRole={roleListLabel(session.user)}
+      userRoles={session.user.roles}
       mustChangePassword={session.user.mustChangePassword}
     >
       {children}

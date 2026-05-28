@@ -1,4 +1,4 @@
-import type { EmailRun, Prisma } from "@prisma/client";
+import type { EmailRun, Prisma, UserRole } from "@prisma/client";
 
 import { DEFAULT_TIMEZONE, parseReportDate, reportDayEnd } from "@/lib/dates";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/lib/email";
 import { isGenerisEmail } from "@/lib/auth-domain";
 import { prisma } from "@/lib/prisma";
+import { hasUserRole, normalizeUserRoles, primaryUserRole } from "@/lib/roles";
 import type { ReviewScope } from "@/lib/services/departments";
 import { listReportsForDate } from "@/lib/services/reports";
 
@@ -35,7 +36,8 @@ type DigestRow = {
     id: string;
     name?: string | null;
     email?: string | null;
-    role: string;
+    role: UserRole;
+    roles?: UserRole[] | null;
     status?: string | null;
   };
   report: DigestReport | null;
@@ -46,6 +48,7 @@ type DigestRecipient = {
   email: string;
   name?: string | null;
   role?: "REVIEWER" | "ADMIN";
+  roles?: UserRole[];
 };
 
 function toDate(value?: string | Date | null) {
@@ -102,7 +105,7 @@ export function applyReviewDigestFilters(rows: DigestRow[], _date: string, filte
     const employee = `${row.user.name ?? ""} ${row.user.email ?? ""}`.toLowerCase();
     const matchesSearch = !query || employee.includes(query);
 
-    return matchesSearch && row.user.role === "EMPLOYEE";
+    return matchesSearch && hasUserRole(row.user, "EMPLOYEE");
   });
 }
 
@@ -191,7 +194,14 @@ export async function selectReviewDigestRecipients(scope?: ReviewScope) {
   const users = await prisma.user.findMany({
     where: {
       status: "ACTIVE",
-      ...(scope ? { id: scope.userId } : { role: { in: ["REVIEWER", "ADMIN"] as const } }),
+      ...(scope
+        ? { id: scope.userId }
+        : {
+            OR: [
+              { roles: { hasSome: ["REVIEWER", "ADMIN"] as const } },
+              { role: { in: ["REVIEWER", "ADMIN"] as const } }
+            ]
+          }),
       email: { not: null }
     },
     orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
@@ -200,20 +210,27 @@ export async function selectReviewDigestRecipients(scope?: ReviewScope) {
       email: true,
       name: true,
       role: true,
+      roles: true,
       status: true
     }
   });
 
   return users
-    .filter((user): user is { id: string; email: string; name: string | null; role: "REVIEWER" | "ADMIN"; status: "ACTIVE" } =>
+    .filter((user): user is { id: string; email: string; name: string | null; role: UserRole; roles: UserRole[]; status: "ACTIVE" } =>
       Boolean(
         user.email &&
           isGenerisEmail(user.email) &&
           user.status === "ACTIVE" &&
-          (user.role === "REVIEWER" || user.role === "ADMIN")
+          (hasUserRole(user, "REVIEWER") || hasUserRole(user, "ADMIN"))
         )
     )
-    .map((user) => ({ id: user.id, email: user.email, name: user.name, role: user.role }));
+    .map((user) => ({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: primaryUserRole(user) as "REVIEWER" | "ADMIN",
+      roles: normalizeUserRoles(user)
+    }));
 }
 
 export async function sendReviewDigest({
@@ -328,7 +345,7 @@ export async function sendScheduledReviewDigests({ date }: { date: string }) {
       await sendReviewDigest({
         date,
         trigger: "SCHEDULED",
-        scope: { userId: recipient.id!, role: recipient.role! },
+        scope: { userId: recipient.id!, roles: recipient.roles ?? (recipient.role ? [recipient.role] : undefined) },
         throwOnFailure: false
       })
     );

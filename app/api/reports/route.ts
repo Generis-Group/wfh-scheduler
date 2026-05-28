@@ -2,6 +2,7 @@ import { assertCanAccessUserData, requireSession } from "@/lib/access";
 import { revalidateReportRoutes } from "@/lib/cache-invalidation";
 import { ensureDailyReport, getDailyReport, getReviewDashboardData, updateReport } from "@/lib/services/reports";
 import { handleRouteError, HttpError, json } from "@/lib/http";
+import { hasUserRole, normalizeUserRoles } from "@/lib/roles";
 import { createReportSchema, reportQuerySchema } from "@/lib/validation";
 
 function isAutosaveRequest(request: Request) {
@@ -17,8 +18,11 @@ export async function GET(request: Request) {
       userId: url.searchParams.get("userId") ?? undefined
     });
 
-    if (!query.userId && (session.user.role === "REVIEWER" || session.user.role === "ADMIN")) {
-      const scope = { userId: session.user.id, role: session.user.role };
+    if (
+      !query.userId &&
+      (hasUserRole(session.user, "REVIEWER") || hasUserRole(session.user, "ADMIN"))
+    ) {
+      const scope = { userId: session.user.id, roles: normalizeUserRoles(session.user) };
       const { rows: reports, metrics } = await getReviewDashboardData(query.date, scope);
 
       return json({ reports, metrics });
@@ -39,7 +43,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireSession();
 
-    if (session.user.role !== "EMPLOYEE") {
+    if (!hasUserRole(session.user, "EMPLOYEE")) {
       throw new HttpError(403, "Only employees can create daily reports.");
     }
 

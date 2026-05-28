@@ -60,8 +60,10 @@ type DashboardUser = {
   name?: string | null;
   email?: string | null;
   role: string;
+  roles?: string[] | null;
   status?: string | null;
   departments?: Array<{
+    role?: string | null;
     department?: { name?: string | null } | null;
   }>;
 };
@@ -299,9 +301,14 @@ function reportPdfStatusTone(status: string): ReportPdfStatusTone {
 function userDepartmentLabel(user: DashboardUser) {
   const departments =
     user.departments
+      ?.filter((membership) => (membership.role ?? "EMPLOYEE") === "EMPLOYEE")
       ?.map((membership) => membership.department?.name)
       .filter(Boolean) ?? [];
   return departments.length ? departments.join(", ") : "No department";
+}
+
+function hasDashboardRole(user: DashboardUser, role: string) {
+  return (user.roles?.length ? user.roles : [user.role]).includes(role);
 }
 
 function reportReadReceipt(
@@ -716,7 +723,7 @@ export function ReviewerDashboard({
     return [
       ...new Set(
         items
-          .filter((row) => row.user.role === "EMPLOYEE")
+          .filter((row) => hasDashboardRole(row.user, "EMPLOYEE"))
           .map((row) => userDepartmentLabel(row.user)),
       ),
     ].sort((first, second) => first.localeCompare(second));
@@ -738,7 +745,7 @@ export function ReviewerDashboard({
           employeeStatusFilterValue(row) === statusFilter;
 
         return (
-          row.user.role === "EMPLOYEE" &&
+          hasDashboardRole(row.user, "EMPLOYEE") &&
           matchesSearch &&
           matchesDepartment &&
           matchesStatus

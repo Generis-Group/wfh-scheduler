@@ -61,11 +61,12 @@ afterEach(() => {
 
 describe("ReviewerDashboard weekly reports", () => {
   it("does not show a redundant submitted status pill inside opened daily reports", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ report: submittedReport }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ report: submittedReport }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -83,38 +84,42 @@ describe("ReviewerDashboard weekly reports", () => {
     expect(
       await screen.findByRole("heading", { name: "Daily Report" }),
     ).toBeTruthy();
-    expect(document.querySelector(".report-pdf-header")?.textContent).not.toContain(
-      "Submitted",
-    );
+    expect(
+      document.querySelector(".report-pdf-header")?.textContent,
+    ).not.toContain("Submitted");
     expect(screen.getByLabelText("Add review note")).toBeTruthy();
 
-    const reviewNotesSection = screen
-      .getByText("Review Notes")
-      .closest("section");
-    const summarySection = screen.getByText("Summary").closest("section");
-    expect(reviewNotesSection).toBeTruthy();
-    expect(summarySection).toBeTruthy();
-    expect(reviewNotesSection!.compareDocumentPosition(summarySection!)).toBe(
+    const reviewNotesPanel = screen.getByRole("complementary", {
+      name: "Review notes",
+    });
+    const reportDocument = document.querySelector(".report-pdf-document");
+    expect(reviewNotesPanel).toBeTruthy();
+    expect(reportDocument).toBeTruthy();
+    expect(reportDocument!.textContent).not.toContain("Review Notes");
+    expect(reportDocument!.textContent).not.toContain("Add review note");
+    expect(reviewNotesPanel.compareDocumentPosition(reportDocument!)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
+    expect(reviewNotesPanel.className).toContain("report-pdf-screen-only");
   });
 
   it("opens a generated weekly report for an employee", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          weeklyReport: {
-            employee,
-            weekStart: "2026-05-11",
-            weekEnd: "2026-05-15",
-            reports: [],
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            weeklyReport: {
+              employee,
+              weekStart: "2026-05-11",
+              weekEnd: "2026-05-15",
+              reports: [],
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
           },
-        }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
+        ),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -146,20 +151,21 @@ describe("ReviewerDashboard weekly reports", () => {
   });
 
   it("sends a reminder for a missing employee report", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          employee,
-          emailDelivery: {
-            status: "SENT",
-            providerMessageId: "reminder-1",
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            employee,
+            emailDelivery: {
+              status: "SENT",
+              providerMessageId: "reminder-1",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
           },
-        }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
+        ),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -188,6 +194,8 @@ describe("ReviewerDashboard weekly reports", () => {
         }),
       );
     });
-    expect(await screen.findByText("Reminder emailed to Alex Employee.")).toBeTruthy();
+    expect(
+      await screen.findByText("Reminder emailed to Alex Employee."),
+    ).toBeTruthy();
   });
 });

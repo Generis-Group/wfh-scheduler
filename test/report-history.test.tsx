@@ -48,13 +48,17 @@ describe("ReportHistory review notes", () => {
     expect(screen.getByText("Review Notes")).toBeTruthy();
     expect(screen.getByText("Please add the client follow-up.")).toBeTruthy();
 
-    const reviewNotesSection = screen
-      .getByText("Review Notes")
-      .closest("section");
-    const summarySection = screen.getByText("Summary").closest("section");
-    expect(reviewNotesSection).toBeTruthy();
-    expect(summarySection).toBeTruthy();
-    expect(reviewNotesSection!.compareDocumentPosition(summarySection!)).toBe(
+    const reviewNotesPanel = screen.getByRole("complementary", {
+      name: "Review notes",
+    });
+    const reportDocument = document.querySelector(".report-pdf-document");
+    expect(reviewNotesPanel).toBeTruthy();
+    expect(reportDocument).toBeTruthy();
+    expect(reportDocument!.textContent).not.toContain("Review Notes");
+    expect(reportDocument!.textContent).not.toContain(
+      "Please add the client follow-up.",
+    );
+    expect(reviewNotesPanel.compareDocumentPosition(reportDocument!)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
     expect(

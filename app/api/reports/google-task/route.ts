@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSession } from "@/lib/access";
 import { revalidateReportRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, HttpError, json } from "@/lib/http";
+import { hasUserRole } from "@/lib/roles";
 import { addGoogleTaskReference } from "@/lib/services/sync";
 import { dateStringSchema } from "@/lib/validation";
 
@@ -16,7 +17,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireSession();
 
-    if (session.user.role !== "EMPLOYEE") {
+    if (!hasUserRole(session.user, "EMPLOYEE")) {
       throw new HttpError(403, "Only employees can add Google Tasks to reports.");
     }
 

@@ -64,22 +64,31 @@ export const reportReadStateSchema = z.object({
   read: z.boolean(),
 });
 
+const userRoleSchema = z.enum(["EMPLOYEE", "REVIEWER", "ADMIN"]);
+const userRolesSchema = z.array(userRoleSchema).min(1).max(3);
+
 export const createUserSchema = z.object({
   email: z.string().email().refine(isGenerisEmail, generisEmailMessage()),
   name: z.string().min(1).max(200).optional(),
-  role: z.enum(["EMPLOYEE", "REVIEWER", "ADMIN"]).default("EMPLOYEE"),
+  role: userRoleSchema.optional(),
+  roles: userRolesSchema.optional(),
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).default("INVITED"),
   temporaryPassword: z.string().min(8).optional(),
   reviewerAllDepartments: z.boolean().optional(),
   departmentIds: z.array(z.string()).optional(),
+  employeeDepartmentIds: z.array(z.string()).optional(),
+  reviewerDepartmentIds: z.array(z.string()).optional(),
 });
 
 export const updateUserSchema = z.object({
   name: z.string().min(1).max(200).nullable().optional(),
-  role: z.enum(["EMPLOYEE", "REVIEWER", "ADMIN"]).optional(),
+  role: userRoleSchema.optional(),
+  roles: userRolesSchema.optional(),
   status: z.enum(["INVITED", "ACTIVE", "DISABLED"]).optional(),
   reviewerAllDepartments: z.boolean().optional(),
   departmentIds: z.array(z.string()).optional(),
+  employeeDepartmentIds: z.array(z.string()).optional(),
+  reviewerDepartmentIds: z.array(z.string()).optional(),
 });
 
 export const createDepartmentSchema = z.object({

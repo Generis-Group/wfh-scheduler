@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/access";
 import { handleRouteError, json } from "@/lib/http";
+import { normalizeUserRoles } from "@/lib/roles";
 import { sendReportReminderEmail } from "@/lib/services/report-reminder-email";
 import { reportReminderSchema } from "@/lib/validation";
 
@@ -10,7 +11,7 @@ export async function POST(request: Request) {
     const result = await sendReportReminderEmail({
       date: input.date,
       userId: input.userId,
-      scope: { userId: session.user.id, role: session.user.role },
+      scope: { userId: session.user.id, roles: normalizeUserRoles(session.user) },
     });
 
     return json(result);

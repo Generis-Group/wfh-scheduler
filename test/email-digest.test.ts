@@ -52,8 +52,8 @@ describe("review email digest", () => {
     const recipients = await selectReviewDigestRecipients();
 
     expect(recipients).toEqual([
-      { id: "reviewer-1", email: "reviewer@generisgp.com", name: "Reviewer", role: "REVIEWER" },
-      { id: "admin-1", email: "admin@generisgp.com", name: "Admin", role: "ADMIN" }
+      { id: "reviewer-1", email: "reviewer@generisgp.com", name: "Reviewer", role: "REVIEWER", roles: ["REVIEWER"] },
+      { id: "admin-1", email: "admin@generisgp.com", name: "Admin", role: "ADMIN", roles: ["ADMIN"] }
     ]);
   });
 
@@ -197,8 +197,8 @@ describe("review email digest", () => {
     const result = await sendScheduledReviewDigests({ date: "2026-05-14" });
 
     expect(result.emailRuns).toHaveLength(2);
-    expect(mockListReportsForDate).toHaveBeenNthCalledWith(1, "2026-05-14", { userId: "reviewer-1", role: "REVIEWER" });
-    expect(mockListReportsForDate).toHaveBeenNthCalledWith(2, "2026-05-14", { userId: "admin-1", role: "ADMIN" });
+    expect(mockListReportsForDate).toHaveBeenNthCalledWith(1, "2026-05-14", { userId: "reviewer-1", roles: ["REVIEWER"] });
+    expect(mockListReportsForDate).toHaveBeenNthCalledWith(2, "2026-05-14", { userId: "admin-1", roles: ["ADMIN"] });
     expect(mockEmailRunCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ dedupeKey: "review-digest:2026-05-14:reviewer-1" })
