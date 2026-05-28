@@ -1499,24 +1499,36 @@ export function ReviewerDashboard({
                   {filteredItems.length}
                 </span>
                 <div className="flex items-center gap-4">
-                  <button
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 rounded-[7px] bg-white text-[#64748b] ring-1 ring-[#dfe4ee] hover:text-[#2563eb] dark:bg-[#0b1523] dark:ring-[#263a55]"
                     aria-label="First page"
                     onClick={() => setPage(1)}
                     disabled={currentPage === 1}
                   >
                     <ChevronsLeft className="h-4 w-4" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 rounded-[7px] bg-white text-[#64748b] ring-1 ring-[#dfe4ee] hover:text-[#2563eb] dark:bg-[#0b1523] dark:ring-[#263a55]"
                     aria-label="Previous page"
                     onClick={() => setPage((value) => Math.max(1, value - 1))}
                     disabled={currentPage === 1}
                   >
                     <ChevronLeft className="h-4 w-4" />
-                  </button>
+                  </Button>
                   <span className="flex h-9 w-9 items-center justify-center rounded-[7px] border border-[#93c5fd] text-[#2563eb]">
                     {currentPage}
                   </span>
-                  <button
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 rounded-[7px] bg-white text-[#64748b] ring-1 ring-[#dfe4ee] hover:text-[#2563eb] dark:bg-[#0b1523] dark:ring-[#263a55]"
                     aria-label="Next page"
                     onClick={() =>
                       setPage((value) => Math.min(pageCount, value + 1))
@@ -1524,14 +1536,18 @@ export function ReviewerDashboard({
                     disabled={currentPage === pageCount}
                   >
                     <ChevronRight className="h-4 w-4" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 rounded-[7px] bg-white text-[#64748b] ring-1 ring-[#dfe4ee] hover:text-[#2563eb] dark:bg-[#0b1523] dark:ring-[#263a55]"
                     aria-label="Last page"
                     onClick={() => setPage(pageCount)}
                     disabled={currentPage === pageCount}
                   >
                     <ChevronsRight className="h-4 w-4" />
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
