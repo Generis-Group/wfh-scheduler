@@ -107,6 +107,46 @@ const reportInclude = {
   }
 };
 
+const reportHistoryInclude = {
+  user: {
+    select: reportUserSelect
+  },
+  activities: {
+    where: { selected: true, staleAt: null },
+    orderBy: [{ startedAt: "asc" as const }, { createdAt: "asc" as const }],
+    select: {
+      id: true,
+      source: true,
+      title: true,
+      status: true,
+      durationMinutes: true,
+      employeeNote: true,
+      sourceUrl: true
+    }
+  },
+  comments: {
+    orderBy: { createdAt: "asc" as const },
+    select: {
+      id: true,
+      body: true,
+      createdAt: true,
+      author: {
+        select: userIdentitySelect
+      }
+    }
+  },
+  revisions: {
+    orderBy: { createdAt: "desc" as const },
+    select: {
+      id: true,
+      createdAt: true,
+      editedBy: {
+        select: userIdentitySelect
+      }
+    }
+  }
+};
+
 function dashboardReportInclude(scope?: ReviewScope) {
   return {
     activities: {
@@ -592,51 +632,24 @@ export async function getWeeklyReportForEmployee(
   };
 }
 
-export async function listReportHistory(userId: string, limit = 30) {
-  return prisma.dailyReport.findMany({
+export async function listReportHistory(userId: string, limit = 30, targetReportId?: string | null) {
+  const reports = await prisma.dailyReport.findMany({
     where: { userId },
     orderBy: { reportDate: "desc" },
     take: limit,
-    include: {
-      user: {
-        select: reportUserSelect
-      },
-      activities: {
-        where: { selected: true, staleAt: null },
-        orderBy: [{ startedAt: "asc" }, { createdAt: "asc" }],
-        select: {
-          id: true,
-          source: true,
-          title: true,
-          status: true,
-          durationMinutes: true,
-          employeeNote: true,
-          sourceUrl: true
-        }
-      },
-      comments: {
-        orderBy: { createdAt: "asc" },
-        select: {
-          id: true,
-          body: true,
-          createdAt: true,
-          author: {
-            select: userIdentitySelect
-          }
-        }
-      },
-      revisions: {
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          createdAt: true,
-          editedBy: {
-            select: userIdentitySelect
-          }
-        }
-      }
-    }
+    include: reportHistoryInclude
   });
+
+  if (!targetReportId || reports.some((report) => report.id === targetReportId)) {
+    return reports;
+  }
+
+  const targetReport = await prisma.dailyReport.findFirst({
+    where: { id: targetReportId, userId },
+    include: reportHistoryInclude
+  });
+
+  return targetReport ? [targetReport, ...reports] : reports;
 }
 
 async function getDashboardMetricsForWhere(reportDate: Date, employeeWhere: Prisma.UserWhereInput) {

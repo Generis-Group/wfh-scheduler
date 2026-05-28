@@ -133,6 +133,57 @@ export function ReportPdfDocument({
             ))}
           </dl>
 
+          {comments.length || screenExtras ? (
+            <ReportPdfSection
+              title="Review Notes"
+              action={
+                comments.length ? (
+                  <span className="text-xs font-semibold text-[#667085] dark:text-muted-foreground">
+                    {comments.length} note{comments.length === 1 ? "" : "s"}
+                  </span>
+                ) : null
+              }
+            >
+              {comments.length ? (
+                <div
+                  className="report-pdf-comments-list space-y-2 pr-1"
+                  role="region"
+                  aria-label="Review notes list"
+                  tabIndex={0}
+                >
+                  {comments.map((comment) => (
+                    <div
+                      key={comment.id}
+                      className="rounded-[8px] bg-[#f8fafc] px-3 py-2.5 ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
+                    >
+                      <p className="whitespace-pre-wrap text-sm leading-6 text-[#111827] dark:text-foreground">
+                        {comment.body}
+                      </p>
+                      <p className="mt-1 text-xs font-medium text-[#667085] dark:text-muted-foreground">
+                        {comment.meta}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : screenExtras ? (
+                <p className="text-sm text-[#667085] dark:text-muted-foreground">
+                  No review notes yet.
+                </p>
+              ) : null}
+
+              {screenExtras ? (
+                <div
+                  className={cn(
+                    "report-pdf-screen-extra report-pdf-hide",
+                    comments.length ? "mt-3 border-t border-[#d9e1ec] pt-3 dark:border-[#263a55]" : "mt-3",
+                  )}
+                >
+                  {screenExtras}
+                </div>
+              ) : null}
+            </ReportPdfSection>
+          ) : null}
+
           <ReportPdfSection title="Summary">
             <div className="report-pdf-prose text-sm leading-6 text-[#111827] dark:text-foreground">
               {summary}
@@ -210,32 +261,6 @@ export function ReportPdfDocument({
               </p>
             )}
           </ReportPdfSection>
-
-          {comments.length ? (
-            <ReportPdfSection title="Review Notes">
-              <div className="space-y-2">
-                {comments.map((comment) => (
-                  <div
-                    key={comment.id}
-                    className="rounded-[8px] bg-[#f8fafc] px-3 py-2.5 ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
-                  >
-                    <p className="whitespace-pre-wrap text-sm leading-6 text-[#111827] dark:text-foreground">
-                      {comment.body}
-                    </p>
-                    <p className="mt-1 text-xs font-medium text-[#667085] dark:text-muted-foreground">
-                      {comment.meta}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </ReportPdfSection>
-          ) : null}
-
-          {screenExtras ? (
-            <div className="report-pdf-screen-extra report-pdf-hide mt-4 border-t border-[#d9e1ec] pt-4 dark:border-[#263a55]">
-              {screenExtras}
-            </div>
-          ) : null}
 
           {footer ? (
             <footer className="report-pdf-footer mt-4 border-t border-[#e5eaf2] pt-3 text-xs text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">

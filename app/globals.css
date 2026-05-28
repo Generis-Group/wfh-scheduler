@@ -577,6 +577,19 @@
   .report-pdf-print-only {
     display: none;
   }
+
+  .report-pdf-comments-list {
+    max-height: 16.25rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .report-pdf-comments-list:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 3px;
+    border-radius: 8px;
+  }
 }
 
 @media print {
@@ -638,6 +651,12 @@
 
   .report-pdf-print-only {
     display: block !important;
+  }
+
+  .report-pdf-comments-list {
+    max-height: none !important;
+    overflow: visible !important;
+    padding-right: 0 !important;
   }
 
   .report-pdf-header {

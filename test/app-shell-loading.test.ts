@@ -5,6 +5,7 @@ import path from "node:path";
 
 import React from "react";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -246,6 +247,7 @@ describe("authenticated app shell loading boundaries", () => {
 
     fireEvent.click(reportsLink);
 
+    expect(mockRouterPush).toHaveBeenCalledWith("/reports");
     expect(reportsLink.className).toContain("text-[#2563eb]");
     expect(screen.queryByText("Current page content")).toBeNull();
     expect(screen.getByLabelText("Loading page")).toBeTruthy();
@@ -257,6 +259,25 @@ describe("authenticated app shell loading boundaries", () => {
         .querySelector(".reference-content-scroll")
         ?.getAttribute("aria-busy"),
     ).toBe("true");
+  });
+
+  it("keeps the destination skeleton visible until the route commit arrives", () => {
+    vi.useFakeTimers();
+
+    try {
+      renderReferenceShell("Settings page content");
+
+      fireEvent.click(screen.getAllByRole("link", { name: "Reports" })[0]);
+
+      act(() => {
+        vi.advanceTimersByTime(15_000);
+      });
+
+      expect(screen.queryByText("Settings page content")).toBeNull();
+      expect(screen.getByLabelText("Loading page")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("ignores stale saved dashboard dates so the server resolves today", () => {

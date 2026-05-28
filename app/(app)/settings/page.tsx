@@ -22,37 +22,42 @@ export default async function SettingsPage() {
     redirect("/change-password");
   }
 
-  const canManageCompanySettings = session.user.role === "ADMIN";
-  const [settings, accounts, companySetting, user] = await Promise.all([
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+      role: true,
+      mustChangePassword: true,
+      passwordHash: true,
+    },
+  });
+
+  if (!user) {
+    redirect("/api/auth/signout?callbackUrl=/login");
+  }
+
+  if (user.mustChangePassword) {
+    redirect("/change-password");
+  }
+
+  const canManageCompanySettings = user.role === "ADMIN";
+  const [settings, accounts, companySetting] = await Promise.all([
     prisma.userIntegrationSettings.upsert({
-      where: { userId: session.user.id },
+      where: { userId: user.id },
       update: {},
-      create: { userId: session.user.id, googleTaskListIds: [] },
+      create: { userId: user.id, googleTaskListIds: [] },
     }),
     prisma.account.findMany({
-      where: { userId: session.user.id },
+      where: { userId: user.id },
       select: { provider: true },
     }),
     canManageCompanySettings
       ? getCompanySettings()
       : Promise.resolve({ jiraProjectKeys: [] }),
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        role: true,
-        mustChangePassword: true,
-        passwordHash: true,
-      },
-    }),
   ]);
-
-  if (!user) {
-    redirect("/login");
-  }
 
   const connected = {
     google: accounts.some((account) => account.provider === "google"),

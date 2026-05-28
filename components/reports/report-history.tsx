@@ -206,19 +206,19 @@ function statusTone(report: HistoryReport): "green" | "orange" | "neutral" {
   return "neutral";
 }
 
-function getInitialOpenedId() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  return new URLSearchParams(window.location.search).get("reportId") ?? "";
-}
-
 const PAGE_SIZE = 8;
 
-export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
+export function ReportHistory({
+  reports,
+  initialOpenedReportId = null,
+}: {
+  reports: HistoryReport[];
+  initialOpenedReportId?: string | null;
+}) {
   const [items, setItems] = useState(reports);
-  const [openedReportId, setOpenedReportId] = useState(getInitialOpenedId);
+  const [openedReportId, setOpenedReportId] = useState(
+    initialOpenedReportId ?? "",
+  );
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [fromDate, setFromDate] = useState("");
@@ -298,6 +298,10 @@ export function ReportHistory({ reports }: { reports: HistoryReport[] }) {
   useEffect(() => {
     setPage(1);
   }, [fromDate, query, statusFilter, toDateValue]);
+
+  useEffect(() => {
+    setOpenedReportId(initialOpenedReportId ?? "");
+  }, [initialOpenedReportId]);
 
   useEffect(() => {
     if (page > pageCount) {

@@ -67,7 +67,7 @@ describe("report comment emails", () => {
     });
     expect(body.text).toContain("Riley Reviewer left a comment");
     expect(body.text).toContain(
-      "Open report: https://reports.generisgp.com/?date=2026-05-13",
+      "Open report: https://reports.generisgp.com/reports?reportId=report-1",
     );
     expect(result).toEqual({
       status: "SENT",

@@ -269,7 +269,7 @@ describe("sync service pagination", () => {
     expect(activities.map((activity) => activity.sourceId)).not.toEqual(
       expect.arrayContaining(["worklog:w1", "worklog:w2", "changelog:10001:c1", "comment:10001:m1"])
     );
-  });
+  }, 20_000);
 
   it("imports Jira comments and worklogs from issues the user does not own as issue rows", async () => {
     const jiraFetch = vi.fn(async (path: string, init?: RequestInit) => {

@@ -64,7 +64,7 @@ export async function sendReportCommentEmail({
 
   const reportDate = reportDateKey(report.reportDate ?? new Date());
   const displayDate = formatReportDate(reportDate);
-  const reportUrl = appUrl(`/?date=${encodeURIComponent(reportDate)}`);
+  const reportUrl = appUrl(`/reports?reportId=${encodeURIComponent(report.id)}`);
   const employeeName = displayName(report.user);
   const authorName = displayName(author, "A reviewer");
   const subject = `New report comment - ${reportDate}`;

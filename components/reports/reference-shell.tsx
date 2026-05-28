@@ -258,20 +258,6 @@ export function ReferenceAppShell({
   }, [active, pathname, searchParamString]);
 
   useEffect(() => {
-    if (!pendingNavigation) {
-      return;
-    }
-
-    const fallbackTimer = window.setTimeout(() => {
-      setPendingNavigation(null);
-    }, 10000);
-
-    return () => {
-      window.clearTimeout(fallbackTimer);
-    };
-  }, [pendingNavigation]);
-
-  useEffect(() => {
     function syncServerDataVersions() {
       setServerDataVersion(getServerDataVersion());
       setFreshServerDataVersion(getFreshServerDataVersion());
@@ -363,11 +349,11 @@ export function ReferenceAppShell({
         });
         setProfileOpen(false);
 
+        event.preventDefault();
         if (hasStalePrefetchedData) {
-          event.preventDefault();
           refreshStaleServerData(router);
-          router.push(href);
         }
+        router.push(href);
       },
     };
   }

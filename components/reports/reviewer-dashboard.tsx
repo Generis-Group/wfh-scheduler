@@ -2123,12 +2123,19 @@ function ReportReviewPage({
       }
       screenExtras={
         <form onSubmit={handleCommentSubmit}>
+          <label
+            htmlFor="review-comment-body"
+            className="mb-1.5 block text-sm font-semibold text-[#111827] dark:text-foreground"
+          >
+            Add review note
+          </label>
           <Textarea
+            id="review-comment-body"
             value={commentBody}
             onChange={(event) => setCommentBody(event.target.value)}
             placeholder="Add a note for the employee..."
             disabled={!report || isAddingComment}
-            className="min-h-24"
+            className="min-h-24 resize-y"
           />
           <div className="mt-3 flex justify-end">
             <Button

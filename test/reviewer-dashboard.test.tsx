@@ -86,6 +86,17 @@ describe("ReviewerDashboard weekly reports", () => {
     expect(document.querySelector(".report-pdf-header")?.textContent).not.toContain(
       "Submitted",
     );
+    expect(screen.getByLabelText("Add review note")).toBeTruthy();
+
+    const reviewNotesSection = screen
+      .getByText("Review Notes")
+      .closest("section");
+    const summarySection = screen.getByText("Summary").closest("section");
+    expect(reviewNotesSection).toBeTruthy();
+    expect(summarySection).toBeTruthy();
+    expect(reviewNotesSection!.compareDocumentPosition(summarySection!)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it("opens a generated weekly report for an employee", async () => {

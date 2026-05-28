@@ -5,7 +5,13 @@ import { auth } from "@/lib/auth";
 import { serialize } from "@/lib/serializers";
 import { listReportHistory } from "@/lib/services/reports";
 
-export default async function ReportsPage() {
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams?: {
+    reportId?: string | string[];
+  };
+}) {
   const session = await auth();
 
   if (!session?.user) {
@@ -24,7 +30,17 @@ export default async function ReportsPage() {
     redirect("/review");
   }
 
-  const reports = await listReportHistory(session.user.id);
+  const targetReportId =
+    typeof searchParams?.reportId === "string" && searchParams.reportId
+      ? searchParams.reportId
+      : null;
 
-  return <ReportHistory reports={serialize(reports)} />;
+  const reports = await listReportHistory(session.user.id, 30, targetReportId);
+
+  return (
+    <ReportHistory
+      reports={serialize(reports)}
+      initialOpenedReportId={targetReportId}
+    />
+  );
 }
