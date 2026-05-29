@@ -370,7 +370,7 @@ export function getReviewDigestEmailStatus() {
     configured: emailStatus.configured,
     provider: emailStatus.provider,
     from: emailStatus.from,
-    digestTime: `6:00 PM ${DEFAULT_TIMEZONE}`,
+    digestTime: `Weekday evening ${DEFAULT_TIMEZONE}`,
     recipientRule: "Manual digests go to the sender; scheduled digests are scoped per active reviewer/admin"
   };
 }

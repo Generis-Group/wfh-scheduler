@@ -67,7 +67,7 @@ npm run db:deploy
 npm run db:seed
 ```
 
-5. Vercel Cron is configured in `vercel.json` to call `/api/cron/review-digest` hourly on weekdays. The route checks `CRON_SECRET`, sends only during the 6 PM `America/Toronto` hour, and skips duplicate scheduled digests for the same report date.
+5. Vercel Cron is configured in `vercel.json` to call `/api/cron/review-digest` once per weekday evening. The route checks `CRON_SECRET` and skips duplicate scheduled digests for the same report date.
 
 ## MVP Notes
 

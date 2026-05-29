@@ -16,11 +16,9 @@ function isAuthorized(request: Request) {
 }
 
 function cronWindow(now = new Date()) {
-  const hour = Number(formatInTimeZone(now, DEFAULT_TIMEZONE, "H"));
   const weekday = Number(formatInTimeZone(now, DEFAULT_TIMEZONE, "i"));
 
   return {
-    isSixPm: hour === 18,
     isWeekday: weekday >= 1 && weekday <= 5
   };
 }
@@ -35,10 +33,6 @@ export async function GET(request: Request) {
 
     if (!window.isWeekday) {
       return json({ skipped: true, reason: "Daily digest runs Monday-Friday." });
-    }
-
-    if (!window.isSixPm) {
-      return json({ skipped: true, reason: "Daily digest only sends during the 6 PM America/Toronto hour." });
     }
 
     const date = todayDateString(DEFAULT_TIMEZONE);

@@ -162,7 +162,7 @@ vi.mock("@/lib/services/email-digest", () => ({
     configured: true,
     provider: "Resend",
     from: "reports@generisgp.com",
-    digestTime: "6:00 PM America/Toronto",
+    digestTime: "Weekday evening America/Toronto",
     recipientRule:
       "Manual digests go to the sender; scheduled digests are scoped per active reviewer/admin",
   })),
@@ -848,7 +848,7 @@ describe("route contracts", () => {
     }
   });
 
-  it("runs the scheduled reviewer email digest during the 6 PM Toronto weekday hour", async () => {
+  it("runs the scheduled reviewer email digest during the weekday cron", async () => {
     const previousSecret = process.env.CRON_SECRET;
     process.env.CRON_SECRET = "test-cron-secret";
     vi.useFakeTimers();
