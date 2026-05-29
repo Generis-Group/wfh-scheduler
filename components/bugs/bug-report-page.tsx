@@ -64,15 +64,20 @@ export function BugReportPage({
   canReviewAll,
   currentUserName,
   sourcePagePath,
+  initialSelectedReportId,
 }: {
   initialReports: BugReport[];
   canReviewAll: boolean;
   currentUserName: string;
   sourcePagePath?: string | null;
+  initialSelectedReportId?: string | null;
 }) {
   const [reports, setReports] = useState(initialReports);
   const [selectedReportId, setSelectedReportId] = useState(
-    initialReports[0]?.id ?? null,
+    initialSelectedReportId &&
+      initialReports.some((report) => report.id === initialSelectedReportId)
+      ? initialSelectedReportId
+      : initialReports[0]?.id ?? null,
   );
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);

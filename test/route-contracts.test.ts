@@ -189,6 +189,13 @@ vi.mock("@/lib/services/report-comment-emails", () => ({
   })),
 }));
 
+vi.mock("@/lib/services/bug-report-emails", () => ({
+  sendBugReportAdminEmail: vi.fn(async () => ({
+    status: "SENT",
+    providerMessageId: "bug-admin-email-1",
+  })),
+}));
+
 vi.mock("@/lib/services/bug-reports", () => ({
   createBugReport: vi.fn(async () => ({
     id: "bug-report-1",
@@ -457,9 +464,11 @@ describe("route contracts", () => {
   });
 
   it("creates authenticated bug reports", async () => {
+    const bugReportEmails = await import("@/lib/services/bug-report-emails");
     const bugReports = await import("@/lib/services/bug-reports");
     const { POST } = await import("@/app/api/bug-reports/route");
 
+    vi.mocked(bugReportEmails.sendBugReportAdminEmail).mockClear();
     vi.mocked(bugReports.createBugReport).mockClear();
 
     const response = await POST(
@@ -481,8 +490,18 @@ describe("route contracts", () => {
         body: "The page is blank after I click save.",
       }),
     );
+    expect(bugReportEmails.sendBugReportAdminEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "bug-report-1",
+        body: "The page is blank.",
+      }),
+    );
     await expect(response.json()).resolves.toMatchObject({
       bugReport: { id: "bug-report-1" },
+      adminEmailDelivery: {
+        status: "SENT",
+        providerMessageId: "bug-admin-email-1",
+      },
     });
   });
 

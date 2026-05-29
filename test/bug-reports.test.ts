@@ -8,6 +8,12 @@ describe("bug report service", () => {
       true,
     );
     expect(
+      canReviewBugReports({
+        role: "EMPLOYEE",
+        roles: ["EMPLOYEE", "ADMIN"],
+      }),
+    ).toBe(true);
+    expect(
       canReviewBugReports({ role: "REVIEWER", roles: ["REVIEWER"] }),
     ).toBe(false);
     expect(

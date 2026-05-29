@@ -12,6 +12,7 @@ import {
 type BugsPageProps = {
   searchParams?: {
     from?: string | string[];
+    reportId?: string | string[];
   };
 };
 
@@ -27,6 +28,16 @@ function normalizeSourcePagePath(value?: string | string[]) {
   }
 
   return source.slice(0, 500);
+}
+
+function normalizeReportId(value?: string | string[]) {
+  const reportId = Array.isArray(value) ? value[0] : value;
+
+  if (!reportId || reportId.length > 128) {
+    return null;
+  }
+
+  return reportId;
 }
 
 export default async function BugsPage({ searchParams }: BugsPageProps) {
@@ -58,6 +69,7 @@ export default async function BugsPage({ searchParams }: BugsPageProps) {
       canReviewAll={canReviewAll}
       currentUserName={session.user.name ?? session.user.email ?? "You"}
       sourcePagePath={normalizeSourcePagePath(searchParams?.from)}
+      initialSelectedReportId={normalizeReportId(searchParams?.reportId)}
     />
   );
 }

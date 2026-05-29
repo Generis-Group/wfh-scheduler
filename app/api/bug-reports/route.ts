@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/access";
 import { handleRouteError, json } from "@/lib/http";
 import { withServerTiming } from "@/lib/performance";
 import { serialize } from "@/lib/serializers";
+import { sendBugReportAdminEmail } from "@/lib/services/bug-report-emails";
 import { createBugReport } from "@/lib/services/bug-reports";
 import { createBugReportSchema } from "@/lib/validation";
 
@@ -19,7 +20,26 @@ export async function POST(request: Request) {
 
     revalidatePath("/bugs");
 
-    return json({ bugReport: serialize(bugReport) }, { status: 201 });
+    const adminEmailDelivery = await withServerTiming(
+      "api:bug-reports:notify-admins",
+      () => sendBugReportAdminEmail(bugReport),
+      { reportId: bugReport.id },
+    ).catch((error) => {
+      console.error("Failed to notify admins about bug report.", error);
+
+      return {
+        status: "FAILED" as const,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unknown bug report email error.",
+      };
+    });
+
+    return json(
+      { bugReport: serialize(bugReport), adminEmailDelivery },
+      { status: 201 },
+    );
   } catch (error) {
     return handleRouteError(error);
   }
