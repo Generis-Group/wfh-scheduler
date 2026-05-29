@@ -255,52 +255,6 @@
     }
   }
 
-  html[data-sidebar-collapsed="true"] .reference-app-shell {
-    grid-template-columns: 64px minmax(0, 1fr);
-  }
-
-  html[data-sidebar-collapsed="true"] .reference-sidebar {
-    align-items: center;
-    padding-left: 0.625rem;
-    padding-right: 0.625rem;
-  }
-
-  html[data-sidebar-collapsed="true"] .reference-sidebar-logo-link {
-    height: 2.25rem;
-    width: 2.5rem;
-    justify-content: center;
-    overflow: hidden;
-    padding-left: 0;
-    padding-right: 0;
-  }
-
-  html[data-sidebar-collapsed="true"] .reference-sidebar-logo-frame {
-    width: 2.5rem;
-  }
-
-  html[data-sidebar-collapsed="true"] .reference-sidebar-logo-image {
-    width: 132px;
-    max-width: none;
-    object-fit: contain;
-    object-position: left center;
-  }
-
-  html[data-sidebar-collapsed="true"] .reference-sidebar-nav {
-    width: 100%;
-  }
-
-  html[data-sidebar-collapsed="true"] .reference-sidebar-nav-link {
-    height: 2.5rem;
-    justify-content: center;
-    gap: 0;
-    padding-left: 0;
-    padding-right: 0;
-  }
-
-  html[data-sidebar-collapsed="true"] .reference-sidebar-nav-label {
-    display: none;
-  }
-
   .reference-label {
     @apply mb-1.5 text-xs font-medium tracking-normal text-[#64748b] dark:text-muted-foreground;
   }
@@ -740,6 +694,14 @@
     padding: 0.1in !important;
     margin-top: 0.11in !important;
     margin-bottom: 0 !important;
+  }
+
+  .weekly-report-pdf .report-pdf-card {
+    break-inside: auto;
+  }
+
+  .weekly-report-day {
+    break-inside: avoid;
   }
 
   .report-pdf-card h2 {

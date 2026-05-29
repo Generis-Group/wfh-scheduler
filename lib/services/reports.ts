@@ -23,6 +23,74 @@ type ChangedActivityUpdate = {
   input: ActivityUpdateInput;
   existing: ExistingActivityUpdate;
 };
+type WeeklyDashboardUser = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  role: string;
+  roles: string[];
+  status: string;
+  departments?: Array<{
+    departmentId?: string;
+    role?: string | null;
+    department?: { id?: string; name?: string | null; slug?: string | null } | null;
+  }>;
+};
+type WeeklyDashboardReport = {
+  id: string;
+  userId: string;
+  reportDate: Date;
+  workLocation: string;
+  summary: string;
+  status: string;
+  submittedAt: Date | null;
+  updatedAt: Date;
+  activities: Array<{
+    id: string;
+    source: string;
+    title: string;
+    selected: boolean;
+    status: string | null;
+    durationMinutes: number | null;
+    employeeNote: string | null;
+    sourceUrl: string | null;
+  }>;
+  comments: Array<{
+    id: string;
+    body: string;
+    createdAt: Date;
+    author: {
+      name: string | null;
+      email: string | null;
+    };
+  }>;
+  readReceipts: Array<{
+    reviewerId: string;
+    readAt: Date;
+  }>;
+  revisions: Array<{
+    id: string;
+    createdAt: Date;
+    editedBy: {
+      name: string | null;
+      email: string | null;
+    };
+  }>;
+};
+type WeeklyReportSnapshot = {
+  id?: string;
+  savedReportId?: string;
+  employee: WeeklyDashboardUser;
+  weekStart: string;
+  weekEnd: string;
+  generatedAt: string;
+  submittedCount: number;
+  expectedDays: number;
+  activityCount: number;
+  reports: ReturnType<typeof serializeWeeklyDashboardReport>[];
+};
+
+const weeklyReportSnapshotVersion = 1;
 
 const userIdentitySelect = {
   id: true,
@@ -579,9 +647,149 @@ export function reportWorkWeekRange(dateString: string) {
   const weekday = date.getUTCDay();
   const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
   const start = addReportDateDays(dateString, mondayOffset);
-  const end = addReportDateDays(start, 4);
+  const end = addReportDateDays(start, 6);
 
   return { start, end };
+}
+
+function dateToReportString(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function serializeWeeklyDashboardUser(user: WeeklyDashboardUser) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    roles: user.roles,
+    status: user.status,
+    departments:
+      user.departments?.map((membership) => ({
+        departmentId: membership.departmentId,
+        role: membership.role,
+        department: membership.department
+          ? {
+              id: membership.department.id,
+              name: membership.department.name,
+              slug: membership.department.slug,
+            }
+          : null,
+      })) ?? [],
+  };
+}
+
+function serializeWeeklyDashboardReport(report: WeeklyDashboardReport) {
+  return {
+    id: report.id,
+    userId: report.userId,
+    reportDate: dateToReportString(report.reportDate),
+    workLocation: report.workLocation,
+    summary: report.summary,
+    status: report.status,
+    submittedAt: report.submittedAt?.toISOString() ?? null,
+    updatedAt: report.updatedAt.toISOString(),
+    activities: report.activities.map((activity) => ({
+      id: activity.id,
+      source: activity.source,
+      title: activity.title,
+      selected: activity.selected,
+      status: activity.status,
+      durationMinutes: activity.durationMinutes,
+      employeeNote: activity.employeeNote,
+      sourceUrl: activity.sourceUrl,
+    })),
+    comments: [],
+    readReceipts: [],
+    revisions: [],
+  };
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+      .join(",")}}`;
+  }
+
+  return JSON.stringify(value);
+}
+
+function weeklyReportSourceHash(snapshot: WeeklyReportSnapshot) {
+  return crypto
+    .createHash("sha256")
+    .update(
+      stableJson({
+        version: weeklyReportSnapshotVersion,
+        employee: snapshot.employee,
+        weekStart: snapshot.weekStart,
+        weekEnd: snapshot.weekEnd,
+        reports: snapshot.reports,
+      }),
+    )
+    .digest("hex");
+}
+
+function weeklyExpectedDays(start: string, end: string) {
+  let count = 0;
+  let cursor = start;
+
+  while (cursor <= end) {
+    count += 1;
+    cursor = addReportDateDays(cursor, 1);
+  }
+
+  return count;
+}
+
+function weeklyReportRecordToData(report: {
+  id: string;
+  snapshot: Prisma.JsonValue;
+  generatedAt: Date;
+  submittedCount: number;
+  activityCount: number;
+  sourceHash: string;
+}) {
+  const snapshot = report.snapshot as unknown as WeeklyReportSnapshot;
+
+  return {
+    ...snapshot,
+    id: report.id,
+    savedReportId: report.id,
+    generatedAt: report.generatedAt.toISOString(),
+    submittedCount: report.submittedCount,
+    activityCount: report.activityCount,
+    sourceHash: report.sourceHash,
+  };
+}
+
+function weeklyReportSummary(report: {
+  id: string;
+  weekStart: Date;
+  weekEnd: Date;
+  generatedAt: Date;
+  submittedCount: number;
+  activityCount: number;
+}) {
+  const weekStart = dateToReportString(report.weekStart);
+  const weekEnd = dateToReportString(report.weekEnd);
+
+  return {
+    id: report.id,
+    weekStart,
+    weekEnd,
+    generatedAt: report.generatedAt.toISOString(),
+    submittedCount: report.submittedCount,
+    expectedDays: weeklyExpectedDays(weekStart, weekEnd),
+    activityCount: report.activityCount,
+  };
 }
 
 export async function getWeeklyReportForEmployee(
@@ -593,45 +801,152 @@ export async function getWeeklyReportForEmployee(
   const employeeWhere = await getReviewableEmployeeWhere(scope);
   const startDate = parseReportDate(start);
   const endDate = parseReportDate(end);
-  const { employee, reports } = await prisma.$transaction(async (tx) => {
-    const employee = await tx.user.findFirst({
-      where: {
-        ...employeeWhere,
-        id: employeeId,
-      },
-      select: dashboardUserSelect,
-    });
-
-    if (!employee) {
-      return { employee: null, reports: [] };
-    }
-
-    const reports = await tx.dailyReport.findMany({
-      where: {
-        userId: employeeId,
-        status: "SUBMITTED",
-        reportDate: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      orderBy: { reportDate: "asc" },
-      include: dashboardReportInclude(scope),
-    });
-
-    return { employee, reports };
+  const employee = await prisma.user.findFirst({
+    where: {
+      ...employeeWhere,
+      id: employeeId,
+    },
+    select: dashboardUserSelect,
   });
 
   if (!employee) {
     throw new HttpError(404, "Employee not found.");
   }
 
-  return {
-    employee,
+  const reports = await prisma.dailyReport.findMany({
+    where: {
+      userId: employeeId,
+      status: "SUBMITTED",
+      reportDate: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+    orderBy: { reportDate: "asc" },
+    include: dashboardReportInclude(scope),
+  });
+  const generatedAt = new Date();
+  const serializedReports = reports.map((report) =>
+    serializeWeeklyDashboardReport(report),
+  );
+  const submittedCount = reports.length;
+  const activityCount = serializedReports.reduce(
+    (count, report) =>
+      count + report.activities.filter((activity) => activity.selected).length,
+    0,
+  );
+  const snapshot: WeeklyReportSnapshot = {
+    employee: serializeWeeklyDashboardUser(employee),
     weekStart: start,
     weekEnd: end,
-    reports,
+    generatedAt: generatedAt.toISOString(),
+    submittedCount,
+    expectedDays: weeklyExpectedDays(start, end),
+    activityCount,
+    reports: serializedReports,
   };
+  const sourceHash = weeklyReportSourceHash(snapshot);
+  const existing = await prisma.weeklyReport.findUnique({
+    where: {
+      employeeId_weekStart: {
+        employeeId,
+        weekStart: startDate,
+      },
+    },
+  });
+
+  if (existing?.sourceHash === sourceHash) {
+    return weeklyReportRecordToData(existing);
+  }
+
+  const savedReport = await prisma.weeklyReport.upsert({
+    where: {
+      employeeId_weekStart: {
+        employeeId,
+        weekStart: startDate,
+      },
+    },
+    update: {
+      weekEnd: endDate,
+      snapshot: snapshot as unknown as Prisma.InputJsonValue,
+      sourceHash,
+      submittedCount,
+      activityCount,
+      generatedById: scope.userId,
+      generatedAt,
+    },
+    create: {
+      employeeId,
+      generatedById: scope.userId,
+      weekStart: startDate,
+      weekEnd: endDate,
+      snapshot: snapshot as unknown as Prisma.InputJsonValue,
+      sourceHash,
+      submittedCount,
+      activityCount,
+      generatedAt,
+    },
+  });
+
+  return weeklyReportRecordToData(savedReport);
+}
+
+export async function listSavedWeeklyReportsForEmployee(
+  employeeId: string,
+  scope: ReviewScope,
+) {
+  const employeeWhere = await getReviewableEmployeeWhere(scope);
+  const employee = await prisma.user.findFirst({
+    where: {
+      ...employeeWhere,
+      id: employeeId,
+    },
+    select: dashboardUserSelect,
+  });
+
+  if (!employee) {
+    throw new HttpError(404, "Employee not found.");
+  }
+
+  const reports = await prisma.weeklyReport.findMany({
+    where: {
+      employeeId,
+    },
+    orderBy: [{ weekStart: "desc" }, { generatedAt: "desc" }],
+    take: 52,
+    select: {
+      id: true,
+      weekStart: true,
+      weekEnd: true,
+      generatedAt: true,
+      submittedCount: true,
+      activityCount: true,
+    },
+  });
+
+  return {
+    employee: serializeWeeklyDashboardUser(employee),
+    reports: reports.map(weeklyReportSummary),
+  };
+}
+
+export async function getSavedWeeklyReport(
+  weeklyReportId: string,
+  scope: ReviewScope,
+) {
+  const employeeWhere = await getReviewableEmployeeWhere(scope);
+  const report = await prisma.weeklyReport.findFirst({
+    where: {
+      id: weeklyReportId,
+      employee: employeeWhere,
+    },
+  });
+
+  if (!report) {
+    throw new HttpError(404, "Weekly report not found.");
+  }
+
+  return weeklyReportRecordToData(report);
 }
 
 export async function listReportHistory(userId: string, limit = 30, targetReportId?: string | null) {
@@ -657,7 +972,9 @@ export async function listReportHistory(userId: string, limit = 30, targetReport
 async function getDashboardMetricsForWhere(reportDate: Date, employeeWhere: Prisma.UserWhereInput) {
   const { users, submitted, activities } = await prisma.$transaction(async (tx) => {
     const users = await tx.user.count({ where: employeeWhere });
-    const submitted = await tx.dailyReport.count({ where: { reportDate, status: "SUBMITTED", user: employeeWhere } });
+    const submitted = await tx.dailyReport.count({
+      where: { reportDate, status: "SUBMITTED", user: employeeWhere }
+    });
     const activities = await tx.activityItem.groupBy({
       by: ["source"],
       where: { reportDate, selected: true, staleAt: null, user: employeeWhere },

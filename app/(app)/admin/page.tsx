@@ -6,7 +6,6 @@ import { prisma } from "@/lib/prisma";
 import { hasUserRole } from "@/lib/roles";
 import { serialize } from "@/lib/serializers";
 import { adminUserSelect } from "@/lib/services/admin";
-import { getCompanySettings } from "@/lib/services/company-settings";
 import { listDepartments } from "@/lib/services/departments";
 
 export default async function AdminPage() {
@@ -28,20 +27,18 @@ export default async function AdminPage() {
     redirect("/");
   }
 
-  const [users, departments, initialSettings] = await Promise.all([
+  const [users, departments] = await Promise.all([
     prisma.user.findMany({
-      orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
+      orderBy: [{ name: "asc" }, { email: "asc" }],
       select: adminUserSelect,
     }),
     listDepartments(),
-    getCompanySettings(),
   ]);
 
   return (
     <AdminUsers
       initialUsers={serialize(users)}
       initialDepartments={serialize(departments)}
-      initialSettings={serialize(initialSettings)}
     />
   );
 }

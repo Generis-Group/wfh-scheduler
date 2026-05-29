@@ -9,8 +9,6 @@ import type { ElementType, MouseEvent, ReactNode } from "react";
 import {
   BarChart3,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CircleUser,
   ClipboardList,
   History,
@@ -164,7 +162,6 @@ export function ReferenceAppShell({
     useState<PendingNavigation | null>(null);
   const [serverDataVersion, setServerDataVersion] = useState(0);
   const [freshServerDataVersion, setFreshServerDataVersion] = useState(0);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const prefetchedHrefsRef = useRef<Set<string>>(new Set());
@@ -208,15 +205,6 @@ export function ReferenceAppShell({
     },
     [router],
   );
-
-  useEffect(() => {
-    const storedCollapsed =
-      window.localStorage.getItem("generis.sidebarCollapsed") === "true";
-    document.documentElement.dataset.sidebarCollapsed = storedCollapsed
-      ? "true"
-      : "false";
-    setSidebarCollapsed(storedCollapsed);
-  }, []);
 
   useEffect(() => {
     if (!canUseDaily) {
@@ -386,93 +374,24 @@ export function ReferenceAppShell({
     };
   }
 
-  function toggleSidebarCollapsed() {
-    setSidebarCollapsed((collapsed) => {
-      const nextCollapsed = !collapsed;
-      window.localStorage.setItem(
-        "generis.sidebarCollapsed",
-        String(nextCollapsed),
-      );
-      document.documentElement.dataset.sidebarCollapsed = nextCollapsed
-        ? "true"
-        : "false";
-      return nextCollapsed;
-    });
-  }
-
   return (
-    <div
-      className={cn(
-        "reference-app-shell min-h-screen bg-[#f4f7fb] text-[#0f172a] dark:bg-background dark:text-foreground lg:grid lg:h-screen lg:overflow-hidden lg:transition-[grid-template-columns] lg:duration-200",
-        sidebarCollapsed
-          ? "lg:grid-cols-[64px_minmax(0,1fr)]"
-          : "lg:grid-cols-[176px_minmax(0,1fr)]",
-      )}
-    >
-      <aside
-        className={cn(
-          "reference-sidebar sticky top-0 hidden h-screen min-w-0 flex-col bg-white/88 px-3 py-4 shadow-[1px_0_0_rgba(15,23,42,0.04)] backdrop-blur-xl dark:bg-[#0b1422]/96 dark:shadow-[1px_0_0_rgba(255,255,255,0.04)] lg:flex",
-          sidebarCollapsed && "items-center px-2.5",
-        )}
-      >
-        <button
-          type="button"
-          className="absolute -right-3 top-1/2 z-30 flex h-14 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-[#dfe7f1] bg-[#f8fafc] text-[#64748b] shadow-[0_6px_14px_rgba(15,23,42,0.08)] transition-colors hover:border-[#cbd5e1] hover:bg-[#eef4fb] hover:text-[#2563eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:border-[#24354c] dark:bg-[#0b1422] dark:text-[#94a3b8] dark:shadow-[0_10px_20px_rgba(0,0,0,0.24)] dark:hover:bg-[#132239] dark:hover:text-[#bfdbfe]"
-          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          onClick={toggleSidebarCollapsed}
+    <div className="reference-app-shell min-h-screen bg-[#f4f7fb] text-[#0f172a] dark:bg-background dark:text-foreground lg:grid lg:h-screen lg:overflow-hidden lg:grid-cols-[176px_minmax(0,1fr)]">
+      <aside className="reference-sidebar sticky top-0 hidden h-screen min-w-0 flex-col bg-white/88 px-3 py-4 shadow-[1px_0_0_rgba(15,23,42,0.04)] backdrop-blur-xl dark:bg-[#0b1422]/96 dark:shadow-[1px_0_0_rgba(255,255,255,0.04)] lg:flex">
+        <Link
+          href={logoHref}
+          {...routeLinkProps(logoHref, logoActiveKey)}
+          className="reference-sidebar-logo-link flex items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
         >
-          {sidebarCollapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <ChevronLeft className="h-4 w-4" />
-          )}
-        </button>
-        {sidebarCollapsed ? (
-          <Link
-            href={logoHref}
-            {...routeLinkProps(
-              logoHref,
-              logoActiveKey,
-            )}
-            className="reference-sidebar-logo-link flex h-9 w-10 items-center justify-center overflow-hidden rounded-[9px] transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
-            aria-label="Generis home"
-            title="Generis home"
-          >
-            <span className="reference-sidebar-logo-frame relative flex h-7 w-10 items-center overflow-hidden">
-              <Image
-                src={generisLogo}
-                alt="Generis"
-                className="reference-sidebar-logo-image h-auto w-[132px] max-w-none object-left object-contain"
-                priority
-              />
-            </span>
-          </Link>
-        ) : (
-          <Link
-            href={logoHref}
-            {...routeLinkProps(
-              logoHref,
-              logoActiveKey,
-            )}
-            className="reference-sidebar-logo-link flex items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
-          >
-            <span className="reference-sidebar-logo-frame relative flex h-7 w-[132px] items-center overflow-hidden">
-              <Image
-                src={generisLogo}
-                alt="Generis"
-                className="reference-sidebar-logo-image h-auto w-full object-contain"
-                priority
-              />
-            </span>
-          </Link>
-        )}
-        <nav
-          className={cn(
-            "reference-sidebar-nav mt-6 space-y-0.5",
-            sidebarCollapsed && "w-full",
-          )}
-        >
+          <span className="reference-sidebar-logo-frame relative flex h-7 w-[132px] items-center overflow-hidden">
+            <Image
+              src={generisLogo}
+              alt="Generis"
+              className="reference-sidebar-logo-image h-auto w-full object-contain"
+              priority
+            />
+          </span>
+        </Link>
+        <nav className="reference-sidebar-nav mt-6 space-y-0.5">
           {nav.map((item) => {
             const Icon = item.icon;
             const href = getNavHref(item, rememberedDates);
@@ -482,24 +401,17 @@ export function ReferenceAppShell({
                 key={item.key}
                 href={href}
                 {...routeLinkProps(href, item.key, item.prefetch)}
-                aria-label={sidebarCollapsed ? item.label : undefined}
-                title={sidebarCollapsed ? item.label : undefined}
                 className={cn(
-                  "reference-sidebar-nav-link flex items-center rounded-[9px] text-[15px] font-semibold transition-colors",
-                  sidebarCollapsed
-                    ? "h-11 justify-center px-0"
-                    : "gap-3 px-3 py-2.5",
+                  "reference-sidebar-nav-link flex items-center gap-3 rounded-[9px] px-3 py-2.5 text-[15px] font-semibold transition-colors",
                   visibleActive === item.key
                     ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
                     : "text-[#52647a] hover:bg-[#eef4fb] hover:text-[#0f172a] dark:text-[#93a4b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]",
                 )}
               >
                 <Icon className="h-[18px] w-[18px]" />
-                {sidebarCollapsed ? null : (
-                  <span className="reference-sidebar-nav-label">
-                    {item.label}
-                  </span>
-                )}
+                <span className="reference-sidebar-nav-label">
+                  {item.label}
+                </span>
               </Link>
             );
           })}
@@ -511,10 +423,7 @@ export function ReferenceAppShell({
             <div className="flex h-full min-w-0 items-center gap-[clamp(16px,2.2vw,34px)] lg:hidden">
               <Link
                 href={mobileLogoHref}
-                {...routeLinkProps(
-                  mobileLogoHref,
-                  logoActiveKey,
-                )}
+                {...routeLinkProps(mobileLogoHref, logoActiveKey)}
                 className="flex shrink-0 items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
               >
                 <span className="relative flex h-7 w-[132px] items-center overflow-hidden">
@@ -690,7 +599,10 @@ export function ReferenceAppShell({
   );
 }
 
-function rolesFromShell(userRoles: string[] | null | undefined, variant: ShellVariant) {
+function rolesFromShell(
+  userRoles: string[] | null | undefined,
+  variant: ShellVariant,
+) {
   const fallbackRoles =
     variant === "admin"
       ? ["ADMIN"]
@@ -710,7 +622,10 @@ function hasShellRole(
   return rolesFromShell(userRoles, variant).has(role);
 }
 
-function navForRoles(userRoles: string[] | null | undefined, variant: ShellVariant) {
+function navForRoles(
+  userRoles: string[] | null | undefined,
+  variant: ShellVariant,
+) {
   const roles = rolesFromShell(userRoles, variant);
   const nav: NavItem[] = [];
 
@@ -764,7 +679,10 @@ function persistRememberedDate(
   window.localStorage.setItem(savedOnStorageKey, todayDateString());
 }
 
-function clearRememberedDate(dateStorageKey: string, savedOnStorageKey: string) {
+function clearRememberedDate(
+  dateStorageKey: string,
+  savedOnStorageKey: string,
+) {
   window.localStorage.removeItem(dateStorageKey);
   window.localStorage.removeItem(savedOnStorageKey);
 }
@@ -780,11 +698,11 @@ export function activeNavKey(pathname: string | null): NavKey {
     return "report";
   }
 
-  if (path.startsWith("/reports") || path.startsWith("/history")) {
+  if (path.startsWith("/reports")) {
     return "reports";
   }
 
-  if (path.startsWith("/review") || path.startsWith("/coo")) {
+  if (path.startsWith("/review")) {
     return "review";
   }
 
@@ -808,9 +726,7 @@ export function shellPageKindFromHref(
   if (
     path === "/" ||
     path.startsWith("/reports") ||
-    path.startsWith("/history") ||
     path.startsWith("/review") ||
-    path.startsWith("/coo") ||
     path.startsWith("/admin") ||
     path.startsWith("/settings") ||
     path.startsWith("/account")

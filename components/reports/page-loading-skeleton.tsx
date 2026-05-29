@@ -202,11 +202,11 @@ export function loadingKindFromHref(
 ): PageLoadingKind {
   const path = href.split("#")[0].split("?")[0] || "/";
 
-  if (path.endsWith("/reports") || path.endsWith("/history")) {
+  if (path.endsWith("/reports")) {
     return "reports";
   }
 
-  if (path.endsWith("/review") || path.endsWith("/coo")) {
+  if (path.endsWith("/review")) {
     return "review";
   }
 
@@ -218,7 +218,7 @@ export function loadingKindFromHref(
     return "settings";
   }
 
-  if (path.endsWith("/settings") || path.endsWith("/admin-settings")) {
+  if (path.endsWith("/settings")) {
     return "settings";
   }
 

@@ -13,12 +13,19 @@ import {
   Clock3,
   Download,
   Edit3,
+  Eye,
+  EyeOff,
   FileText,
+  History,
+  ListChecks,
   Loader2,
   Lock,
   Mail,
+  MapPin,
+  MoreHorizontal,
+  ShieldCheck,
 } from "lucide-react";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent, MouseEvent, ReactNode } from "react";
 
 import { EmptyReferenceState } from "@/components/reports/reference-shell";
 import {
@@ -34,13 +41,14 @@ import {
 import {
   formatReportDuration,
   reportActivitySourceLabel,
+  ReportActivitySourceIcon,
   ReportPageHeader,
   ReportSearchField,
   ReportStatusBadge,
   ReportSurface,
 } from "@/components/reports/report-ui";
 import { SummaryRenderer } from "@/components/reports/summary-renderer";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FixedToast } from "@/components/ui/fixed-toast";
 import { Select } from "@/components/ui/select";
@@ -53,6 +61,7 @@ import {
   reportDayEnd,
   todayDateString,
 } from "@/lib/dates";
+import type { SummaryActivityReferenceMap } from "@/lib/summary-format";
 import { cn, initials, titleCase } from "@/lib/utils";
 
 type DashboardUser = {
@@ -110,10 +119,26 @@ type Row = {
 };
 
 type WeeklyReportData = {
+  id?: string;
+  savedReportId?: string;
   employee: DashboardUser;
   weekStart: string | Date;
   weekEnd: string | Date;
+  generatedAt?: string | Date;
+  submittedCount?: number;
+  expectedDays?: number;
+  activityCount?: number;
   reports: DashboardReport[];
+};
+
+type WeeklyReportSummary = {
+  id: string;
+  weekStart: string | Date;
+  weekEnd: string | Date;
+  generatedAt?: string | Date;
+  submittedCount: number;
+  expectedDays: number;
+  activityCount: number;
 };
 
 type WeeklyReportState =
@@ -124,6 +149,22 @@ type WeeklyReportState =
   | {
       status: "ready";
       data: WeeklyReportData;
+    }
+  | {
+      status: "error";
+      employee: DashboardUser;
+      message: string;
+    };
+
+type WeeklyReportArchiveState =
+  | {
+      status: "loading";
+      employee: DashboardUser;
+    }
+  | {
+      status: "ready";
+      employee: DashboardUser;
+      reports: WeeklyReportSummary[];
     }
   | {
       status: "error";
@@ -198,6 +239,45 @@ function formatWeekdayShortDate(value?: string | Date) {
 
   return new Intl.DateTimeFormat("en-US", {
     weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function formatWeekdayOnly(value?: string | Date) {
+  const date = value ? dateOnlyDisplayDate(value) : null;
+
+  if (!date) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+  }).format(date);
+}
+
+function formatFullWeekdayDate(value?: string | Date) {
+  const date = value ? dateOnlyDisplayDate(value) : null;
+
+  if (!date) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function formatMonthDay(value?: string | Date) {
+  const date = value ? dateOnlyDisplayDate(value) : null;
+
+  if (!date) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
   }).format(date);
@@ -677,6 +757,73 @@ function SortableHeader({
   );
 }
 
+function ReportRowActionButton({
+  icon,
+  children,
+  className,
+  onClick,
+  onKeyDown,
+  ...props
+}: ButtonProps & { icon: ReactNode }) {
+  return (
+    <Button
+      {...props}
+      variant="outline"
+      data-testid="employee-report-row-action"
+      className={cn(
+        "h-8 w-full min-w-0 gap-1.5 rounded-[7px] px-2.5 text-xs text-[#2563eb]",
+        className,
+      )}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick?.(event);
+      }}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        onKeyDown?.(event);
+      }}
+    >
+      <span
+        className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center [&_svg]:h-3.5 [&_svg]:w-3.5"
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 truncate">{children}</span>
+    </Button>
+  );
+}
+
+function ReviewerRowMenuButton({
+  icon,
+  children,
+  onClick,
+  disabled = false,
+}: {
+  icon: ReactNode;
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={disabled}
+      className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#334155] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:text-foreground dark:hover:bg-white/5"
+      onClick={onClick}
+    >
+      <span
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center [&_svg]:h-4 [&_svg]:w-4"
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      {children}
+    </button>
+  );
+}
+
 export function ReviewerDashboard({
   rows,
   metrics: _metrics,
@@ -695,6 +842,8 @@ export function ReviewerDashboard({
   );
   const [weeklyReportState, setWeeklyReportState] =
     useState<WeeklyReportState | null>(null);
+  const [weeklyReportArchiveState, setWeeklyReportArchiveState] =
+    useState<WeeklyReportArchiveState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSendingDigest, setIsSendingDigest] = useState(false);
   const [remindingUserId, setRemindingUserId] = useState<string | null>(null);
@@ -708,6 +857,11 @@ export function ReviewerDashboard({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
+  const [rowActionMenu, setRowActionMenu] = useState<{
+    userId: string;
+    top: number;
+    left: number;
+  } | null>(null);
   const [blockedOpenUserId, setBlockedOpenUserId] = useState<string | null>(
     null,
   );
@@ -715,6 +869,7 @@ export function ReviewerDashboard({
     useState<ReportDateControl | null>(null);
   const pendingDateRef = useRef<string | null>(null);
   const blockedOpenTimerRef = useRef<number | null>(null);
+  const rowActionMenuRef = useRef<HTMLDivElement | null>(null);
   const maxReportDate = todayDateString();
   const currentReviewDate = dateInputValue(date);
   const dateNavigationPending = pendingDateControl !== null;
@@ -771,11 +926,18 @@ export function ReviewerDashboard({
       row.report &&
       selectedReportIds.includes(row.report.id),
   );
+  const selectedReportsHaveUnread = selectedRows.some((row) =>
+    isUnreadForReviewer(row.report, reviewerId),
+  );
+  const selectedReadAction = selectedReportsHaveUnread;
   const allVisibleReportsSelected =
     visibleReportIds.length > 0 &&
     visibleReportIds.every((id) => selectedReportIds.includes(id));
   const activeRow = activeReportUserId
     ? (items.find((row) => row.user.id === activeReportUserId) ?? null)
+    : null;
+  const menuRow = rowActionMenu
+    ? (items.find((row) => row.user.id === rowActionMenu.userId) ?? null)
     : null;
   const total = filteredItems.length;
   const submitted = filteredItems.filter(
@@ -802,7 +964,9 @@ export function ReviewerDashboard({
     setItems(rows);
     setActiveReportUserId(null);
     setWeeklyReportState(null);
+    setWeeklyReportArchiveState(null);
     setSelectedReportIds([]);
+    setRowActionMenu(null);
     setBlockedOpenUserId(null);
     setRemindingUserId(null);
     setPage(1);
@@ -817,6 +981,32 @@ export function ReviewerDashboard({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!rowActionMenu) {
+      return;
+    }
+
+    function closeMenu() {
+      setRowActionMenu(null);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+    };
+  }, [rowActionMenu]);
 
   useEffect(() => {
     if (!pendingDateControl) {
@@ -1007,14 +1197,34 @@ export function ReviewerDashboard({
   async function openWeeklyReport(row: Row) {
     setNotice(null);
     setActiveReportUserId(null);
+    setWeeklyReportArchiveState(null);
+    setRowActionMenu(null);
     setWeeklyReportState({ status: "loading", employee: row.user });
 
-    const response = await fetch(
-      `/api/review/weekly-report?userId=${encodeURIComponent(
-        row.user.id,
-      )}&date=${encodeURIComponent(currentReviewDate)}`,
-    );
-    const body = await response.json().catch(() => ({}));
+    let response: Response;
+    let body: { error?: string; weeklyReport?: WeeklyReportData };
+
+    try {
+      response = await fetch("/api/review/weekly-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: row.user.id,
+          date: currentReviewDate,
+        }),
+      });
+      body = await response.json().catch(() => ({}));
+    } catch {
+      const message =
+        "Unable to generate weekly report. Check your connection and try again.";
+      setWeeklyReportState({
+        status: "error",
+        employee: row.user,
+        message,
+      });
+      setNotice(message);
+      return;
+    }
 
     if (!response.ok) {
       const message = body.error ?? "Unable to generate weekly report.";
@@ -1027,7 +1237,120 @@ export function ReviewerDashboard({
       return;
     }
 
-    setWeeklyReportState({ status: "ready", data: body.weeklyReport });
+    setWeeklyReportState({ status: "ready", data: body.weeklyReport! });
+  }
+
+  async function openWeeklyReportArchive(row: Row) {
+    setNotice(null);
+    setActiveReportUserId(null);
+    setWeeklyReportState(null);
+    setRowActionMenu(null);
+    setWeeklyReportArchiveState({ status: "loading", employee: row.user });
+
+    let response: Response;
+    let body: {
+      error?: string;
+      weeklyReports?: {
+        employee?: DashboardUser;
+        reports?: WeeklyReportSummary[];
+      };
+    };
+
+    try {
+      response = await fetch(
+        `/api/review/weekly-reports?userId=${encodeURIComponent(row.user.id)}`,
+      );
+      body = await response.json().catch(() => ({}));
+    } catch {
+      const message =
+        "Unable to load saved weekly reports. Check your connection and try again.";
+      setWeeklyReportArchiveState({
+        status: "error",
+        employee: row.user,
+        message,
+      });
+      setNotice(message);
+      return;
+    }
+
+    if (!response.ok) {
+      const message = body.error ?? "Unable to load saved weekly reports.";
+      setWeeklyReportArchiveState({
+        status: "error",
+        employee: row.user,
+        message,
+      });
+      setNotice(message);
+      return;
+    }
+
+    setWeeklyReportArchiveState({
+      status: "ready",
+      employee: body.weeklyReports?.employee ?? row.user,
+      reports: body.weeklyReports?.reports ?? [],
+    });
+  }
+
+  async function openSavedWeeklyReport(
+    report: WeeklyReportSummary,
+    employee: DashboardUser,
+  ) {
+    setNotice(null);
+    setWeeklyReportArchiveState(null);
+    setWeeklyReportState({ status: "loading", employee });
+
+    let response: Response;
+    let body: { error?: string; weeklyReport?: WeeklyReportData };
+
+    try {
+      response = await fetch(
+        `/api/review/weekly-reports/${encodeURIComponent(report.id)}`,
+      );
+      body = await response.json().catch(() => ({}));
+    } catch {
+      const message =
+        "Unable to load saved weekly report. Check your connection and try again.";
+      setWeeklyReportState({ status: "error", employee, message });
+      setNotice(message);
+      return;
+    }
+
+    if (!response.ok) {
+      const message = body.error ?? "Unable to load saved weekly report.";
+      setWeeklyReportState({ status: "error", employee, message });
+      setNotice(message);
+      return;
+    }
+
+    setWeeklyReportState({ status: "ready", data: body.weeklyReport! });
+  }
+
+  function toggleRowActionMenu(row: Row, event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+
+    if (rowActionMenu?.userId === row.user.id) {
+      setRowActionMenu(null);
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const menuWidth = 220;
+    const menuHeight = row.report && canReviewReport(row) ? 154 : 110;
+    const viewportPadding = 12;
+    const left = Math.min(
+      Math.max(viewportPadding, rect.right - menuWidth),
+      Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding),
+    );
+    const openBelow =
+      window.innerHeight - rect.bottom - viewportPadding >= menuHeight;
+
+    setRowActionMenu({
+      userId: row.user.id,
+      left,
+      top: openBelow
+        ? rect.bottom + 6
+        : Math.max(viewportPadding, rect.top - menuHeight - 6),
+    });
   }
 
   function nudgeUnavailableReport(row: Row) {
@@ -1043,11 +1366,12 @@ export function ReviewerDashboard({
     }, 650);
   }
 
-  async function markSelectedUnread() {
+  async function markSelectedReadState() {
     const rowsToUpdate = selectedRows;
+    const read = selectedReadAction;
 
     setSelectedReportIds([]);
-    await Promise.all(rowsToUpdate.map((row) => setReadState(row, false)));
+    await Promise.all(rowsToUpdate.map((row) => setReadState(row, read)));
   }
 
   async function sendEmailDigest() {
@@ -1207,7 +1531,13 @@ export function ReviewerDashboard({
 
   return (
     <>
-      {weeklyReportState ? (
+      {weeklyReportArchiveState ? (
+        <WeeklyReportArchivePage
+          state={weeklyReportArchiveState}
+          onBack={() => setWeeklyReportArchiveState(null)}
+          onOpenReport={openSavedWeeklyReport}
+        />
+      ) : weeklyReportState ? (
         <WeeklyReportReviewPage
           state={weeklyReportState}
           onBack={() => setWeeklyReportState(null)}
@@ -1316,9 +1646,9 @@ export function ReviewerDashboard({
                         variant="outline"
                         size="sm"
                         className="h-7 shrink-0 rounded-[7px] bg-white px-3 text-xs dark:bg-[#0b1523]"
-                        onClick={markSelectedUnread}
+                        onClick={markSelectedReadState}
                       >
-                        Mark as unread
+                        {selectedReadAction ? "Mark as read" : "Mark as unread"}
                       </Button>
                     </div>
                   ) : null}
@@ -1463,7 +1793,7 @@ export function ReviewerDashboard({
                         onSort={toggleEmployeeSort}
                       />
                     </th>
-                    <th className="w-[14%] px-2 py-2 text-center">Actions</th>
+                    <th className="w-[14%] px-2 py-2 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1490,6 +1820,36 @@ export function ReviewerDashboard({
                       const unread =
                         canReview &&
                         isUnreadForReviewer(row.report, reviewerId);
+                      const primaryAction: {
+                        key: string;
+                        label: string;
+                        icon: ReactNode;
+                        title?: string;
+                        disabled?: boolean;
+                        ariaLabel?: string;
+                        onClick: () => void;
+                      } = canReview
+                        ? {
+                            key: "review",
+                            label: "Review",
+                            icon: <FileText />,
+                            onClick: () => openReport(row),
+                          }
+                        : {
+                            key: "remind",
+                            label: reminderPending ? "Sending" : "Remind",
+                            icon: reminderPending ? (
+                              <Loader2 className="animate-spin" />
+                            ) : (
+                              <Mail />
+                            ),
+                            title: blockedReason,
+                            disabled: remindingUserId !== null,
+                            ariaLabel: `Send reminder to ${employeeLabel(row)}`,
+                            onClick: () => {
+                              void sendReportReminder(row);
+                            },
+                          };
 
                       return (
                         <tr
@@ -1587,64 +1947,41 @@ export function ReviewerDashboard({
                           <td className="px-2 py-2.5 text-xs">
                             {formatTimestamp(row.report?.submittedAt)}
                           </td>
-                          <td className="px-2 py-2.5 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              {canReview ? (
-                                <Button
-                                  variant="outline"
-                                  className="h-8 rounded-[7px] px-3 text-xs text-[#2563eb]"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    openReport(row);
-                                  }}
-                                  onKeyDown={(event) => event.stopPropagation()}
+                          <td className="px-2 py-2.5 text-right">
+                            <div
+                              className="relative ml-auto grid w-[132px] grid-cols-[minmax(0,1fr)_34px] items-center gap-1.5"
+                              data-testid="employee-report-row-actions"
+                            >
+                              {unavailablePulse ? (
+                                <span
+                                  className="reference-lock-nudge pointer-events-none absolute -left-7 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-[#eef2f7] text-[#64748b] dark:bg-white/10 dark:text-muted-foreground"
+                                  aria-hidden="true"
                                 >
-                                  Review
-                                </Button>
-                              ) : (
-                                <>
-                                  <span
-                                    className={cn(
-                                      "inline-flex h-6 w-6 items-center justify-center rounded-full text-[#64748b] opacity-0 transition-opacity dark:text-muted-foreground",
-                                      unavailablePulse &&
-                                        "reference-lock-nudge bg-[#eef2f7] opacity-100 dark:bg-white/10",
-                                    )}
-                                    aria-hidden="true"
-                                  >
-                                    <Lock className="h-3.5 w-3.5" />
-                                  </span>
-                                  <Button
-                                    variant="outline"
-                                    className="h-8 rounded-[7px] px-2.5 text-xs text-[#2563eb]"
-                                    title={blockedReason}
-                                    disabled={remindingUserId !== null}
-                                    aria-label={`Send reminder to ${employeeLabel(row)}`}
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      void sendReportReminder(row);
-                                    }}
-                                    onKeyDown={(event) => event.stopPropagation()}
-                                  >
-                                    {reminderPending ? (
-                                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                      <Mail className="mr-1.5 h-3.5 w-3.5" />
-                                    )}
-                                    {reminderPending ? "Sending" : "Remind"}
-                                  </Button>
-                                </>
-                              )}
+                                  <Lock className="h-3.5 w-3.5" />
+                                </span>
+                              ) : null}
+                              <ReportRowActionButton
+                                key={primaryAction.key}
+                                icon={primaryAction.icon}
+                                title={primaryAction.title}
+                                disabled={primaryAction.disabled}
+                                aria-label={primaryAction.ariaLabel}
+                                onClick={() => primaryAction.onClick()}
+                              >
+                                {primaryAction.label}
+                              </ReportRowActionButton>
                               <Button
+                                type="button"
                                 variant="outline"
-                                className="h-8 rounded-[7px] px-2.5 text-xs text-[#2563eb]"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void openWeeklyReport(row);
-                                }}
+                                size="icon"
+                                className="h-8 w-8 rounded-[7px] bg-[#f4f7fb] p-0 text-[#64748b] hover:text-[#2563eb]"
+                                aria-label={`More actions for ${employeeLabel(row)}`}
+                                aria-haspopup="menu"
+                                aria-expanded={rowActionMenu?.userId === row.user.id}
+                                onClick={(event) => toggleRowActionMenu(row, event)}
                                 onKeyDown={(event) => event.stopPropagation()}
                               >
-                                <CalendarRange className="mr-1.5 h-3.5 w-3.5" />
-                                Week
+                                <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </div>
                           </td>
@@ -1735,6 +2072,61 @@ export function ReviewerDashboard({
           </ReportSurface>
         </main>
       )}
+      {menuRow && rowActionMenu ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-40 cursor-default bg-transparent"
+            aria-label="Close employee report menu"
+            onClick={() => setRowActionMenu(null)}
+          />
+          <div
+            ref={rowActionMenuRef}
+            className="fixed z-50 w-[220px] rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+            style={{ top: rowActionMenu.top, left: rowActionMenu.left }}
+            role="menu"
+          >
+            <ReviewerRowMenuButton
+              icon={<CalendarRange />}
+              onClick={() => {
+                setRowActionMenu(null);
+                void openWeeklyReport(menuRow);
+              }}
+            >
+              Weekly report
+            </ReviewerRowMenuButton>
+            <ReviewerRowMenuButton
+              icon={<History />}
+              onClick={() => {
+                setRowActionMenu(null);
+                void openWeeklyReportArchive(menuRow);
+              }}
+            >
+              View saved reports
+            </ReviewerRowMenuButton>
+            {canReviewReport(menuRow) ? (
+              <ReviewerRowMenuButton
+                icon={
+                  isUnreadForReviewer(menuRow.report, reviewerId) ? (
+                    <Eye />
+                  ) : (
+                    <EyeOff />
+                  )
+                }
+                onClick={() => {
+                  const read = isUnreadForReviewer(menuRow.report, reviewerId);
+                  setRowActionMenu(null);
+                  void setReadState(menuRow, read);
+                }}
+              >
+                {isUnreadForReviewer(menuRow.report, reviewerId)
+                  ? "Mark as read"
+                  : "Mark as unread"}
+              </ReviewerRowMenuButton>
+            ) : null}
+          </div>
+        </>
+      ) : null}
       <FixedToast message={notice} onDismiss={() => setNotice(null)} />
     </>
   );
@@ -1812,6 +2204,362 @@ function Avatar({ name }: { name?: string | null }) {
   );
 }
 
+function weeklyActivityStatusLabel(activity: DashboardActivity) {
+  if (!activity.status) {
+    return "Done";
+  }
+
+  return titleCase(activity.status);
+}
+
+function WeeklyProgressRing({
+  submittedCount,
+  expectedDays,
+}: {
+  submittedCount: number;
+  expectedDays: number;
+}) {
+  const progress = expectedDays
+    ? Math.min(100, Math.round((submittedCount / expectedDays) * 100))
+    : 0;
+
+  return (
+    <div
+      className="relative flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-full"
+      style={{
+        background: `conic-gradient(#198754 ${progress * 3.6}deg, #e8eef6 0deg)`,
+      }}
+      aria-label={`${submittedCount} of ${expectedDays} submitted`}
+    >
+      <div className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-white text-sm font-semibold text-[#0f172a] dark:bg-[#0f1b2a] dark:text-foreground">
+        {submittedCount}/{expectedDays}
+      </div>
+    </div>
+  );
+}
+
+function WeeklyReportDayTabs({
+  weekDates,
+  reportsByDate,
+  selectedDate,
+  submittedCount,
+  expectedDays,
+  onSelect,
+}: {
+  weekDates: string[];
+  reportsByDate: Map<string, DashboardReport>;
+  selectedDate: string;
+  submittedCount: number;
+  expectedDays: number;
+  onSelect: (date: string) => void;
+}) {
+  return (
+    <div className="grid gap-4 min-[720px]:grid-cols-4 min-[1120px]:grid-cols-[repeat(7,minmax(0,1fr))_minmax(230px,1.9fr)]">
+      {weekDates.map((weekDate) => {
+        const selected = weekDate === selectedDate;
+
+        return (
+          <button
+            key={weekDate}
+            type="button"
+            className={cn(
+              "relative flex h-[76px] min-w-0 flex-col items-center justify-center rounded-[10px] border px-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]",
+              selected
+                ? "border-[#8ab7ff] bg-[#eff6ff] text-[#0b63e5] shadow-[0_10px_22px_rgba(37,99,235,0.08)] dark:border-blue-300/30 dark:bg-blue-400/10 dark:text-blue-100"
+                : "border-[#dbe3ee] bg-white text-[#0f172a] hover:border-[#b7c8df] hover:bg-[#fbfdff] dark:border-[#263a55] dark:bg-[#0f1b2a] dark:text-foreground dark:hover:bg-white/[0.06]",
+            )}
+            aria-pressed={selected}
+            aria-label={`${formatWeekdayShortDate(weekDate)} ${
+              reportsByDate.has(weekDate) ? "Submitted" : "Missing"
+            }`}
+            onClick={() => onSelect(weekDate)}
+          >
+            <span className="text-[15px] font-semibold leading-5">
+              {formatWeekdayOnly(weekDate)}
+            </span>
+            <span
+              className={cn(
+                "mt-1 text-[13px] font-medium leading-5",
+                selected
+                  ? "text-[#0b63e5] dark:text-blue-100"
+                  : "text-[#52647a] dark:text-muted-foreground",
+              )}
+            >
+              {formatMonthDay(weekDate)}
+            </span>
+            {selected ? (
+              <span
+                className="absolute inset-x-0 -bottom-2 h-1 rounded-full bg-[#0b63e5]"
+                aria-hidden="true"
+              />
+            ) : null}
+          </button>
+        );
+      })}
+
+      <div className="flex min-h-[76px] items-center gap-4 rounded-[10px] border border-[#dbe3ee] bg-white px-5 py-3 dark:border-[#263a55] dark:bg-[#0f1b2a] min-[720px]:col-span-2 min-[1120px]:col-span-1">
+        <WeeklyProgressRing
+          submittedCount={submittedCount}
+          expectedDays={expectedDays}
+        />
+        <div className="min-w-0">
+          <p className="text-[15px] font-semibold text-[#0f172a] dark:text-foreground">
+            {submittedCount} of {expectedDays} submitted
+          </p>
+          <p className="mt-1 text-[13px] leading-5 text-[#52647a] dark:text-muted-foreground">
+            Keep it up. You&apos;re on track.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WeeklyDayMeta({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 border-[#dbe3ee] py-2 dark:border-[#263a55] min-[700px]:border-r min-[700px]:pr-8 min-[700px]:last:border-r-0">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center text-[#52647a] [&_svg]:h-5 [&_svg]:w-5 dark:text-muted-foreground">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <dt className="text-[13px] font-medium leading-5 text-[#52647a] dark:text-muted-foreground">
+          {label}
+        </dt>
+        <dd className="truncate text-[15px] font-medium leading-6 text-[#0f172a] dark:text-foreground">
+          {value}
+        </dd>
+      </div>
+    </div>
+  );
+}
+
+function WeeklyDayActivities({
+  activities,
+}: {
+  activities: DashboardActivity[];
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center gap-3">
+        <ListChecks className="h-5 w-5 text-[#0b63e5]" aria-hidden="true" />
+        <h4 className="text-[17px] font-semibold text-[#0f172a] dark:text-foreground">
+          Activities
+        </h4>
+      </div>
+      <div className="mt-4 border-t border-[#dbe3ee] dark:border-[#263a55]">
+        {activities.length ? (
+          <ul className="divide-y divide-[#e6edf6] dark:divide-[#263a55]">
+            {activities.map((activity) => (
+              <li
+                key={activity.id}
+                className="grid min-w-0 gap-3 py-4 min-[640px]:grid-cols-[minmax(0,1fr)_72px_94px] min-[640px]:items-center"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <ReportActivitySourceIcon
+                    source={activity.source}
+                    size="sm"
+                    className="weekly-report-source-icon report-pdf-source-icon"
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate text-[15px] font-semibold leading-5 text-[#0f172a] dark:text-foreground">
+                      {activity.title || "Untitled activity"}
+                    </p>
+                    <p className="mt-0.5 truncate text-[13px] leading-5 text-[#52647a] dark:text-muted-foreground">
+                      {reportActivitySourceLabel(activity.source)}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-[14px] font-medium text-[#0f172a] dark:text-foreground">
+                  {formatReportDuration(activity.durationMinutes)}
+                </div>
+                <span className="inline-flex h-7 w-fit items-center rounded-full bg-emerald-50 px-3 text-[13px] font-semibold text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300">
+                  {weeklyActivityStatusLabel(activity)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="py-5 text-[14px] leading-6 text-[#52647a] dark:text-muted-foreground">
+            No activities selected.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WeeklyReportDayCard({
+  weekDate,
+  report,
+  activityReferences,
+}: {
+  weekDate: string;
+  report?: DashboardReport | null;
+  activityReferences: SummaryActivityReferenceMap;
+}) {
+  const dayActivities = includedActivities(report ?? null);
+
+  return (
+    <section className="weekly-report-day report-pdf-card overflow-hidden rounded-[10px] border border-[#dbe3ee] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.07)] dark:border-[#263a55] dark:bg-[#0f1b2a]">
+      <div className="px-6 py-6 min-[900px]:px-7">
+        <div className="flex flex-wrap items-center gap-4">
+          <h3 className="text-[24px] font-semibold leading-tight text-[#0f172a] dark:text-foreground">
+            {formatFullWeekdayDate(weekDate)}
+          </h3>
+          <ReportStatusBadge
+            status={report ? "Submitted" : "Missing"}
+            className="h-8 px-3 text-[14px] font-semibold"
+            showIcon
+          />
+        </div>
+
+        <dl className="mt-6 grid gap-x-8 gap-y-3 border-t border-[#dbe3ee] pt-5 dark:border-[#263a55] min-[700px]:grid-cols-3">
+          <WeeklyDayMeta
+            icon={<MapPin />}
+            label="Location"
+            value={report ? titleCase(report.workLocation) : "-"}
+          />
+          <WeeklyDayMeta
+            icon={<Clock3 />}
+            label="Submitted"
+            value={report ? formatTimestamp(report.submittedAt) : "-"}
+          />
+          <WeeklyDayMeta
+            icon={<ListChecks />}
+            label="Activities"
+            value={dayActivities.length}
+          />
+        </dl>
+      </div>
+
+      <div className="grid border-t border-[#dbe3ee] dark:border-[#263a55] min-[960px]:grid-cols-[minmax(0,1fr)_minmax(360px,1.05fr)]">
+        <div className="min-w-0 px-6 py-6 dark:bg-[#0f1b2a] min-[900px]:px-7 min-[960px]:border-r min-[960px]:border-[#dbe3ee] min-[960px]:dark:border-[#263a55]">
+          <div className="flex items-center gap-3">
+            <FileText className="h-5 w-5 text-[#0b63e5]" aria-hidden="true" />
+            <h4 className="text-[17px] font-semibold text-[#0f172a] dark:text-foreground">
+              Summary
+            </h4>
+          </div>
+          <div className="mt-4 border-t border-[#dbe3ee] pt-5 text-[15px] leading-7 text-[#0f172a] dark:border-[#263a55] dark:text-foreground">
+            {report ? (
+              <SummaryRenderer
+                value={report.summary}
+                activityReferences={activityReferences}
+                emptyText="No summary recorded."
+              />
+            ) : (
+              <p className="text-[#52647a] dark:text-muted-foreground">
+                Nothing to summarize for this day.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="min-w-0 px-6 py-6 min-[900px]:px-7">
+          <WeeklyDayActivities activities={dayActivities} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WeeklyReportArchivePage({
+  state,
+  onBack,
+  onOpenReport,
+}: {
+  state: WeeklyReportArchiveState;
+  onBack: () => void;
+  onOpenReport: (
+    report: WeeklyReportSummary,
+    employee: DashboardUser,
+  ) => Promise<void>;
+}) {
+  return (
+    <main className="reference-page">
+      <button
+        className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+        onClick={onBack}
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to review dashboard
+      </button>
+      <ReportSurface className="mx-auto max-w-[980px]">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e5eaf2] pb-4 dark:border-[#263a55]">
+          <div>
+            <h1 className="text-[24px] font-semibold leading-tight text-[#101828] dark:text-foreground">
+              Saved Weekly Reports
+            </h1>
+            <p className="mt-1 text-sm text-[#52647a] dark:text-muted-foreground">
+              {userLabel(state.employee)}
+            </p>
+          </div>
+        </div>
+
+        {state.status === "loading" ? (
+          <div className="flex min-h-[220px] items-center justify-center text-center">
+            <div>
+              <Loader2 className="mx-auto h-7 w-7 animate-spin text-[#2563eb]" />
+              <p className="mt-3 text-sm font-medium text-[#52647a] dark:text-muted-foreground">
+                Loading saved weekly reports
+              </p>
+            </div>
+          </div>
+        ) : state.status === "error" ? (
+          <div className="py-8">
+            <EmptyReferenceState>{state.message}</EmptyReferenceState>
+          </div>
+        ) : state.reports.length ? (
+          <div className="mt-4 divide-y divide-[#e5eaf2] overflow-hidden rounded-[10px] border border-[#dbe3ee] dark:divide-[#263a55] dark:border-[#263a55]">
+            {state.reports.map((report) => (
+              <div
+                key={report.id}
+                className="grid gap-3 bg-white px-4 py-4 dark:bg-[#0f1b2a] min-[760px]:grid-cols-[minmax(0,1fr)_auto] min-[760px]:items-center"
+              >
+                <div className="min-w-0">
+                  <p className="text-base font-semibold text-[#0f172a] dark:text-foreground">
+                    {formatWeekRange(report.weekStart, report.weekEnd)}
+                  </p>
+                  <p className="mt-1 text-sm text-[#52647a] dark:text-muted-foreground">
+                    {report.submittedCount} of {report.expectedDays} submitted
+                    - {report.activityCount} activities - Generated{" "}
+                    {formatTimestamp(report.generatedAt)}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 rounded-[8px] bg-white px-4 text-sm font-semibold text-[#2563eb] dark:bg-[#0b1523]"
+                  onClick={() => {
+                    void onOpenReport(report, state.employee);
+                  }}
+                >
+                  View report
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-8">
+            <EmptyReferenceState>
+              No saved weekly reports yet. Generate one from the employee
+              actions menu first.
+            </EmptyReferenceState>
+          </div>
+        )}
+      </ReportSurface>
+    </main>
+  );
+}
+
 function WeeklyReportReviewPage({
   state,
   onBack,
@@ -1821,23 +2569,25 @@ function WeeklyReportReviewPage({
   onBack: () => void;
   onPrint: () => void;
 }) {
+  const [selectedWeekDate, setSelectedWeekDate] = useState<string | null>(null);
+
   if (state.status !== "ready") {
     return (
-      <main className="reference-page">
+      <main className="reference-page report-pdf-page weekly-report-pdf">
         <button
-          className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+          className="report-pdf-back mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
           onClick={onBack}
         >
           <ArrowLeft className="h-4 w-4" />
           Back to review dashboard
         </button>
-        <ReportSurface className="flex min-h-[260px] items-center justify-center">
+        <ReportSurface className="mx-auto flex min-h-[260px] max-w-[980px] items-center justify-center">
           <div className="text-center">
             {state.status === "loading" ? (
               <>
                 <Loader2 className="mx-auto h-7 w-7 animate-spin text-[#2563eb]" />
                 <h1 className="mt-4 text-lg font-semibold text-[#101828] dark:text-foreground">
-                  Generating weekly report
+                  Loading weekly report
                 </h1>
                 <p className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
                   {userLabel(state.employee)}
@@ -1846,7 +2596,7 @@ function WeeklyReportReviewPage({
             ) : (
               <>
                 <h1 className="text-lg font-semibold text-[#101828] dark:text-foreground">
-                  Unable to generate weekly report
+                  Unable to load weekly report
                 </h1>
                 <p className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
                   {state.message}
@@ -1873,30 +2623,19 @@ function WeeklyReportReviewPage({
       report,
     ]),
   );
-  const submittedCount = reports.length;
-  const expectedDays = weekDates.length;
-  const weeklyActivities: ReportPdfActivity[] = reports.flatMap((report) =>
-    includedActivities(report).map((activity) => ({
-      id: `${report.id}:${activity.id}`,
-      title: activity.title,
-      source: activity.source,
-      sourceLabel: `${formatWeekdayShortDate(
-        report.reportDate,
-      )} - ${reportActivitySourceLabel(activity.source)}`,
-      duration: formatReportDuration(activity.durationMinutes),
-      note: activity.employeeNote || activity.status || "-",
-      status: activity.status,
-    })),
-  );
-  const weeklyComments: ReportPdfComment[] = reports.flatMap((report) =>
-    visibleReviewComments(report).map((comment) => ({
-      id: `${report.id}:${comment.id}`,
-      body: comment.body,
-      meta: `${formatShortDate(report.reportDate)} - ${formatTimestamp(
-        comment.createdAt,
-      )} by ${comment.author.name ?? comment.author.email ?? "Review team"}`,
-    })),
-  );
+  const selectedDayDate =
+    selectedWeekDate && weekDates.includes(selectedWeekDate)
+      ? selectedWeekDate
+      : (weekDates[0] ?? dateInputValue(data.weekStart));
+  const selectedDayReport = reportsByDate.get(selectedDayDate);
+  const submittedCount = data.submittedCount ?? reports.length;
+  const expectedDays = data.expectedDays ?? weekDates.length;
+  const weeklyActivityCount =
+    data.activityCount ??
+    reports.reduce(
+      (count, report) => count + includedActivities(report).length,
+      0,
+    );
   const activityReferences = Object.fromEntries(
     reports.flatMap((report) =>
       report.activities.map((activity) => [
@@ -1911,96 +2650,89 @@ function WeeklyReportReviewPage({
   );
 
   return (
-    <ReportPdfDocument
-      eyebrow="Generis Weekly Report"
-      title="Weekly Report"
-      subtitle={
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span>{userLabel(data.employee)}</span>
-          <span aria-hidden="true">-</span>
-          <span>{formatWeekRange(data.weekStart, data.weekEnd)}</span>
-        </div>
-      }
-      status={{
-        label: `${submittedCount}/${expectedDays} submitted`,
-        tone:
-          submittedCount === expectedDays
-            ? "green"
-            : submittedCount > 0
-              ? "orange"
-              : "red",
-      }}
-      meta={[
-        { label: "Department", value: userDepartmentLabel(data.employee) },
-        { label: "Week", value: formatWeekRange(data.weekStart, data.weekEnd) },
-        {
-          label: "Submitted days",
-          value: `${submittedCount}/${expectedDays}`,
-        },
-        { label: "Activities", value: weeklyActivities.length },
-      ]}
-      summary={
-        <div className="space-y-3">
-          {weekDates.map((weekDate) => {
-            const report = reportsByDate.get(weekDate);
-
-            return (
-              <div
-                key={weekDate}
-                className="rounded-[8px] bg-[#f8fafc] p-3 ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
-              >
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-[#111827] dark:text-foreground">
-                    {formatWeekdayShortDate(weekDate)}
-                  </h3>
-                  <ReportStatusBadge
-                    status={report ? "Submitted" : "Missing"}
-                    className="px-2.5 py-1 text-[11px] font-semibold"
-                  />
-                </div>
-                {report ? (
-                  <SummaryRenderer
-                    value={report.summary}
-                    activityReferences={activityReferences}
-                    emptyText="No summary recorded."
-                  />
-                ) : (
-                  <p className="text-sm text-[#667085] dark:text-muted-foreground">
-                    No submitted report.
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      }
-      activities={weeklyActivities}
-      comments={weeklyComments}
-      backControl={
+    <main className="reference-page report-pdf-page weekly-report-pdf bg-[#f6f9fd] dark:bg-background">
+      <div className="mx-auto max-w-[1280px]">
         <button
-          className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+          className="report-pdf-back mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
           onClick={onBack}
         >
           <ArrowLeft className="h-4 w-4" />
           Back to review dashboard
         </button>
-      }
-      actions={
-        <Button
-          className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold text-white hover:bg-[#1d4ed8]"
-          onClick={onPrint}
-        >
-          <Download className="mr-2 h-4 w-4" />
-          Download PDF
-        </Button>
-      }
-      footer={
-        <>
-          Generated from submitted daily reports for{" "}
-          {formatWeekRange(data.weekStart, data.weekEnd)}.
-        </>
-      }
-    />
+
+        <article className="report-pdf-document weekly-report-document rounded-[12px] border border-[#dbe3ee] bg-white p-6 shadow-[0_16px_46px_rgba(15,23,42,0.08)] dark:border-[#263a55] dark:bg-[#0f1b2a] min-[900px]:p-9">
+          <header className="report-pdf-header flex flex-col gap-4 border-b border-[#dbe3ee] pb-8 dark:border-[#263a55] min-[720px]:flex-row min-[720px]:items-start min-[720px]:justify-between">
+            <div className="flex min-w-0 items-center gap-5">
+              <span className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-[12px] bg-[#eef6ff] text-[#0b63e5] dark:bg-blue-400/10 dark:text-blue-100">
+                <FileText className="h-7 w-7" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <h1 className="text-[28px] font-semibold leading-tight text-[#07152e] dark:text-foreground min-[900px]:text-[30px]">
+                  Weekly Report
+                </h1>
+                <p className="mt-1 text-[18px] font-medium leading-6 text-[#52647a] dark:text-muted-foreground">
+                  {formatWeekRange(data.weekStart, data.weekEnd)}
+                </p>
+                <p className="mt-1 text-sm text-[#64748b] dark:text-muted-foreground">
+                  {userLabel(data.employee)}
+                </p>
+              </div>
+            </div>
+
+            <div className="report-pdf-actions">
+              <Button
+                variant="outline"
+                className="h-12 rounded-[9px] bg-white px-5 text-[15px] font-semibold text-[#0b63e5] ring-1 ring-[#cbd9ea] hover:bg-[#f8fbff] dark:bg-[#0b1523] dark:ring-[#263a55]"
+                onClick={onPrint}
+              >
+                <Download className="mr-2 h-5 w-5" />
+                Download PDF
+              </Button>
+            </div>
+          </header>
+
+          <div className="report-pdf-screen-only mt-6">
+            <WeeklyReportDayTabs
+              weekDates={weekDates}
+              reportsByDate={reportsByDate}
+              selectedDate={selectedDayDate}
+              submittedCount={submittedCount}
+              expectedDays={expectedDays}
+              onSelect={setSelectedWeekDate}
+            />
+            <div className="mt-8">
+              <WeeklyReportDayCard
+                weekDate={selectedDayDate}
+                report={selectedDayReport}
+                activityReferences={activityReferences}
+              />
+            </div>
+          </div>
+
+          <div className="report-pdf-print-only mt-6 space-y-5">
+            {weekDates.map((weekDate) => (
+              <WeeklyReportDayCard
+                key={weekDate}
+                weekDate={weekDate}
+                report={reportsByDate.get(weekDate)}
+                activityReferences={activityReferences}
+              />
+            ))}
+          </div>
+
+          <footer className="report-pdf-footer mt-8 flex flex-wrap items-center justify-between gap-4 text-[14px] font-medium text-[#52647a] dark:text-muted-foreground">
+            <span className="inline-flex items-center gap-3">
+              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              Only visible to you and the employee&apos;s reviewer(s)
+            </span>
+            <span>
+              {weeklyActivityCount} activities - Generated on{" "}
+              {formatShortDate(data.generatedAt ?? new Date())}
+            </span>
+          </footer>
+        </article>
+      </div>
+    </main>
   );
 }
 

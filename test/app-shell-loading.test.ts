@@ -225,21 +225,16 @@ describe("authenticated app shell loading boundaries", () => {
   it("maps routes to stable nav keys", () => {
     expect(activeNavKey("/")).toBe("report");
     expect(activeNavKey("/reports")).toBe("reports");
-    expect(activeNavKey("/history")).toBe("reports");
     expect(activeNavKey("/review")).toBe("review");
-    expect(activeNavKey("/coo")).toBe("review");
     expect(activeNavKey("/admin")).toBe("admin");
     expect(activeNavKey("/settings")).toBe("settings");
     expect(activeNavKey("/account")).toBe("settings");
   });
 
   it("maps shell routes to stable destination skeletons", () => {
-    expect(loadingKindFromHref("/coo", "reviewer")).toBe("review");
     expect(shellPageKindFromHref("/", "employee")).toBe("daily");
     expect(shellPageKindFromHref("/reports", "employee")).toBe("reports");
-    expect(shellPageKindFromHref("/history", "employee")).toBe("reports");
     expect(shellPageKindFromHref("/review", "reviewer")).toBe("review");
-    expect(shellPageKindFromHref("/coo", "reviewer")).toBe("review");
     expect(shellPageKindFromHref("/admin", "admin")).toBe("admin");
     expect(shellPageKindFromHref("/settings#account", "employee")).toBe(
       "settings",
@@ -273,14 +268,18 @@ describe("authenticated app shell loading boundaries", () => {
   it("splits reviewer and admin navigation", () => {
     renderReferenceShell("Current page content", "reviewer");
 
-    expect(screen.getAllByRole("link", { name: "Review" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("link", { name: "Review" }).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByRole("link", { name: "Admin" })).toBeNull();
 
     cleanup();
 
     renderReferenceShell("Current page content", "admin");
 
-    expect(screen.getAllByRole("link", { name: "Review" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("link", { name: "Review" }).length,
+    ).toBeGreaterThan(0);
     expect(uniqueLinkHrefs("Admin")).toEqual(["/admin"]);
   });
 
@@ -378,9 +377,7 @@ describe("authenticated app shell loading boundaries", () => {
 
     await waitFor(() => {
       expect(uniqueLinkHrefs("Review")).toEqual(["/review?date=2026-05-19"]);
-      expect(uniqueLinkHrefs("Generis")).toEqual([
-        "/review?date=2026-05-19",
-      ]);
+      expect(uniqueLinkHrefs("Generis")).toEqual(["/review?date=2026-05-19"]);
     });
   });
 

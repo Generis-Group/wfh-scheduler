@@ -42,7 +42,32 @@ vi.mock("@/lib/services/reports", () => ({
   getWeeklyReportForEmployee: vi.fn(async () => ({
     employee: { id: "user-1", name: "Employee", role: "EMPLOYEE" },
     weekStart: "2026-05-11",
-    weekEnd: "2026-05-15",
+    weekEnd: "2026-05-17",
+    reports: []
+  })),
+  listSavedWeeklyReportsForEmployee: vi.fn(async () => ({
+    employee: { id: "user-1", name: "Employee", role: "EMPLOYEE" },
+    reports: [
+      {
+        id: "weekly-report-1",
+        weekStart: "2026-05-04",
+        weekEnd: "2026-05-10",
+        generatedAt: "2026-05-10T20:00:00.000Z",
+        submittedCount: 5,
+        expectedDays: 7,
+        activityCount: 12
+      }
+    ]
+  })),
+  getSavedWeeklyReport: vi.fn(async () => ({
+    id: "weekly-report-1",
+    employee: { id: "user-1", name: "Employee", role: "EMPLOYEE" },
+    weekStart: "2026-05-04",
+    weekEnd: "2026-05-10",
+    generatedAt: "2026-05-10T20:00:00.000Z",
+    submittedCount: 5,
+    expectedDays: 7,
+    activityCount: 12,
     reports: []
   })),
   getReportById: vi.fn(async () => ({ id: "report-1", userId: "user-1" })),
@@ -432,13 +457,17 @@ describe("route contracts", () => {
 
   it("returns a reviewer weekly report for one employee", async () => {
     const reports = await import("@/lib/services/reports");
-    const { GET } = await import("@/app/api/review/weekly-report/route");
+    const { POST } = await import("@/app/api/review/weekly-report/route");
     vi.mocked(reports.getWeeklyReportForEmployee).mockClear();
 
-    const response = await GET(
-      new Request(
-        "http://localhost/api/review/weekly-report?userId=user-1&date=2026-05-13"
-      )
+    const response = await POST(
+      new Request("http://localhost/api/review/weekly-report", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: "user-1",
+          date: "2026-05-13"
+        })
+      })
     );
 
     expect(response.status).toBe(200);
@@ -451,8 +480,54 @@ describe("route contracts", () => {
       weeklyReport: {
         employee: { id: "user-1", name: "Employee", role: "EMPLOYEE" },
         weekStart: "2026-05-11",
-        weekEnd: "2026-05-15",
+        weekEnd: "2026-05-17",
         reports: []
+      }
+    });
+  });
+
+  it("lists saved weekly reports for one employee", async () => {
+    const reports = await import("@/lib/services/reports");
+    const { GET } = await import("@/app/api/review/weekly-reports/route");
+    vi.mocked(reports.listSavedWeeklyReportsForEmployee).mockClear();
+
+    const response = await GET(
+      new Request("http://localhost/api/review/weekly-reports?userId=user-1")
+    );
+
+    expect(response.status).toBe(200);
+    expect(reports.listSavedWeeklyReportsForEmployee).toHaveBeenCalledWith(
+      "user-1",
+      { userId: "admin-1", roles: ["ADMIN"] }
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      weeklyReports: {
+        employee: { id: "user-1", name: "Employee", role: "EMPLOYEE" },
+        reports: [{ id: "weekly-report-1", submittedCount: 5 }]
+      }
+    });
+  });
+
+  it("returns one saved weekly report", async () => {
+    const reports = await import("@/lib/services/reports");
+    const { GET } = await import("@/app/api/review/weekly-reports/[id]/route");
+    vi.mocked(reports.getSavedWeeklyReport).mockClear();
+
+    const response = await GET(
+      new Request("http://localhost/api/review/weekly-reports/weekly-report-1"),
+      { params: { id: "weekly-report-1" } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(reports.getSavedWeeklyReport).toHaveBeenCalledWith(
+      "weekly-report-1",
+      { userId: "admin-1", roles: ["ADMIN"] }
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      weeklyReport: {
+        id: "weekly-report-1",
+        weekStart: "2026-05-04",
+        weekEnd: "2026-05-10"
       }
     });
   });

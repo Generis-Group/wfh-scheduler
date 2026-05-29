@@ -151,3 +151,11 @@ export const weeklyReportQuerySchema = z.object({
   date: dateStringSchema,
   userId: z.string().min(1),
 });
+
+export const weeklyReportListQuerySchema = z.object({
+  userId: z.string().min(1),
+});
+
+export const weeklyReportIdSchema = z.object({
+  id: z.string().min(1),
+});

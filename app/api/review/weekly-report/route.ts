@@ -4,14 +4,10 @@ import { normalizeUserRoles } from "@/lib/roles";
 import { getWeeklyReportForEmployee } from "@/lib/services/reports";
 import { weeklyReportQuerySchema } from "@/lib/validation";
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   try {
     const session = await requireRole(["REVIEWER", "ADMIN"]);
-    const url = new URL(request.url);
-    const query = weeklyReportQuerySchema.parse({
-      date: url.searchParams.get("date"),
-      userId: url.searchParams.get("userId"),
-    });
+    const query = weeklyReportQuerySchema.parse(await request.json());
     const weeklyReport = await getWeeklyReportForEmployee(
       query.userId,
       query.date,

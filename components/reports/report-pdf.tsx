@@ -45,8 +45,9 @@ type ReportPdfDocumentProps = {
     tone?: ReportPdfStatusTone;
   };
   meta: ReportPdfMetaItem[];
+  summaryTitle?: string;
   summary: ReactNode;
-  activities: ReportPdfActivity[];
+  activities?: ReportPdfActivity[] | null;
   comments?: ReportPdfComment[];
   backControl?: ReactNode;
   actions?: ReactNode;
@@ -72,8 +73,9 @@ export function ReportPdfDocument({
   subtitle,
   status,
   meta,
+  summaryTitle = "Summary",
   summary,
-  activities,
+  activities = [],
   comments = [],
   backControl,
   actions,
@@ -82,6 +84,8 @@ export function ReportPdfDocument({
   className,
 }: ReportPdfDocumentProps) {
   const hasReviewNotesPanel = comments.length > 0 || Boolean(screenExtras);
+  const showActivitiesSection = activities !== null;
+  const activityItems = activities ?? [];
 
   return (
     <main className={cn("reference-page report-pdf-page", className)}>
@@ -167,87 +171,89 @@ export function ReportPdfDocument({
               ))}
             </dl>
 
-            <ReportPdfSection title="Summary">
+            <ReportPdfSection title={summaryTitle}>
               <div className="report-pdf-prose text-sm leading-6 text-[#111827] dark:text-foreground">
                 {summary}
               </div>
             </ReportPdfSection>
 
-            <ReportPdfSection
-              title="Activities"
-              action={
-                activities.length ? (
-                  <span className="text-xs font-semibold text-[#667085] dark:text-muted-foreground">
-                    {activities.length} included
-                  </span>
-                ) : null
-              }
-            >
-              {activities.length ? (
-                <div className="overflow-hidden rounded-[8px] ring-1 ring-[#d9e1ec] dark:ring-[#263a55]">
-                  <table className="report-pdf-activity-table w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-[#f8fafc] text-[11px] uppercase tracking-[0.08em] text-[#667085] dark:bg-white/[0.04] dark:text-muted-foreground">
-                        <th className="px-3 py-2 font-semibold">Activity</th>
-                        <th className="hidden w-32 px-3 py-2 font-semibold min-[740px]:table-cell">
-                          Source
-                        </th>
-                        <th className="hidden w-24 px-3 py-2 font-semibold min-[840px]:table-cell">
-                          Time
-                        </th>
-                        <th className="px-3 py-2 font-semibold">Note</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#e5eaf2] dark:divide-[#263a55]">
-                      {activities.map((activity) => (
-                        <tr key={activity.id}>
-                          <td className="px-3 py-2.5 align-top">
-                            <div className="flex min-w-0 gap-2">
-                              <ReportActivitySourceIcon
-                                source={activity.source}
-                                size="sm"
-                                className="report-pdf-source-icon"
-                              />
-                              <div className="min-w-0">
-                                <div className="font-semibold leading-5 text-[#111827] dark:text-foreground">
-                                  {activity.title || "Untitled activity"}
-                                </div>
-                                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#667085] dark:text-muted-foreground min-[740px]:hidden">
-                                  <span>
-                                    {activity.sourceLabel ??
-                                      reportActivitySourceLabel(
-                                        activity.source,
-                                      )}
-                                  </span>
-                                  <span>{activity.duration}</span>
-                                  {activity.status ? (
-                                    <span>{activity.status}</span>
-                                  ) : null}
+            {showActivitiesSection ? (
+              <ReportPdfSection
+                title="Activities"
+                action={
+                  activityItems.length ? (
+                    <span className="text-xs font-semibold text-[#667085] dark:text-muted-foreground">
+                      {activityItems.length} included
+                    </span>
+                  ) : null
+                }
+              >
+                {activityItems.length ? (
+                  <div className="overflow-hidden rounded-[8px] ring-1 ring-[#d9e1ec] dark:ring-[#263a55]">
+                    <table className="report-pdf-activity-table w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-[#f8fafc] text-[11px] uppercase tracking-[0.08em] text-[#667085] dark:bg-white/[0.04] dark:text-muted-foreground">
+                          <th className="px-3 py-2 font-semibold">Activity</th>
+                          <th className="hidden w-32 px-3 py-2 font-semibold min-[740px]:table-cell">
+                            Source
+                          </th>
+                          <th className="hidden w-24 px-3 py-2 font-semibold min-[840px]:table-cell">
+                            Time
+                          </th>
+                          <th className="px-3 py-2 font-semibold">Note</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#e5eaf2] dark:divide-[#263a55]">
+                        {activityItems.map((activity) => (
+                          <tr key={activity.id}>
+                            <td className="px-3 py-2.5 align-top">
+                              <div className="flex min-w-0 gap-2">
+                                <ReportActivitySourceIcon
+                                  source={activity.source}
+                                  size="sm"
+                                  className="report-pdf-source-icon"
+                                />
+                                <div className="min-w-0">
+                                  <div className="font-semibold leading-5 text-[#111827] dark:text-foreground">
+                                    {activity.title || "Untitled activity"}
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#667085] dark:text-muted-foreground min-[740px]:hidden">
+                                    <span>
+                                      {activity.sourceLabel ??
+                                        reportActivitySourceLabel(
+                                          activity.source,
+                                        )}
+                                    </span>
+                                    <span>{activity.duration}</span>
+                                    {activity.status ? (
+                                      <span>{activity.status}</span>
+                                    ) : null}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="hidden px-3 py-2.5 align-top text-[#475467] dark:text-muted-foreground min-[740px]:table-cell">
-                            {activity.sourceLabel ??
-                              reportActivitySourceLabel(activity.source)}
-                          </td>
-                          <td className="hidden px-3 py-2.5 align-top font-medium text-[#111827] dark:text-foreground min-[840px]:table-cell">
-                            {activity.duration}
-                          </td>
-                          <td className="px-3 py-2.5 align-top text-[#475467] dark:text-muted-foreground">
-                            {activity.note || activity.status || "-"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-sm text-[#667085] dark:text-muted-foreground">
-                  No activities included.
-                </p>
-              )}
-            </ReportPdfSection>
+                            </td>
+                            <td className="hidden px-3 py-2.5 align-top text-[#475467] dark:text-muted-foreground min-[740px]:table-cell">
+                              {activity.sourceLabel ??
+                                reportActivitySourceLabel(activity.source)}
+                            </td>
+                            <td className="hidden px-3 py-2.5 align-top font-medium text-[#111827] dark:text-foreground min-[840px]:table-cell">
+                              {activity.duration}
+                            </td>
+                            <td className="px-3 py-2.5 align-top text-[#475467] dark:text-muted-foreground">
+                              {activity.note || activity.status || "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-sm text-[#667085] dark:text-muted-foreground">
+                    No activities included.
+                  </p>
+                )}
+              </ReportPdfSection>
+            ) : null}
 
             {footer ? (
               <footer className="report-pdf-footer mt-4 border-t border-[#e5eaf2] pt-3 text-xs text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">

@@ -13,7 +13,7 @@ function fallbackVariant(pathname: string | null) {
     return "admin";
   }
 
-  if (pathname?.startsWith("/review") || pathname?.startsWith("/coo")) {
+  if (pathname?.startsWith("/review")) {
     return "reviewer";
   }
 

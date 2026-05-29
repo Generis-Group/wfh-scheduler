@@ -65,29 +65,31 @@ enum EmailRunStatus {
 }
 
 model User {
-  id                   String                   @id @default(cuid())
-  name                 String?
-  email                String?                  @unique
-  emailVerified        DateTime?
-  image                String?
-  role                 UserRole                 @default(EMPLOYEE)
-  roles                UserRole[]               @default([EMPLOYEE])
-  status               UserStatus               @default(INVITED)
-  passwordHash         String?
-  mustChangePassword   Boolean                  @default(false)
-  reviewerAllDepartments Boolean                @default(false)
-  createdAt            DateTime                 @default(now())
-  updatedAt            DateTime                 @updatedAt
-  accounts             Account[]
-  sessions             Session[]
-  departments          UserDepartment[]
-  reports              DailyReport[]
-  activities           ActivityItem[]
-  comments             ReportComment[]          @relation("CommentAuthor")
-  revisions            ReportRevision[]         @relation("RevisionEditor")
-  reportReadReceipts   ReportReadReceipt[]      @relation("ReadReceiptReviewer")
-  syncRuns             SyncRun[]
-  integrationSettings  UserIntegrationSettings?
+  id                     String                   @id @default(cuid())
+  name                   String?
+  email                  String?                  @unique
+  emailVerified          DateTime?
+  image                  String?
+  role                   UserRole                 @default(EMPLOYEE)
+  roles                  UserRole[]               @default([EMPLOYEE])
+  status                 UserStatus               @default(INVITED)
+  passwordHash           String?
+  mustChangePassword     Boolean                  @default(false)
+  reviewerAllDepartments Boolean                  @default(false)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  accounts               Account[]
+  sessions               Session[]
+  departments            UserDepartment[]
+  reports                DailyReport[]
+  activities             ActivityItem[]
+  comments               ReportComment[]          @relation("CommentAuthor")
+  revisions              ReportRevision[]         @relation("RevisionEditor")
+  reportReadReceipts     ReportReadReceipt[]      @relation("ReadReceiptReviewer")
+  weeklyReports          WeeklyReport[]           @relation("WeeklyReportEmployee")
+  generatedWeeklyReports WeeklyReport[]           @relation("WeeklyReportGenerator")
+  syncRuns               SyncRun[]
+  integrationSettings    UserIntegrationSettings?
 }
 
 model Department {
@@ -150,28 +152,28 @@ model VerificationToken {
 }
 
 model UserIntegrationSettings {
-  id                    String   @id @default(cuid())
-  userId                String   @unique
-  jiraCloudId           String?
-  jiraAccountId         String?
-  googleCalendarId      String   @default("primary")
-  googleTaskListIds     String[]
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  jiraCloudId       String?
+  jiraAccountId     String?
+  googleCalendarId  String   @default("primary")
+  googleTaskListIds String[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model DailyReport {
-  id           String          @id @default(cuid())
+  id           String              @id @default(cuid())
   userId       String
-  reportDate   DateTime        @db.Date
-  workLocation WorkLocation    @default(UNKNOWN)
-  summary      String          @default("") @db.Text
-  status       ReportStatus    @default(DRAFT)
+  reportDate   DateTime            @db.Date
+  workLocation WorkLocation        @default(UNKNOWN)
+  summary      String              @default("") @db.Text
+  status       ReportStatus        @default(DRAFT)
   submittedAt  DateTime?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   activities   ActivityItem[]
   comments     ReportComment[]
   revisions    ReportRevision[]
@@ -205,21 +207,21 @@ model ActivityItem {
   user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   dailyReport       DailyReport?   @relation(fields: [dailyReportId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, reportDate, source, sourceId])
   @@index([userId, reportDate])
   @@index([userId, reportDate, source, staleAt])
   @@index([reportDate, selected, staleAt, source])
   @@index([source, sourceId])
-  @@unique([userId, reportDate, source, sourceId])
 }
 
 model ReportRevision {
-  id          String      @id @default(cuid())
-  reportId    String
-  editedById  String
-  snapshot    Json
-  createdAt   DateTime    @default(now())
-  report      DailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  editedBy    User        @relation("RevisionEditor", fields: [editedById], references: [id], onDelete: Cascade)
+  id         String      @id @default(cuid())
+  reportId   String
+  editedById String
+  snapshot   Json
+  createdAt  DateTime    @default(now())
+  report     DailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  editedBy   User        @relation("RevisionEditor", fields: [editedById], references: [id], onDelete: Cascade)
 
   @@index([reportId, createdAt])
 }
@@ -248,6 +250,27 @@ model ReportReadReceipt {
 
   @@unique([reportId, reviewerId])
   @@index([reviewerId, readAt])
+}
+
+model WeeklyReport {
+  id             String   @id @default(cuid())
+  employeeId     String
+  generatedById  String?
+  weekStart      DateTime @db.Date
+  weekEnd        DateTime @db.Date
+  snapshot       Json
+  sourceHash     String
+  submittedCount Int      @default(0)
+  activityCount  Int      @default(0)
+  generatedAt    DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  employee       User     @relation("WeeklyReportEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  generatedBy    User?    @relation("WeeklyReportGenerator", fields: [generatedById], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, weekStart])
+  @@index([employeeId, generatedAt])
+  @@index([generatedById, generatedAt])
 }
 
 model SyncRun {
