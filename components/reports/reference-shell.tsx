@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ElementType, MouseEvent, ReactNode } from "react";
 import {
   BarChart3,
+  Bug,
   ChevronDown,
   CircleUser,
   ClipboardList,
@@ -40,7 +41,7 @@ import generisLogo from "@/images/Generis_logo.png";
 
 type ShellVariant = "employee" | "reviewer" | "admin";
 
-type NavKey = "report" | "reports" | "review" | "admin" | "settings";
+type NavKey = "report" | "reports" | "review" | "admin" | "bugs" | "settings";
 
 type NavItem = {
   href: string;
@@ -81,6 +82,13 @@ const employeeNav: NavItem[] = [
     prefetch: "eager",
   },
   {
+    href: "/bugs",
+    label: "Bugs",
+    icon: Bug,
+    key: "bugs",
+    prefetch: "intent",
+  },
+  {
     href: "/settings",
     label: "Settings",
     icon: Settings,
@@ -102,6 +110,13 @@ const reviewerNav: NavItem[] = [
     label: "Settings",
     icon: Settings,
     key: "settings",
+    prefetch: "intent",
+  },
+  {
+    href: "/bugs",
+    label: "Bugs",
+    icon: Bug,
+    key: "bugs",
     prefetch: "intent",
   },
 ];
@@ -126,6 +141,13 @@ const adminNav: NavItem[] = [
     label: "Settings",
     icon: Settings,
     key: "settings",
+    prefetch: "intent",
+  },
+  {
+    href: "/bugs",
+    label: "Bugs",
+    icon: Bug,
+    key: "bugs",
     prefetch: "intent",
   },
 ];
@@ -306,7 +328,7 @@ export function ReferenceAppShell({
       mobileLogoHref,
       ...nav
         .filter((item) => item.prefetch === "eager")
-        .map((item) => getNavHref(item, rememberedDates)),
+        .map((item) => getNavHref(item, rememberedDates, currentHref)),
     ];
 
     hrefs.forEach((href) => {
@@ -404,7 +426,7 @@ export function ReferenceAppShell({
         <nav className="reference-sidebar-nav mt-6 space-y-0.5">
           {nav.map((item) => {
             const Icon = item.icon;
-            const href = getNavHref(item, rememberedDates);
+            const href = getNavHref(item, rememberedDates, currentHref);
 
             return (
               <Link
@@ -449,7 +471,7 @@ export function ReferenceAppShell({
               <nav className="hidden h-full items-center gap-1 md:flex">
                 {nav.map((item) => {
                   const Icon = item.icon;
-                  const href = getNavHref(item, rememberedDates);
+                  const href = getNavHref(item, rememberedDates, currentHref);
 
                   return (
                     <Link
@@ -564,7 +586,7 @@ export function ReferenceAppShell({
           <nav className="flex h-11 items-center gap-2 overflow-x-auto px-[clamp(14px,1.7vw,26px)] shadow-[0_-1px_0_rgba(15,23,42,0.04)] dark:shadow-[0_-1px_0_rgba(255,255,255,0.04)] md:hidden">
             {nav.map((item) => {
               const Icon = item.icon;
-              const href = getNavHref(item, rememberedDates);
+              const href = getNavHref(item, rememberedDates, currentHref);
 
               return (
                 <Link
@@ -640,17 +662,26 @@ function navForRoles(
   const nav: NavItem[] = [];
 
   if (roles.has("EMPLOYEE")) {
-    nav.push(...employeeNav.filter((item) => item.key !== "settings"));
+    nav.push(
+      ...employeeNav.filter(
+        (item) => item.key !== "settings" && item.key !== "bugs",
+      ),
+    );
   }
 
   if (roles.has("REVIEWER") || roles.has("ADMIN")) {
-    nav.push(...reviewerNav.filter((item) => item.key !== "settings"));
+    nav.push(
+      ...reviewerNav.filter(
+        (item) => item.key !== "settings" && item.key !== "bugs",
+      ),
+    );
   }
 
   if (roles.has("ADMIN")) {
     nav.push(...adminNav.filter((item) => item.key === "admin"));
   }
 
+  nav.push(employeeNav.find((item) => item.key === "bugs")!);
   nav.push(employeeNav.find((item) => item.key === "settings")!);
 
   return nav;
@@ -668,7 +699,11 @@ function getLogoHref(
   return "/";
 }
 
-function getNavHref(item: NavItem, dates: RememberedDates) {
+function getNavHref(
+  item: NavItem,
+  dates: RememberedDates,
+  currentHref?: string | null,
+) {
   if (item.key === "report" && dates.lastReportDate) {
     return `/?date=${dates.lastReportDate}`;
   }
@@ -677,7 +712,19 @@ function getNavHref(item: NavItem, dates: RememberedDates) {
     return `/review?date=${dates.lastReviewDate}`;
   }
 
+  if (item.key === "bugs") {
+    return bugReportHrefForSource(currentHref);
+  }
+
   return item.href;
+}
+
+function bugReportHrefForSource(currentHref?: string | null) {
+  if (!currentHref || currentHref.startsWith("/bugs")) {
+    return "/bugs";
+  }
+
+  return `/bugs?from=${encodeURIComponent(currentHref.slice(0, 500))}`;
 }
 
 function persistRememberedDate(
@@ -720,6 +767,10 @@ export function activeNavKey(pathname: string | null): NavKey {
     return "admin";
   }
 
+  if (path.startsWith("/bugs")) {
+    return "bugs";
+  }
+
   if (path.startsWith("/settings") || path.startsWith("/account")) {
     return "settings";
   }
@@ -738,6 +789,7 @@ export function shellPageKindFromHref(
     path.startsWith("/reports") ||
     path.startsWith("/review") ||
     path.startsWith("/admin") ||
+    path.startsWith("/bugs") ||
     path.startsWith("/settings") ||
     path.startsWith("/account")
   ) {

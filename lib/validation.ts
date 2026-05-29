@@ -119,6 +119,23 @@ export const accountProfileSchema = z.object({
     .optional(),
 });
 
+export const bugReportAttachmentSchema = z.object({
+  fileName: z.string().min(1).max(200),
+  contentType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  dataUrl: z
+    .string()
+    .max(1_200_000)
+    .regex(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/),
+  sizeBytes: z.number().int().min(1).max(900_000),
+});
+
+export const createBugReportSchema = z.object({
+  body: z.string().trim().min(1).max(5000),
+  pagePath: z.string().max(500).nullable().optional(),
+  userAgent: z.string().max(1000).nullable().optional(),
+  attachments: z.array(bugReportAttachmentSchema).max(4).default([]),
+});
+
 export const companySettingsSchema = z.object({
   jiraProjectKeys: z.array(z.string().min(1)).default([]),
 });

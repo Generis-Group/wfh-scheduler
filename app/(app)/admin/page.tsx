@@ -42,6 +42,7 @@ export default async function AdminPage() {
     <AdminUsers
       initialUsers={serialize(users)}
       initialDepartments={serialize(departments)}
+      currentUserId={session.user.id}
     />
   );
 }

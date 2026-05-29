@@ -189,6 +189,48 @@ vi.mock("@/lib/services/report-comment-emails", () => ({
   })),
 }));
 
+vi.mock("@/lib/services/bug-reports", () => ({
+  createBugReport: vi.fn(async () => ({
+    id: "bug-report-1",
+    body: "The page is blank.",
+    pagePath: "/",
+    userAgent: "Vitest",
+    createdAt: "2026-05-29T15:00:00.000Z",
+    reporter: {
+      id: "user-1",
+      name: "Employee",
+      email: "employee@generisgp.com",
+      image: null,
+    },
+    attachments: [],
+  })),
+  getVisibleBugReport: vi.fn(async () => ({
+    id: "bug-report-1",
+    body: "The page is blank.",
+    pagePath: "/",
+    userAgent: "Vitest",
+    createdAt: "2026-05-29T15:00:00.000Z",
+    reporter: {
+      id: "user-1",
+      name: "Employee",
+      email: "employee@generisgp.com",
+      image: null,
+    },
+    attachments: [
+      {
+        id: "attachment-1",
+        fileName: "screenshot.jpg",
+        contentType: "image/jpeg",
+        dataUrl: "data:image/jpeg;base64,AA==",
+        sizeBytes: 1,
+        createdAt: "2026-05-29T15:00:00.000Z",
+      },
+    ],
+  })),
+  listVisibleBugReports: vi.fn(async () => []),
+  canReviewBugReports: vi.fn(() => false),
+}));
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     user: {
@@ -410,6 +452,60 @@ describe("route contracts", () => {
       user: {
         id: "user-1",
         email: "employee@generisgp.com",
+      },
+    });
+  });
+
+  it("creates authenticated bug reports", async () => {
+    const bugReports = await import("@/lib/services/bug-reports");
+    const { POST } = await import("@/app/api/bug-reports/route");
+
+    vi.mocked(bugReports.createBugReport).mockClear();
+
+    const response = await POST(
+      new Request("http://localhost/api/bug-reports", {
+        method: "POST",
+        body: JSON.stringify({
+          body: "The page is blank after I click save.",
+          pagePath: "/",
+          userAgent: "Vitest",
+          attachments: [],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(bugReports.createBugReport).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        body: "The page is blank after I click save.",
+      }),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      bugReport: { id: "bug-report-1" },
+    });
+  });
+
+  it("returns authenticated bug report details", async () => {
+    const bugReports = await import("@/lib/services/bug-reports");
+    const { GET } = await import("@/app/api/bug-reports/[id]/route");
+
+    vi.mocked(bugReports.getVisibleBugReport).mockClear();
+
+    const response = await GET(
+      new Request("http://localhost/api/bug-reports/bug-report-1"),
+      { params: { id: "bug-report-1" } },
+    );
+
+    expect(response.status).toBe(200);
+    expect(bugReports.getVisibleBugReport).toHaveBeenCalledWith(
+      "bug-report-1",
+      { userId: "user-1", canReviewAll: false },
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      bugReport: {
+        id: "bug-report-1",
+        attachments: [{ dataUrl: "data:image/jpeg;base64,AA==" }],
       },
     });
   });

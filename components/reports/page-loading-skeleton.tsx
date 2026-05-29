@@ -7,6 +7,7 @@ export type PageLoadingKind =
   | "reports"
   | "review"
   | "admin"
+  | "bugs"
   | "settings";
 
 function LoadingBar({ className = "" }: { className?: string }) {
@@ -174,6 +175,32 @@ function AdminSkeleton() {
   );
 }
 
+function BugsSkeleton() {
+  return (
+    <>
+      <LoadingHeader titleWidth="w-44" subtitleWidth="w-96" />
+      <div className="grid items-start gap-3 min-[1120px]:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.2fr)]">
+        <LoadingCard className="min-h-[270px]">
+          <LoadingBar className="h-7 w-32 rounded-[4px]" />
+          <LoadingBar className="mt-4 h-32 rounded-[8px]" />
+          <div className="mt-4 flex justify-between gap-3">
+            <LoadingBar className="h-9 w-36 rounded-[8px]" />
+            <LoadingBar className="h-9 w-32 rounded-[8px]" />
+          </div>
+        </LoadingCard>
+        <LoadingCard className="min-h-[360px]">
+          <LoadingBar className="h-8 w-44 rounded-[4px]" />
+          <div className="mt-5 space-y-2">
+            <LoadingBar className="h-16 rounded-[8px]" />
+            <LoadingBar className="h-16 rounded-[8px]" />
+            <LoadingBar className="h-16 rounded-[8px]" />
+          </div>
+        </LoadingCard>
+      </div>
+    </>
+  );
+}
+
 function SettingsSkeleton() {
   return (
     <>
@@ -214,6 +241,10 @@ export function loadingKindFromHref(
     return "admin";
   }
 
+  if (path.endsWith("/bugs")) {
+    return "bugs";
+  }
+
   if (path.endsWith("/account")) {
     return "settings";
   }
@@ -240,6 +271,7 @@ export function PageLoadingSkeleton({
       {kind === "reports" ? <ReportsSkeleton /> : null}
       {kind === "review" ? <ReviewSkeleton /> : null}
       {kind === "admin" ? <AdminSkeleton /> : null}
+      {kind === "bugs" ? <BugsSkeleton /> : null}
       {kind === "settings" ? <SettingsSkeleton /> : null}
     </main>
   );

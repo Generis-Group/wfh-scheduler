@@ -238,6 +238,7 @@ describe("authenticated app shell loading boundaries", () => {
     expect(activeNavKey("/reports")).toBe("reports");
     expect(activeNavKey("/review")).toBe("review");
     expect(activeNavKey("/admin")).toBe("admin");
+    expect(activeNavKey("/bugs")).toBe("bugs");
     expect(activeNavKey("/settings")).toBe("settings");
     expect(activeNavKey("/account")).toBe("settings");
   });
@@ -247,6 +248,7 @@ describe("authenticated app shell loading boundaries", () => {
     expect(shellPageKindFromHref("/reports", "employee")).toBe("reports");
     expect(shellPageKindFromHref("/review", "reviewer")).toBe("review");
     expect(shellPageKindFromHref("/admin", "admin")).toBe("admin");
+    expect(shellPageKindFromHref("/bugs", "employee")).toBe("bugs");
     expect(shellPageKindFromHref("/settings#account", "employee")).toBe(
       "settings",
     );
@@ -305,7 +307,19 @@ describe("authenticated app shell loading boundaries", () => {
     expect(uniqueLinkHrefs("Reports")).toEqual(["/reports"]);
     expect(uniqueLinkHrefs("Review")).toEqual(["/review"]);
     expect(uniqueLinkHrefs("Admin")).toEqual(["/admin"]);
+    expect(uniqueLinkHrefs("Bugs")).toEqual(["/bugs?from=%2F"]);
     expect(uniqueLinkHrefs("Settings")).toEqual(["/settings"]);
+  });
+
+  it("carries the current page into bug report navigation", () => {
+    mockPathname.current = "/reports";
+    mockSearchParams.current = "date=2026-05-27";
+
+    renderReferenceShell();
+
+    expect(uniqueLinkHrefs("Bugs")).toEqual([
+      "/bugs?from=%2Freports%3Fdate%3D2026-05-27",
+    ]);
   });
 
   it("persists reviewer dates for multi-role employee shells", async () => {

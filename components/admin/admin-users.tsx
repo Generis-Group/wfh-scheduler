@@ -198,9 +198,11 @@ function userMatchesSearch(user: User, query: string) {
 export function AdminUsers({
   initialUsers,
   initialDepartments,
+  currentUserId,
 }: {
   initialUsers: User[];
   initialDepartments: Department[];
+  currentUserId?: string | null;
 }) {
   const [users, setUsers] = useState(initialUsers);
   const [departments, setDepartments] = useState(initialDepartments);
@@ -537,6 +539,48 @@ export function AdminUsers({
     return userDrafts[user.id] ?? savedDraftForUser(user);
   }
 
+  function userDisplayName(user: User) {
+    return user.name ?? user.email ?? "This user";
+  }
+
+  function assignmentErrorForUser(user: User, draft: UserDraft) {
+    const normalizedDraft = normalizeUserDraft(draft);
+    const label =
+      user.id === currentUserId ? "Your account" : userDisplayName(user);
+
+    if (
+      user.id === currentUserId &&
+      !normalizedDraft.roles.includes("ADMIN")
+    ) {
+      return "You cannot remove your own admin access.";
+    }
+
+    if (
+      normalizedDraft.roles.includes("EMPLOYEE") &&
+      normalizedDraft.employeeDepartmentIds.length === 0
+    ) {
+      return `${label} needs at least one employee department.`;
+    }
+
+    if (
+      normalizedDraft.roles.includes("REVIEWER") &&
+      !normalizedDraft.reviewerAllDepartments &&
+      normalizedDraft.reviewerDepartmentIds.length === 0
+    ) {
+      return `${label} needs reviewer scope. Select departments or all departments.`;
+    }
+
+    return null;
+  }
+
+  function roleOptionsForUser(user: User) {
+    return roleOptions.map((option) =>
+      user.id === currentUserId && option.value === "ADMIN"
+        ? { ...option, disabled: true }
+        : option,
+    );
+  }
+
   function updateUserDraft(
     user: User,
     updater: (draft: UserDraft) => UserDraft,
@@ -678,6 +722,11 @@ export function AdminUsers({
 
     try {
       const draftEntries = Object.entries(userDrafts);
+      const pendingDrafts: Array<{
+        draft: UserDraft;
+        user: User;
+        userId: string;
+      }> = [];
 
       for (const [userId, draft] of draftEntries) {
         const user = users.find((item) => item.id === userId);
@@ -687,12 +736,23 @@ export function AdminUsers({
         }
 
         const normalizedDraft = normalizeUserDraft(draft);
+        const assignmentError = assignmentErrorForUser(user, normalizedDraft);
+
+        if (assignmentError) {
+          setMessage(assignmentError);
+          return;
+        }
+
+        pendingDrafts.push({ user, draft: normalizedDraft, userId });
+      }
+
+      for (const { user, draft, userId } of pendingDrafts) {
         const saved = await updateUser(user, {
-          roles: normalizedDraft.roles,
-          role: primaryRole(normalizedDraft.roles),
-          reviewerAllDepartments: normalizedDraft.reviewerAllDepartments,
-          employeeDepartmentIds: normalizedDraft.employeeDepartmentIds,
-          reviewerDepartmentIds: normalizedDraft.reviewerDepartmentIds,
+          roles: draft.roles,
+          role: primaryRole(draft.roles),
+          reviewerAllDepartments: draft.reviewerAllDepartments,
+          employeeDepartmentIds: draft.employeeDepartmentIds,
+          reviewerDepartmentIds: draft.reviewerDepartmentIds,
         });
 
         if (!saved) {
@@ -921,7 +981,7 @@ export function AdminUsers({
 
                       <div className="mt-2 grid gap-1.5 min-[900px]:grid-cols-[minmax(180px,0.64fr)_minmax(0,1fr)_minmax(0,1fr)]">
                         <MultiSelect
-                          options={roleOptions}
+                          options={roleOptionsForUser(user)}
                           value={draftRoles}
                           onChange={(nextRoles) =>
                             updateUserRoleDraft(user, nextRoles)

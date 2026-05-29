@@ -74,6 +74,7 @@ describe("AdminUsers", () => {
       <AdminUsers
         initialUsers={initialUsers}
         initialDepartments={initialDepartments}
+        currentUserId="employee-1"
       />,
     );
 
@@ -131,6 +132,7 @@ describe("AdminUsers", () => {
       <AdminUsers
         initialUsers={initialUsers}
         initialDepartments={initialDepartments}
+        currentUserId="employee-1"
       />,
     );
 
@@ -145,6 +147,10 @@ describe("AdminUsers", () => {
       screen.getByLabelText("Employee departments for Alex Employee"),
     );
     fireEvent.click(screen.getByRole("option", { name: "Operations" }));
+    fireEvent.click(screen.getByLabelText("Reviewer scope for Alex Employee"));
+    fireEvent.click(
+      screen.getAllByRole("option", { name: "Operations" }).at(-1)!,
+    );
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByText("Employee, Reviewer, Admin")).toBeTruthy();
@@ -161,6 +167,91 @@ describe("AdminUsers", () => {
       "dept-engineering",
       "dept-operations",
     ]);
-    expect(request.reviewerDepartmentIds).toEqual([]);
+    expect(request.reviewerDepartmentIds).toEqual(["dept-operations"]);
+  });
+
+  it("requires reviewer scope before saving reviewer assignments", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <AdminUsers
+        initialUsers={initialUsers}
+        initialDepartments={initialDepartments}
+        currentUserId="employee-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Roles for Alex Employee"));
+    fireEvent.click(screen.getByRole("option", { name: "Reviewer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        "Your account needs reviewer scope. Select departments or all departments.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("keeps assignment drafts while paging through team members", () => {
+    const manyUsers = [
+      ...initialUsers,
+      ...Array.from({ length: 9 }, (_, index) => ({
+        id: `employee-extra-${index}`,
+        name: `Extra Employee ${index}`,
+        email: `extra${index}@generisgp.com`,
+        role: "EMPLOYEE" as const,
+        roles: ["EMPLOYEE" as const],
+        status: "ACTIVE" as const,
+        reviewerAllDepartments: false,
+        departments: [
+          {
+            departmentId: "dept-engineering",
+            role: "EMPLOYEE" as const,
+            department: initialDepartments[0],
+          },
+        ],
+      })),
+    ];
+
+    render(
+      <AdminUsers
+        initialUsers={manyUsers}
+        initialDepartments={initialDepartments}
+        currentUserId="employee-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Roles for Alex Employee"));
+    fireEvent.click(screen.getByRole("option", { name: "Reviewer" }));
+    fireEvent.click(screen.getByLabelText("Reviewer scope for Alex Employee"));
+    fireEvent.click(screen.getByRole("option", { name: "All departments" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Next team member page" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Previous team member page" }),
+    );
+
+    expect(screen.getByText("Employee, Reviewer, Admin")).toBeTruthy();
+    expect(screen.getByText("All departments")).toBeTruthy();
+  });
+
+  it("does not allow the current admin to remove their own admin role", () => {
+    render(
+      <AdminUsers
+        initialUsers={initialUsers}
+        initialDepartments={initialDepartments}
+        currentUserId="employee-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Roles for Alex Employee"));
+
+    expect(
+      (screen.getByRole("option", { name: "Admin" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 });

@@ -13,11 +13,11 @@ type Context = {
 
 export async function PATCH(request: Request, { params }: Context) {
   try {
-    await requireRole(["ADMIN"]);
+    const session = await requireRole(["ADMIN"]);
     const input = updateUserSchema.parse(await request.json());
     const user = await withServerTiming(
       "api:admin:update-user",
-      () => updateAppUser(params.id, input),
+      () => updateAppUser(params.id, input, { actorUserId: session.user.id }),
       { userId: params.id },
     );
     revalidateAdminRoutes();

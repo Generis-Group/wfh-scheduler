@@ -88,6 +88,7 @@ model User {
   reportReadReceipts     ReportReadReceipt[]      @relation("ReadReceiptReviewer")
   weeklyReports          WeeklyReport[]           @relation("WeeklyReportEmployee")
   generatedWeeklyReports WeeklyReport[]           @relation("WeeklyReportGenerator")
+  bugReports             BugReport[]              @relation("BugReportReporter")
   syncRuns               SyncRun[]
   integrationSettings    UserIntegrationSettings?
 }
@@ -250,6 +251,33 @@ model ReportReadReceipt {
 
   @@unique([reportId, reviewerId])
   @@index([reviewerId, readAt])
+}
+
+model BugReport {
+  id          String                @id @default(cuid())
+  reporterId  String
+  body        String                @db.Text
+  pagePath    String?
+  userAgent   String?               @db.Text
+  createdAt   DateTime              @default(now())
+  reporter    User                  @relation("BugReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  attachments BugReportAttachment[]
+
+  @@index([createdAt])
+  @@index([reporterId, createdAt])
+}
+
+model BugReportAttachment {
+  id          String    @id @default(cuid())
+  bugReportId String
+  fileName    String
+  contentType String
+  dataUrl     String    @db.Text
+  sizeBytes   Int
+  createdAt   DateTime  @default(now())
+  bugReport   BugReport @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+
+  @@index([bugReportId])
 }
 
 model WeeklyReport {

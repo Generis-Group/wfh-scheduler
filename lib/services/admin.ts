@@ -16,6 +16,9 @@ type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 type CreateUserInput = z.infer<typeof createUserSchema>;
 type UpdateUserInput = z.infer<typeof updateUserSchema>;
 type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+type UpdateAppUserOptions = {
+  actorUserId?: string | null;
+};
 
 export const adminUserSelect = {
   id: true,
@@ -34,6 +37,15 @@ function generateTemporaryPassword() {
 
 function uniqueIds(ids?: string[]) {
   return [...new Set(ids ?? [])];
+}
+
+function membershipIds(
+  memberships: Array<{ departmentId: string; role?: string | null }>,
+  role: "EMPLOYEE" | "REVIEWER",
+) {
+  return memberships
+    .filter((membership) => (membership.role ?? "EMPLOYEE") === role)
+    .map((membership) => membership.departmentId);
 }
 
 function resolveLegacyDepartmentIds(input: {
@@ -141,7 +153,11 @@ export async function createAppUser(input: CreateUserInput) {
   return { user, temporaryPassword, emailDelivery };
 }
 
-export async function updateAppUser(userId: string, input: UpdateUserInput) {
+export async function updateAppUser(
+  userId: string,
+  input: UpdateUserInput,
+  options: UpdateAppUserOptions = {},
+) {
   const { departmentIds, employeeDepartmentIds, reviewerDepartmentIds, reviewerAllDepartments, role, roles, ...userInput } = input;
 
   return prisma.$transaction(async (tx) => {
@@ -150,7 +166,13 @@ export async function updateAppUser(userId: string, input: UpdateUserInput) {
       select: {
         role: true,
         roles: true,
-        reviewerAllDepartments: true
+        reviewerAllDepartments: true,
+        departments: {
+          select: {
+            departmentId: true,
+            role: true
+          }
+        }
       }
     });
     const rolesChanged = roles !== undefined || role !== undefined;
@@ -166,6 +188,48 @@ export async function updateAppUser(userId: string, input: UpdateUserInput) {
     const nextReviewerAllDepartments = canBeReviewer
       ? reviewerAllDepartments ?? existingUser.reviewerAllDepartments
       : false;
+    const assignmentsChanged =
+      rolesChanged ||
+      departmentIds !== undefined ||
+      employeeDepartmentIds !== undefined ||
+      reviewerDepartmentIds !== undefined ||
+      reviewerAllDepartments !== undefined;
+    const nextEmployeeDepartmentIds = hasUserRole({ roles: nextRoles }, "EMPLOYEE")
+      ? uniqueIds(
+          legacyDepartmentIds.employeeDepartmentIds ??
+            membershipIds(existingUser.departments, "EMPLOYEE"),
+        )
+      : [];
+    const nextReviewerDepartmentIds = canBeReviewer
+      ? uniqueIds(
+          legacyDepartmentIds.reviewerDepartmentIds ??
+            membershipIds(existingUser.departments, "REVIEWER"),
+        )
+      : [];
+
+    if (options.actorUserId === userId && !nextRoles.includes("ADMIN")) {
+      throw new HttpError(400, "You cannot remove your own admin access.");
+    }
+
+    if (
+      assignmentsChanged &&
+      nextRoles.includes("EMPLOYEE") &&
+      nextEmployeeDepartmentIds.length === 0
+    ) {
+      throw new HttpError(422, "Employees need at least one department.");
+    }
+
+    if (
+      assignmentsChanged &&
+      canBeReviewer &&
+      !nextReviewerAllDepartments &&
+      nextReviewerDepartmentIds.length === 0
+    ) {
+      throw new HttpError(
+        422,
+        "Reviewers need a reviewer scope. Select departments or all departments.",
+      );
+    }
 
     const user = await tx.user.update({
       where: { id: userId },
@@ -181,10 +245,6 @@ export async function updateAppUser(userId: string, input: UpdateUserInput) {
       await tx.userDepartment.deleteMany({
         where: { userId, role: "EMPLOYEE" }
       });
-
-      const nextEmployeeDepartmentIds = hasUserRole({ roles: nextRoles }, "EMPLOYEE")
-        ? uniqueIds(legacyDepartmentIds.employeeDepartmentIds)
-        : [];
 
       if (nextEmployeeDepartmentIds.length > 0) {
         await tx.userDepartment.createMany({
@@ -202,10 +262,6 @@ export async function updateAppUser(userId: string, input: UpdateUserInput) {
       await tx.userDepartment.deleteMany({
         where: { userId, role: "REVIEWER" }
       });
-
-      const nextReviewerDepartmentIds = canBeReviewer
-        ? uniqueIds(legacyDepartmentIds.reviewerDepartmentIds)
-        : [];
 
       if (nextReviewerDepartmentIds.length > 0) {
         await tx.userDepartment.createMany({
