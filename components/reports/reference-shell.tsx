@@ -34,6 +34,7 @@ import {
   serverDataStaleEvent,
 } from "@/lib/client-cache-invalidation";
 import { clampReportDateToToday, todayDateString } from "@/lib/dates";
+import { startClientTiming } from "@/lib/performance";
 import { cn, initials } from "@/lib/utils";
 import generisLogo from "@/images/Generis_logo.png";
 
@@ -165,6 +166,9 @@ export function ReferenceAppShell({
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const prefetchedHrefsRef = useRef<Set<string>>(new Set());
+  const routeTimingRef = useRef<ReturnType<typeof startClientTiming> | null>(
+    null,
+  );
   const searchParamString = searchParams?.toString() ?? "";
   const currentHref = `${pathname}${searchParamString ? `?${searchParamString}` : ""}`;
   const routeDateParam = searchParams?.get("date") ?? null;
@@ -271,6 +275,8 @@ export function ReferenceAppShell({
   useEffect(() => {
     setPendingNavigation(null);
     resetContentScroll(contentScrollRef.current);
+    routeTimingRef.current?.({ status: "committed" });
+    routeTimingRef.current = null;
   }, [active, pathname, searchParamString]);
 
   useEffect(() => {
@@ -359,6 +365,10 @@ export function ReferenceAppShell({
         }
 
         resetContentScroll(contentScrollRef.current);
+        routeTimingRef.current = startClientTiming("shell:route-navigation", {
+          from: currentHref,
+          to: href,
+        });
         setPendingNavigation({
           activeKey: activeKey ?? null,
           pageKind: shellPageKindFromHref(href, variant),

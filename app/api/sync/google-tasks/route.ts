@@ -1,18 +1,6 @@
-import { requireSession } from "@/lib/access";
-import { revalidateReportRoutes } from "@/lib/cache-invalidation";
-import { handleRouteError, json } from "@/lib/http";
 import { syncGoogleTasks } from "@/lib/services/sync";
-import { syncSchema } from "@/lib/validation";
+import { syncRouteResponse } from "@/lib/sync-route-response";
 
 export async function POST(request: Request) {
-  try {
-    const session = await requireSession();
-    const input = syncSchema.parse(await request.json());
-    const result = await syncGoogleTasks(session.user.id, input.date);
-    revalidateReportRoutes();
-
-    return json(result);
-  } catch (error) {
-    return handleRouteError(error);
-  }
+  return syncRouteResponse(request, syncGoogleTasks);
 }

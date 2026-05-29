@@ -52,14 +52,16 @@ import {
   ReportStatusBadge,
   ReportSurface,
 } from "@/components/reports/report-ui";
-import {
-  SummaryEditor,
-  summaryActivityReferenceDragType,
-  type SummaryActivityReferenceDragPayload,
-  type SummaryEditorHandle,
-  type SummarySnapshot,
+import { LazySummaryEditor } from "@/components/reports/lazy-summary-editor";
+import type {
+  SummaryEditorHandle,
+  SummarySnapshot,
 } from "@/components/reports/summary-editor";
 import { dateOnlyString } from "@/lib/date-only";
+import {
+  readServerSentEvents,
+  responseErrorMessage,
+} from "@/lib/client-requests";
 import {
   markServerDataStale,
   refreshStaleServerData,
@@ -71,6 +73,12 @@ import {
   removeSummaryActivityReferences,
   summaryActivityReferenceHref,
 } from "@/lib/summary-format";
+import {
+  summaryActivityReferenceDragType,
+  type SummaryActivityReferenceDragPayload,
+} from "@/lib/summary-drag";
+import { startClientTiming } from "@/lib/performance";
+import type { SyncProgressEvent } from "@/lib/services/sync";
 import { cn } from "@/lib/utils";
 
 type ActivitySource = "JIRA" | "GOOGLE_CALENDAR" | "GOOGLE_TASKS" | "MANUAL";
@@ -185,6 +193,17 @@ type ActivityDragPreview = {
   x: number;
   y: number;
 };
+type ImportProgress = {
+  provider: SyncProviderKey;
+  message: string;
+  stage?: SyncProgressEvent["stage"];
+};
+type SyncResponseBody = {
+  importedCount: number;
+  skippedCount: number;
+  staleCount?: number;
+  activities?: Activity[];
+};
 
 function toDate(value?: string | Date | null) {
   if (!value) {
@@ -239,11 +258,6 @@ function workLocationLabel(value: WorkLocation) {
     workLocationOptions.find((option) => option.value === value)?.label ??
     "Unspecified"
   );
-}
-
-async function responseErrorMessage(response: Response, fallback: string) {
-  const body = await response.json().catch(() => null);
-  return body && typeof body.error === "string" ? body.error : fallback;
 }
 
 function statusTone(
@@ -365,6 +379,9 @@ export function DailyReportApp({
   );
   const [report, setReport] = useState(initialReport);
   const [summary, setSummary] = useState(() => initialSummary);
+  const [summaryEditorSeed, setSummaryEditorSeed] = useState(
+    () => initialSummary,
+  );
   const [workLocation, setWorkLocation] = useState<WorkLocation>(
     initialReport.workLocation,
   );
@@ -386,6 +403,9 @@ export function DailyReportApp({
   const [locationMenuOpen, setLocationMenuOpen] = useState(false);
   const [importingProvider, setImportingProvider] =
     useState<SyncProviderKey | null>(null);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(
+    null,
+  );
   const [pendingDateControl, setPendingDateControl] =
     useState<ReportDateControl | null>(null);
   const [activityPage, setActivityPage] = useState(1);
@@ -402,7 +422,8 @@ export function DailyReportApp({
   );
   const [activityDragPreview, setActivityDragPreview] =
     useState<ActivityDragPreview | null>(null);
-  const summaryEditorRef = useRef<SummaryEditorHandle>(null);
+  const summaryEditorRef = useRef<SummaryEditorHandle | null>(null);
+  const pendingSummarySnapshotRef = useRef<SummarySnapshot | null>(null);
   const locationMenuRef = useRef<HTMLDivElement | null>(null);
   const importMenuRef = useRef<HTMLDivElement | null>(null);
   const activityMenuRef = useRef<HTMLDivElement | null>(null);
@@ -472,6 +493,7 @@ export function DailyReportApp({
 
     setReport(initialReport);
     setSummary(nextSummary);
+    setSummaryEditorSeed(nextSummary);
     setWorkLocation(initialReport.workLocation);
     setActivities(initialReport.activities);
     setDeletedActivityIds([]);
@@ -481,6 +503,7 @@ export function DailyReportApp({
     setLocationMenuOpen(false);
     setMessage(null);
     setAutoSaveStatus("saved");
+    setImportProgress(null);
     setActivityPage(1);
     setActivitySearch("");
     setActivityDragPreview(null);
@@ -492,6 +515,7 @@ export function DailyReportApp({
     googleTaskSearchAbortRef.current?.abort();
     googleTaskSearchAbortRef.current = null;
     setPendingDateControl(null);
+    pendingSummarySnapshotRef.current = null;
   }, [initialReport, date, reportDate]);
 
   useEffect(() => {
@@ -607,10 +631,34 @@ export function DailyReportApp({
     );
   }
 
+  const setSummaryEditorSnapshot = useCallback((snapshot: SummarySnapshot) => {
+    if (summaryEditorRef.current) {
+      summaryEditorRef.current.setSnapshot(snapshot);
+      return;
+    }
+
+    pendingSummarySnapshotRef.current = snapshot;
+    setSummaryEditorSeed(snapshot.summary);
+  }, []);
+
+  const setSummaryEditorHandle = useCallback(
+    (handle: SummaryEditorHandle | null) => {
+      summaryEditorRef.current = handle;
+
+      if (!handle || !pendingSummarySnapshotRef.current) {
+        return;
+      }
+
+      const pendingSnapshot = pendingSummarySnapshotRef.current;
+      pendingSummarySnapshotRef.current = null;
+      handle.setSnapshot(pendingSnapshot);
+    },
+    [],
+  );
+
   function removeSummaryReferencesForActivity(activityId: string) {
-    const snapshot = summaryEditorRef.current?.getSnapshot() ?? {
-      summary,
-    };
+    const snapshot = summaryEditorRef.current?.getSnapshot() ??
+      pendingSummarySnapshotRef.current ?? { summary };
     const nextSummary = removeSummaryActivityReferences(
       snapshot.summary,
       activityId,
@@ -621,7 +669,7 @@ export function DailyReportApp({
     }
 
     const nextSnapshot = { summary: nextSummary };
-    summaryEditorRef.current?.setSnapshot(nextSnapshot);
+    setSummaryEditorSnapshot(nextSnapshot);
     handleSummaryChange(nextSnapshot);
   }
 
@@ -790,15 +838,13 @@ export function DailyReportApp({
 
   const captureCurrentDraftSnapshot = useCallback(
     ({ syncState = true }: { syncState?: boolean } = {}) => {
-      const editorSnapshot = summaryEditorRef.current?.getSnapshot();
+      const editorSnapshot =
+        summaryEditorRef.current?.getSnapshot() ??
+        pendingSummarySnapshotRef.current;
       const currentSummary = editorSnapshot?.summary ?? summary;
       const snapshot = draftSnapshotFor(currentSummary);
 
-      if (
-        syncState &&
-        editorSnapshot &&
-        currentSummary !== summary
-      ) {
+      if (syncState && editorSnapshot && currentSummary !== summary) {
         setSummary(currentSummary);
       }
 
@@ -864,7 +910,7 @@ export function DailyReportApp({
     setActivities(nextReport.activities);
     setDeletedActivityIds([]);
     setWorkLocation(nextReport.workLocation);
-    summaryEditorRef.current?.setSnapshot({ summary: nextSummary });
+    setSummaryEditorSnapshot({ summary: nextSummary });
   }
 
   const draftSaveRequest = useCallback(
@@ -906,6 +952,9 @@ export function DailyReportApp({
     const generation = saveGenerationRef.current;
     const savedSignature = snapshot.signature;
     const requestDetails = draftSaveRequest(snapshot);
+    const finishTiming = startClientTiming("daily:autosave", {
+      hasReport: Boolean(snapshot.reportId),
+    });
     setAutoSaveStatus("saving");
     const request = (async (): Promise<Report | null> => {
       try {
@@ -927,6 +976,7 @@ export function DailyReportApp({
         applySavedReport(nextReport, false, savedSignature);
         markServerDataStale();
         setAutoSaveStatus("saved");
+        finishTiming({ status: "success" });
 
         return nextReport;
       } catch {
@@ -934,6 +984,7 @@ export function DailyReportApp({
           setAutoSaveStatus("error");
         }
 
+        finishTiming({ status: "error" });
         return null;
       }
     })();
@@ -1027,6 +1078,9 @@ export function DailyReportApp({
       return;
     }
 
+    const finishTiming = startClientTiming("daily:submit", {
+      status: reportRef.current.status,
+    });
     const wasPublished = reportRef.current.status === "SUBMITTED";
     flushSync(() => {
       setBusyAction("submit");
@@ -1040,6 +1094,7 @@ export function DailyReportApp({
 
       if (!saved?.id) {
         setMessage("Save failed. Try again before submitting.");
+        finishTiming({ status: "save-failed" });
         return;
       }
 
@@ -1051,12 +1106,15 @@ export function DailyReportApp({
         setMessage(
           (await submitResponse.json()).error ?? "Unable to submit report.",
         );
+        finishTiming({ status: "submit-failed" });
         return;
       }
 
       const nextReport = (await submitResponse.json()).report as Report;
       const submittedSummary =
-        summaryEditorRef.current?.getSnapshot().summary ?? summary;
+        summaryEditorRef.current?.getSnapshot().summary ??
+        pendingSummarySnapshotRef.current?.summary ??
+        summary;
       applySavedReport(
         nextReport,
         true,
@@ -1075,7 +1133,9 @@ export function DailyReportApp({
       setMessage(
         wasPublished ? "Resubmitted for review." : "Submitted for review.",
       );
+      finishTiming({ status: "success" });
     } catch {
+      finishTiming({ status: "error" });
       setMessage(
         "Unable to submit report. Check your connection and try again.",
       );
@@ -1097,6 +1157,7 @@ export function DailyReportApp({
       return;
     }
 
+    const finishTiming = startClientTiming("daily:delete-draft");
     flushSync(() => {
       setBusyAction("delete");
       setMessage(null);
@@ -1112,6 +1173,7 @@ export function DailyReportApp({
 
       if (!response.ok) {
         setMessage((await response.json()).error ?? "Unable to delete draft.");
+        finishTiming({ status: "delete-failed" });
         return;
       }
 
@@ -1145,11 +1207,13 @@ export function DailyReportApp({
       setWorkLocation("UNKNOWN");
       setActivities([]);
       setDeletedActivityIds([]);
-      summaryEditorRef.current?.setSnapshot({ summary: "" });
+      setSummaryEditorSnapshot({ summary: "" });
       markServerDataStale();
       setAutoSaveStatus("saved");
       setMessage("Draft deleted.");
+      finishTiming({ status: "success" });
     } catch {
+      finishTiming({ status: "error" });
       setMessage(
         "Unable to delete draft. Check your connection and try again.",
       );
@@ -1164,15 +1228,24 @@ export function DailyReportApp({
     }
 
     const providerLabel = syncProviderLabels[provider];
+    const finishTiming = startClientTiming("daily:sync", { provider });
     flushSync(() => {
       setImportingProvider(provider);
+      setImportProgress({
+        provider,
+        stage: "starting",
+        message: `Starting ${providerLabel} import...`,
+      });
       setMessage(null);
     });
 
     try {
       const response = await fetch(`/api/sync/${provider}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Accept: "text/event-stream, application/json",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ date }),
       });
 
@@ -1183,36 +1256,80 @@ export function DailyReportApp({
             `${providerLabel} import failed.`,
           ),
         );
+        finishTiming({ status: "request-failed" });
         return;
       }
 
-      const result = (await response.json()) as {
-        importedCount: number;
-        skippedCount: number;
-        staleCount?: number;
-        activities?: Activity[];
-      };
+      let result: SyncResponseBody | null = null;
+      const contentType = response.headers.get("content-type") ?? "";
+
+      if (contentType.includes("text/event-stream")) {
+        await readServerSentEvents(response, {
+          onEvent: (event, data) => {
+            if (event === "progress" && data && typeof data === "object") {
+              const progress = data as SyncProgressEvent;
+              setImportProgress({
+                provider,
+                stage: progress.stage,
+                message: progress.message,
+              });
+              return;
+            }
+
+            if (event === "result" && data && typeof data === "object") {
+              result = data as SyncResponseBody;
+              return;
+            }
+
+            if (event === "error" && data && typeof data === "object") {
+              const message =
+                typeof (data as { message?: unknown }).message === "string"
+                  ? (data as { message: string }).message
+                  : `${providerLabel} import failed.`;
+
+              throw new Error(message);
+            }
+          },
+        });
+      } else {
+        result = (await response.json()) as SyncResponseBody;
+      }
+
+      const syncResult = result;
+
+      if (!syncResult) {
+        throw new Error(`${providerLabel} import did not return results.`);
+      }
+
       setActivities((current) =>
         mergeSyncedActivities(
           current,
           syncProviderSources[provider],
-          result.activities ?? [],
+          syncResult.activities ?? [],
         ),
       );
       setActivityPage(1);
       markServerDataStale();
 
       setMessage(
-        result.importedCount > 0
-          ? `${providerLabel} import complete: ${result.importedCount} work item${result.importedCount === 1 ? "" : "s"} found${result.staleCount ? `, ${result.staleCount} stale item${result.staleCount === 1 ? "" : "s"} hidden` : ""}.`
+        syncResult.importedCount > 0
+          ? `${providerLabel} import complete: ${syncResult.importedCount} work item${syncResult.importedCount === 1 ? "" : "s"} found${syncResult.staleCount ? `, ${syncResult.staleCount} stale item${syncResult.staleCount === 1 ? "" : "s"} hidden` : ""}.`
           : `No ${providerLabel.toLowerCase()} work items found for this date.`,
       );
-    } catch {
+      finishTiming({
+        status: "success",
+        importedCount: syncResult.importedCount,
+      });
+    } catch (error) {
+      finishTiming({ status: "error" });
       setMessage(
-        `${providerLabel} import failed. Check your connection and try again.`,
+        error instanceof Error && error.message
+          ? error.message
+          : `${providerLabel} import failed. Check your connection and try again.`,
       );
     } finally {
       setImportingProvider(null);
+      setImportProgress(null);
     }
   }
 
@@ -1526,6 +1643,10 @@ export function DailyReportApp({
       return;
     }
 
+    const finishTiming = startClientTiming("daily:date-navigation", {
+      from: reportDate,
+      to: targetDate,
+    });
     flushSync(() => {
       setPendingDateControl(control);
     });
@@ -1537,11 +1658,13 @@ export function DailyReportApp({
     if (needsSave && !saved) {
       setPendingDateControl(null);
       setMessage("Save failed. Stay on this date and try again.");
+      finishTiming({ status: "save-failed" });
       return;
     }
 
     refreshStaleServerData(router);
     router.push(`/?date=${targetDate}`);
+    finishTiming({ status: "push" });
   }
 
   function selectWorkLocation(nextLocation: WorkLocation) {
@@ -1729,9 +1852,13 @@ export function DailyReportApp({
                   ) : (
                     <Download className="mr-2 h-4 w-4" />
                   )}
-                  {importingProvider
-                    ? `Importing ${syncProviderLabels[importingProvider]}...`
-                    : "Import"}
+                  <span className="max-w-[190px] truncate">
+                    {importProgress
+                      ? importProgress.message
+                      : importingProvider
+                        ? `Importing ${syncProviderLabels[importingProvider]}...`
+                        : "Import"}
+                  </span>
                   <ChevronDown
                     className={cn("ml-2 h-4 w-4", isImporting && "opacity-0")}
                     aria-hidden="true"
@@ -2046,9 +2173,9 @@ export function DailyReportApp({
                 Summary
               </h2>
             </div>
-            <SummaryEditor
-              ref={summaryEditorRef}
-              initialSummary={editorSummaryForReport(initialReport)}
+            <LazySummaryEditor
+              ref={setSummaryEditorHandle}
+              initialSummary={summaryEditorSeed}
               resetKey={`${date}:${initialReport.id}:${initialReport.updatedAt ?? ""}`}
               activityReferences={activityReferences}
               onChange={handleSummaryChange}

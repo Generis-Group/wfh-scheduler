@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { AppShellLoadingFallback } from "@/components/reports/app-shell-loading-fallback";
 import { ReferenceAppShell } from "@/components/reports/reference-shell";
 import { auth } from "@/lib/auth";
+import { withServerTiming } from "@/lib/performance";
 import { prisma } from "@/lib/prisma";
 import { hasUserRole, roleListLabel } from "@/lib/roles";
 
@@ -19,7 +20,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 }
 
 async function AuthenticatedAppShell({ children }: { children: ReactNode }) {
-  const session = await auth();
+  const session = await withServerTiming("app-shell:auth", () => auth());
 
   if (!session?.user) {
     redirect("/login");
@@ -39,17 +40,22 @@ async function AuthenticatedAppShell({ children }: { children: ReactNode }) {
     shellVariant = hasUserRole(session.user, "ADMIN") ? "admin" : "reviewer";
   }
 
-  const shellUser = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { image: true },
-  });
+  const shellUser = session.user.image
+    ? null
+    : await withServerTiming("app-shell:profile-image", () =>
+        prisma.user.findUnique({
+          where: { id: session.user.id },
+          select: { image: true },
+        }),
+      );
+  const profileImage = session.user.image ?? shellUser?.image ?? null;
 
   return (
     <ReferenceAppShell
       variant={shellVariant}
       displayName={session.user.name ?? session.user.email ?? "User"}
       userEmail={session.user.email}
-      profileImage={shellUser?.image ?? session.user.image}
+      profileImage={profileImage}
       userRole={roleListLabel(session.user)}
       userRoles={session.user.roles}
       mustChangePassword={session.user.mustChangePassword}

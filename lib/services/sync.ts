@@ -20,15 +20,12 @@ import {
   normalizeJiraIssueDay,
   type JiraIssueActivityType,
   type JiraIssueDayEvidence,
-  type NormalizedActivity
+  type NormalizedActivity,
 } from "@/lib/normalizers";
 import { prisma } from "@/lib/prisma";
 import { upsertImportedActivities } from "@/lib/services/activity";
 import { getCompanySettings } from "@/lib/services/company-settings";
-import {
-  createReportRevision,
-  getReportById,
-} from "@/lib/services/reports";
+import { createReportRevision, getReportById } from "@/lib/services/reports";
 
 type JiraIssue = {
   id: string;
@@ -98,14 +95,35 @@ type JiraChangelog = NonNullable<JiraChangelogResponse["values"]>[number];
 type JiraComment = NonNullable<JiraCommentResponse["comments"]>[number];
 type JiraConnection = Awaited<ReturnType<typeof getJiraConnection>>;
 type GoogleCalendarService = calendar_v3.Calendar;
-type GoogleCalendarEventListParams = Omit<calendar_v3.Params$Resource$Events$List, "calendarId">;
+type GoogleCalendarEventListParams = Omit<
+  calendar_v3.Params$Resource$Events$List,
+  "calendarId"
+>;
 type GoogleTasksService = tasks_v1.Tasks;
-type GoogleTaskListParams = Omit<tasks_v1.Params$Resource$Tasks$List, "tasklist">;
+type GoogleTaskListParams = Omit<
+  tasks_v1.Params$Resource$Tasks$List,
+  "tasklist"
+>;
 type SyncResult = {
   importedCount: number;
   skippedCount: number;
   staleCount: number;
   activities: ActivityItem[];
+};
+export type SyncProgressStage =
+  | "starting"
+  | "connecting"
+  | "finding"
+  | "saving"
+  | "complete";
+export type SyncProgressEvent = {
+  stage: SyncProgressStage;
+  message: string;
+  current?: number;
+  total?: number;
+};
+type SyncOptions = {
+  onProgress?: (event: SyncProgressEvent) => void | Promise<void>;
 };
 export type GoogleTaskSuggestion = {
   taskId: string;
@@ -134,7 +152,9 @@ function jiraDateLiteral(value: string) {
 }
 
 function jiraProjectClause(projectKeys: string[]) {
-  return projectKeys.length ? `project in (${projectKeys.map(jiraDateLiteral).join(", ")})` : null;
+  return projectKeys.length
+    ? `project in (${projectKeys.map(jiraDateLiteral).join(", ")})`
+    : null;
 }
 
 function buildJiraJql(clauses: Array<string | null>, orderBy = "updated ASC") {
@@ -158,9 +178,14 @@ const meaningfulJiraChangeFields = new Set([
   "fixversions",
   "sprint",
   "epic link",
-  "parent"
+  "parent",
 ]);
-const jiraActivityTypeOrder: JiraIssueActivityType[] = ["comment", "worklog", "changelog", "issue"];
+const jiraActivityTypeOrder: JiraIssueActivityType[] = [
+  "comment",
+  "worklog",
+  "changelog",
+  "issue",
+];
 
 function optionalDate(value: string | undefined) {
   if (!value) {
@@ -205,17 +230,48 @@ function pushDate(values: Date[], date: Date | null) {
   }
 }
 
+async function emitSyncProgress(
+  options: SyncOptions | undefined,
+  event: SyncProgressEvent,
+) {
+  await options?.onProgress?.(event);
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T, index: number) => Promise<R>,
+) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, limit), items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await mapper(items[index], index);
+      }
+    }),
+  );
+
+  return results;
+}
+
 function earliestDate(values: Date[]) {
   return values.reduce<Date | null>(
-    (earliest, date) => (!earliest || date.getTime() < earliest.getTime() ? date : earliest),
-    null
+    (earliest, date) =>
+      !earliest || date.getTime() < earliest.getTime() ? date : earliest,
+    null,
   );
 }
 
 function latestDate(values: Date[]) {
   return values.reduce<Date | null>(
-    (latest, date) => (!latest || date.getTime() > latest.getTime() ? date : latest),
-    null
+    (latest, date) =>
+      !latest || date.getTime() > latest.getTime() ? date : latest,
+    null,
   );
 }
 
@@ -235,7 +291,7 @@ async function listAllGoogleTaskLists(tasks: GoogleTasksService) {
 async function listGoogleCalendarEvents(
   calendar: GoogleCalendarService,
   calendarId: string,
-  params: GoogleCalendarEventListParams
+  params: GoogleCalendarEventListParams,
 ) {
   const events: calendar_v3.Schema$Event[] = [];
   let pageToken: string | undefined;
@@ -245,7 +301,7 @@ async function listGoogleCalendarEvents(
       calendarId,
       maxResults: 2500,
       ...params,
-      pageToken
+      pageToken,
     });
     events.push(...(response.data.items ?? []));
     pageToken = response.data.nextPageToken ?? undefined;
@@ -254,7 +310,11 @@ async function listGoogleCalendarEvents(
   return events;
 }
 
-async function listGoogleTasks(tasks: GoogleTasksService, taskListId: string, params: GoogleTaskListParams) {
+async function listGoogleTasks(
+  tasks: GoogleTasksService,
+  taskListId: string,
+  params: GoogleTaskListParams,
+) {
   const items: tasks_v1.Schema$Task[] = [];
   let pageToken: string | undefined;
 
@@ -267,7 +327,7 @@ async function listGoogleTasks(tasks: GoogleTasksService, taskListId: string, pa
       showHidden: true,
       showDeleted: false,
       ...params,
-      pageToken
+      pageToken,
     });
     items.push(...(response.data.items ?? []));
     pageToken = response.data.nextPageToken ?? undefined;
@@ -280,11 +340,11 @@ async function listCompletedGoogleTasksForDate(
   tasks: GoogleTasksService,
   taskListId: string,
   start: Date,
-  end: Date
+  end: Date,
 ) {
   return listGoogleTasks(tasks, taskListId, {
     completedMin: start.toISOString(),
-    completedMax: end.toISOString()
+    completedMax: end.toISOString(),
   });
 }
 
@@ -295,7 +355,7 @@ function googleTaskSourceUrl(task: tasks_v1.Schema$Task) {
 function googleTaskSuggestion(
   task: tasks_v1.Schema$Task,
   taskListId: string,
-  taskListTitle: string
+  taskListTitle: string,
 ): GoogleTaskSuggestion | null {
   if (!task.id || task.deleted || task.status === "completed") {
     return null;
@@ -310,12 +370,15 @@ function googleTaskSuggestion(
     status: task.status ?? null,
     due: task.due ?? null,
     updated: task.updated ?? null,
-    sourceUrl: googleTaskSourceUrl(task)
+    sourceUrl: googleTaskSourceUrl(task),
   };
 }
 
 function googleTaskSuggestionText(task: GoogleTaskSuggestion) {
-  return [task.title, task.notes, task.taskListTitle].filter(Boolean).join(" ").toLowerCase();
+  return [task.title, task.notes, task.taskListTitle]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
 
 function googleTaskSuggestionSortValue(task: GoogleTaskSuggestion) {
@@ -325,11 +388,14 @@ function googleTaskSuggestionSortValue(task: GoogleTaskSuggestion) {
   return { due, updated };
 }
 
-async function configuredGoogleTaskLists(userId: string, tasks: GoogleTasksService) {
+async function configuredGoogleTaskLists(
+  userId: string,
+  tasks: GoogleTasksService,
+) {
   const settings = await prisma.userIntegrationSettings.upsert({
     where: { userId },
     update: {},
-    create: { userId, googleTaskListIds: [] }
+    create: { userId, googleTaskListIds: [] },
   });
   const taskLists = await listAllGoogleTaskLists(tasks);
   const selectedListIds =
@@ -337,10 +403,16 @@ async function configuredGoogleTaskLists(userId: string, tasks: GoogleTasksServi
       ? new Set(settings.googleTaskListIds)
       : new Set(taskLists.map((list) => list.id).filter(Boolean) as string[]);
 
-  return taskLists.filter((taskList) => taskList.id && selectedListIds.has(taskList.id));
+  return taskLists.filter(
+    (taskList) => taskList.id && selectedListIds.has(taskList.id),
+  );
 }
 
-export async function searchIncompleteGoogleTasks(userId: string, query: string, limit = 12) {
+export async function searchIncompleteGoogleTasks(
+  userId: string,
+  query: string,
+  limit = 12,
+) {
   const normalizedQuery = query.trim().toLowerCase();
 
   if (normalizedQuery.length < 2) {
@@ -357,14 +429,17 @@ export async function searchIncompleteGoogleTasks(userId: string, query: string,
     }
 
     const tasks = await listGoogleTasks(services.tasks, taskList.id, {
-      showCompleted: false
+      showCompleted: false,
     });
     const taskListTitle = taskList.title ?? "Google Tasks";
 
     for (const task of tasks) {
       const suggestion = googleTaskSuggestion(task, taskList.id, taskListTitle);
 
-      if (suggestion && googleTaskSuggestionText(suggestion).includes(normalizedQuery)) {
+      if (
+        suggestion &&
+        googleTaskSuggestionText(suggestion).includes(normalizedQuery)
+      ) {
         suggestions.push(suggestion);
       }
     }
@@ -384,7 +459,12 @@ export async function searchIncompleteGoogleTasks(userId: string, query: string,
     .slice(0, limit);
 }
 
-export async function addGoogleTaskReference(userId: string, dateString: string, taskListId: string, taskId: string) {
+export async function addGoogleTaskReference(
+  userId: string,
+  dateString: string,
+  taskListId: string,
+  taskId: string,
+) {
   const services = await getGoogleServices(userId);
   const taskLists = await configuredGoogleTaskLists(userId, services.tasks);
   const taskList = taskLists.find((item) => item.id === taskListId);
@@ -393,12 +473,22 @@ export async function addGoogleTaskReference(userId: string, dateString: string,
     throw new HttpError(404, "Google Task list is not available.");
   }
 
-  const taskResponse = await services.tasks.tasks.get({ tasklist: taskList.id, task: taskId });
+  const taskResponse = await services.tasks.tasks.get({
+    tasklist: taskList.id,
+    task: taskId,
+  });
   const task = taskResponse.data;
-  const normalized = normalizeGoogleTask(task, taskList.id, taskList.title ?? "Google Tasks");
+  const normalized = normalizeGoogleTask(
+    task,
+    taskList.id,
+    taskList.title ?? "Google Tasks",
+  );
 
   if (!normalized || task.status === "completed") {
-    throw new HttpError(400, "Choose an incomplete Google Task to add manually.");
+    throw new HttpError(
+      400,
+      "Choose an incomplete Google Task to add manually.",
+    );
   }
 
   const reportDate = parseReportDate(dateString);
@@ -406,14 +496,14 @@ export async function addGoogleTaskReference(userId: string, dateString: string,
     where: {
       userId_reportDate: {
         userId,
-        reportDate
-      }
+        reportDate,
+      },
     },
     update: {},
     create: {
       userId,
-      reportDate
-    }
+      reportDate,
+    },
   });
 
   await createReportRevision(report.id, userId);
@@ -423,25 +513,28 @@ export async function addGoogleTaskReference(userId: string, dateString: string,
       userId,
       reportDate,
       source: "GOOGLE_TASKS" as const,
-      sourceId: normalized.sourceId
-    }
+      sourceId: normalized.sourceId,
+    },
   };
   const existingActivity = await prisma.activityItem.findUnique({
     where: activityWhere,
     select: {
       title: true,
-      metadata: true
-    }
+      metadata: true,
+    },
   });
   const activityMetadata = importedActivityMetadata(
     {
       ...normalized.metadata,
-      manuallyAdded: true
+      manuallyAdded: true,
     },
     normalized.title,
-    existingActivity
+    existingActivity,
   );
-  const activityTitle = importedActivityTitle(normalized.title, existingActivity);
+  const activityTitle = importedActivityTitle(
+    normalized.title,
+    existingActivity,
+  );
 
   await prisma.activityItem.upsert({
     where: activityWhere,
@@ -457,7 +550,7 @@ export async function addGoogleTaskReference(userId: string, dateString: string,
       durationMinutes: normalized.durationMinutes ?? null,
       selected: true,
       staleAt: null,
-      metadata: activityMetadata
+      metadata: activityMetadata,
     },
     create: {
       userId,
@@ -474,31 +567,37 @@ export async function addGoogleTaskReference(userId: string, dateString: string,
       endedAt: normalized.endedAt ?? null,
       durationMinutes: normalized.durationMinutes ?? null,
       selected: true,
-      metadata: activityMetadata
-    }
+      metadata: activityMetadata,
+    },
   });
 
   await prisma.dailyReport.update({
     where: { id: report.id },
-    data: { updatedAt: new Date() }
+    data: { updatedAt: new Date() },
   });
 
   return getReportById(report.id);
 }
 
-async function searchAllJiraIssues(jira: JiraConnection, input: { jql: string; fields: string[] }) {
+async function searchAllJiraIssues(
+  jira: JiraConnection,
+  input: { jql: string; fields: string[] },
+) {
   const issues: JiraIssue[] = [];
   let nextPageToken: string | undefined;
 
   do {
-    const search = await jira.fetch<JiraSearchResponse>("/rest/api/3/search/jql", {
-      method: "POST",
-      body: JSON.stringify({
-        ...input,
-        maxResults: 100,
-        nextPageToken
-      })
-    });
+    const search = await jira.fetch<JiraSearchResponse>(
+      "/rest/api/3/search/jql",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ...input,
+          maxResults: 100,
+          nextPageToken,
+        }),
+      },
+    );
     issues.push(...(search.issues ?? []));
     nextPageToken = search.nextPageToken ?? undefined;
   } while (nextPageToken);
@@ -506,19 +605,26 @@ async function searchAllJiraIssues(jira: JiraConnection, input: { jql: string; f
   return issues;
 }
 
-async function listJiraWorklogs(jira: JiraConnection, issueKey: string, start: Date, end: Date) {
+async function listJiraWorklogs(
+  jira: JiraConnection,
+  issueKey: string,
+  start: Date,
+  end: Date,
+) {
   const worklogs: NonNullable<JiraWorklogResponse["worklogs"]> = [];
   let startAt = 0;
   let total = 0;
 
   do {
     const response = await jira.fetch<JiraWorklogResponse>(
-      `/rest/api/3/issue/${encodeURIComponent(issueKey)}/worklog?startedAfter=${start.getTime()}&startedBefore=${end.getTime()}&startAt=${startAt}&maxResults=100`
+      `/rest/api/3/issue/${encodeURIComponent(issueKey)}/worklog?startedAfter=${start.getTime()}&startedBefore=${end.getTime()}&startAt=${startAt}&maxResults=100`,
     );
     const page = response.worklogs ?? [];
     worklogs.push(...page);
     total = response.total ?? worklogs.length;
-    startAt = (response.startAt ?? startAt) + Math.max(response.maxResults ?? page.length, page.length, 1);
+    startAt =
+      (response.startAt ?? startAt) +
+      Math.max(response.maxResults ?? page.length, page.length, 1);
   } while (startAt < total);
 
   return worklogs;
@@ -531,12 +637,14 @@ async function listJiraChangelog(jira: JiraConnection, issueKey: string) {
 
   do {
     const response = await jira.fetch<JiraChangelogResponse>(
-      `/rest/api/3/issue/${encodeURIComponent(issueKey)}/changelog?startAt=${startAt}&maxResults=100`
+      `/rest/api/3/issue/${encodeURIComponent(issueKey)}/changelog?startAt=${startAt}&maxResults=100`,
     );
     const page = response.values ?? [];
     values.push(...page);
     total = response.total ?? values.length;
-    startAt = (response.startAt ?? startAt) + Math.max(response.maxResults ?? page.length, page.length, 1);
+    startAt =
+      (response.startAt ?? startAt) +
+      Math.max(response.maxResults ?? page.length, page.length, 1);
   } while (startAt < total);
 
   return values;
@@ -549,12 +657,14 @@ async function listJiraComments(jira: JiraConnection, issueKey: string) {
 
   do {
     const response = await jira.fetch<JiraCommentResponse>(
-      `/rest/api/3/issue/${encodeURIComponent(issueKey)}/comment?startAt=${startAt}&maxResults=100&orderBy=created`
+      `/rest/api/3/issue/${encodeURIComponent(issueKey)}/comment?startAt=${startAt}&maxResults=100&orderBy=created`,
     );
     const page = response.comments ?? [];
     comments.push(...page);
     total = response.total ?? comments.length;
-    startAt = (response.startAt ?? startAt) + Math.max(response.maxResults ?? page.length, page.length, 1);
+    startAt =
+      (response.startAt ?? startAt) +
+      Math.max(response.maxResults ?? page.length, page.length, 1);
   } while (startAt < total);
 
   return comments;
@@ -567,18 +677,23 @@ function buildJiraIssueDayEvidence(
   end: Date,
   worklogs: JiraWorklog[],
   changelog: JiraChangelog[],
-  comments: JiraComment[]
+  comments: JiraComment[],
 ): JiraIssueDayEvidence | null {
   const activityTypes = new Set<JiraIssueActivityType>();
   const activityDates: Date[] = [];
   const changedFields = new Set<string>();
-  const statusTransitions: NonNullable<JiraIssueDayEvidence["statusTransitions"]> = [];
+  const statusTransitions: NonNullable<
+    JiraIssueDayEvidence["statusTransitions"]
+  > = [];
   let commentCount = 0;
   let worklogCount = 0;
   let durationMinutes = 0;
   const issueCreatedAt = optionalDate(issue.fields?.created);
 
-  if (issue.fields?.creator?.accountId === accountId && isInRange(issueCreatedAt, start, end)) {
+  if (
+    issue.fields?.creator?.accountId === accountId &&
+    isInRange(issueCreatedAt, start, end)
+  ) {
     activityTypes.add("issue");
     pushDate(activityDates, issueCreatedAt);
   }
@@ -586,11 +701,16 @@ function buildJiraIssueDayEvidence(
   for (const worklog of worklogs) {
     const startedAt = optionalDate(worklog.started);
 
-    if (worklog.author?.accountId !== accountId || !isInRange(startedAt, start, end)) {
+    if (
+      worklog.author?.accountId !== accountId ||
+      !isInRange(startedAt, start, end)
+    ) {
       continue;
     }
 
-    const minutes = worklog.timeSpentSeconds ? Math.round(worklog.timeSpentSeconds / 60) : 0;
+    const minutes = worklog.timeSpentSeconds
+      ? Math.round(worklog.timeSpentSeconds / 60)
+      : 0;
     activityTypes.add("worklog");
     worklogCount += 1;
     durationMinutes += minutes;
@@ -604,11 +724,16 @@ function buildJiraIssueDayEvidence(
   for (const history of changelog) {
     const changedAt = optionalDate(history.created);
 
-    if (history.author?.accountId !== accountId || !isInRange(changedAt, start, end)) {
+    if (
+      history.author?.accountId !== accountId ||
+      !isInRange(changedAt, start, end)
+    ) {
       continue;
     }
 
-    const meaningfulItems = (history.items ?? []).filter((item) => isMeaningfulJiraChangeField(item.field));
+    const meaningfulItems = (history.items ?? []).filter((item) =>
+      isMeaningfulJiraChangeField(item.field),
+    );
 
     if (meaningfulItems.length === 0) {
       continue;
@@ -629,7 +754,7 @@ function buildJiraIssueDayEvidence(
       if (isJiraStatusChangeField(fieldName)) {
         statusTransitions.push({
           from: item.fromString ?? null,
-          to: item.toString ?? null
+          to: item.toString ?? null,
         });
       }
     }
@@ -638,9 +763,17 @@ function buildJiraIssueDayEvidence(
   for (const comment of comments) {
     const createdAt = optionalDate(comment.created);
     const updatedAt = optionalDate(comment.updated);
-    const createdByUser = comment.author?.accountId === accountId && isInRange(createdAt, start, end);
-    const updatedByUser = comment.updateAuthor?.accountId === accountId && isInRange(updatedAt, start, end);
-    const commentedAt = updatedByUser ? updatedAt : createdByUser ? createdAt : null;
+    const createdByUser =
+      comment.author?.accountId === accountId &&
+      isInRange(createdAt, start, end);
+    const updatedByUser =
+      comment.updateAuthor?.accountId === accountId &&
+      isInRange(updatedAt, start, end);
+    const commentedAt = updatedByUser
+      ? updatedAt
+      : createdByUser
+        ? createdAt
+        : null;
 
     if (!commentedAt) {
       continue;
@@ -656,20 +789,24 @@ function buildJiraIssueDayEvidence(
   }
 
   return {
-    activityTypes: jiraActivityTypeOrder.filter((type) => activityTypes.has(type)),
+    activityTypes: jiraActivityTypeOrder.filter((type) =>
+      activityTypes.has(type),
+    ),
     commentCount,
     worklogCount,
     durationMinutes: durationMinutes > 0 ? durationMinutes : null,
     changedFields: [...changedFields],
     statusTransitions,
     firstActivityAt: earliestDate(activityDates),
-    lastActivityAt: latestDate(activityDates)
+    lastActivityAt: latestDate(activityDates),
   };
 }
 
 async function getJiraProjectFilter() {
   const settings = await getCompanySettings();
-  const keys = settings.jiraProjectKeys.filter((item) => item.trim().length > 0);
+  const keys = settings.jiraProjectKeys.filter(
+    (item) => item.trim().length > 0,
+  );
 
   return keys.map((key) => key.trim().toUpperCase());
 }
@@ -678,21 +815,33 @@ async function runSync(
   provider: SyncProvider,
   userId: string,
   dateString: string,
-  callback: () => Promise<SyncResult>
+  options: SyncOptions | undefined,
+  callback: () => Promise<SyncResult>,
 ) {
   const reportDate = parseReportDate(dateString);
+  await emitSyncProgress(options, {
+    stage: "starting",
+    message: "Starting import...",
+  });
+
   const syncRun = await prisma.syncRun.create({
     data: {
       userId,
       provider,
       rangeStart: reportDate,
       rangeEnd: reportDate,
-      status: "RUNNING"
-    }
+      status: "RUNNING",
+    },
   });
 
   try {
     const result = await callback();
+    await emitSyncProgress(options, {
+      stage: "complete",
+      message: "Import complete.",
+      current: result.importedCount,
+      total: result.importedCount,
+    });
 
     await prisma.syncRun.update({
       where: { id: syncRun.id },
@@ -700,8 +849,8 @@ async function runSync(
         status: "SUCCEEDED",
         importedCount: result.importedCount,
         skippedCount: result.skippedCount,
-        completedAt: new Date()
-      }
+        completedAt: new Date(),
+      },
     });
 
     return result;
@@ -710,134 +859,246 @@ async function runSync(
       where: { id: syncRun.id },
       data: {
         status: "FAILED",
-        errorMessage: error instanceof Error ? error.message : "Unknown sync error.",
-        completedAt: new Date()
-      }
+        errorMessage:
+          error instanceof Error ? error.message : "Unknown sync error.",
+        completedAt: new Date(),
+      },
     });
 
     throw error;
   }
 }
 
-export async function syncJira(userId: string, dateString: string) {
-  return runSync("JIRA", userId, dateString, async () => {
+export async function syncJira(
+  userId: string,
+  dateString: string,
+  options?: SyncOptions,
+) {
+  return runSync("JIRA", userId, dateString, options, async () => {
     const { start, end } = zonedDayRange(dateString, DEFAULT_TIMEZONE);
+    await emitSyncProgress(options, {
+      stage: "connecting",
+      message: "Connecting to Jira...",
+    });
     const jira = await getJiraConnection(userId);
     const myself = await jira.fetch<JiraUser>("/rest/api/3/myself");
 
     await prisma.userIntegrationSettings.upsert({
       where: { userId },
       update: { jiraAccountId: myself.accountId },
-      create: { userId, jiraAccountId: myself.accountId, jiraCloudId: jira.resource.id, googleTaskListIds: [] }
+      create: {
+        userId,
+        jiraAccountId: myself.accountId,
+        jiraCloudId: jira.resource.id,
+        googleTaskListIds: [],
+      },
     });
 
     const projectKeys = await getJiraProjectFilter();
     const projectClause = jiraProjectClause(projectKeys);
-    const issueFields = ["summary", "status", "created", "updated", "assignee", "creator", "reporter"];
+    const issueFields = [
+      "summary",
+      "status",
+      "created",
+      "updated",
+      "assignee",
+      "creator",
+      "reporter",
+    ];
     const issueMap = new Map<string, JiraIssue>();
     const issueSearches = [
       buildJiraJql([
         projectClause,
-        `issuekey in updatedBy(${jiraDateLiteral(myself.accountId)}, ${jiraDateLiteral(dateString)}, ${jiraDateLiteral(nextDateString(dateString))})`
+        `issuekey in updatedBy(${jiraDateLiteral(myself.accountId)}, ${jiraDateLiteral(dateString)}, ${jiraDateLiteral(nextDateString(dateString))})`,
       ]),
       buildJiraJql([
         projectClause,
         `worklogDate = ${jiraDateLiteral(dateString)}`,
-        "worklogAuthor = currentUser()"
-      ])
+        "worklogAuthor = currentUser()",
+      ]),
     ];
 
+    await emitSyncProgress(options, {
+      stage: "finding",
+      message: "Finding Jira work items...",
+    });
     for (const jql of issueSearches) {
-      for (const issue of await searchAllJiraIssues(jira, { jql, fields: issueFields })) {
+      for (const issue of await searchAllJiraIssues(jira, {
+        jql,
+        fields: issueFields,
+      })) {
         issueMap.set(issue.id || issue.key, issue);
       }
     }
 
-    const activities: NormalizedActivity[] = [];
+    const issues = [...issueMap.values()];
+    const activities = (
+      await mapWithConcurrency(issues, 4, async (issue, index) => {
+        await emitSyncProgress(options, {
+          stage: "finding",
+          message: `Reading Jira issue ${index + 1} of ${issues.length}...`,
+          current: index + 1,
+          total: issues.length,
+        });
+        const [worklogs, changelog, comments] = await Promise.all([
+          listJiraWorklogs(jira, issue.key, start, end),
+          listJiraChangelog(jira, issue.key),
+          listJiraComments(jira, issue.key),
+        ]);
+        const evidence = buildJiraIssueDayEvidence(
+          issue,
+          myself.accountId,
+          start,
+          end,
+          worklogs,
+          changelog,
+          comments,
+        );
 
-    for (const issue of issueMap.values()) {
-      const [worklogs, changelog, comments] = await Promise.all([
-        listJiraWorklogs(jira, issue.key, start, end),
-        listJiraChangelog(jira, issue.key),
-        listJiraComments(jira, issue.key)
-      ]);
-      const evidence = buildJiraIssueDayEvidence(
-        issue,
-        myself.accountId,
-        start,
-        end,
-        worklogs,
-        changelog,
-        comments
-      );
+        if (evidence) {
+          return normalizeJiraIssueDay(issue, evidence, jira.resource.url);
+        }
 
-      if (evidence) {
-        activities.push(normalizeJiraIssueDay(issue, evidence, jira.resource.url));
-      }
-    }
+        return null;
+      })
+    ).filter((activity): activity is NormalizedActivity => Boolean(activity));
 
+    await emitSyncProgress(options, {
+      stage: "saving",
+      message: `Saving ${activities.length} Jira work item${activities.length === 1 ? "" : "s"}...`,
+    });
     return upsertImportedActivities("JIRA", userId, dateString, activities);
   });
 }
 
-export async function syncGoogleCalendar(userId: string, dateString: string) {
-  return runSync("GOOGLE_CALENDAR", userId, dateString, async () => {
+export async function syncGoogleCalendar(
+  userId: string,
+  dateString: string,
+  options?: SyncOptions,
+) {
+  return runSync("GOOGLE_CALENDAR", userId, dateString, options, async () => {
     const { start, end } = zonedDayRange(dateString, DEFAULT_TIMEZONE);
+    await emitSyncProgress(options, {
+      stage: "connecting",
+      message: "Connecting to Google Calendar...",
+    });
     const services = await getGoogleServices(userId);
     const user = await prisma.user.findUnique({ where: { id: userId } });
     const settings = await prisma.userIntegrationSettings.upsert({
       where: { userId },
       update: {},
-      create: { userId, googleTaskListIds: [] }
+      create: { userId, googleTaskListIds: [] },
     });
 
-    const events = await listGoogleCalendarEvents(services.calendar, settings.googleCalendarId || "primary", {
-      timeMin: start.toISOString(),
-      timeMax: end.toISOString(),
-      singleEvents: true,
-      orderBy: "startTime"
+    await emitSyncProgress(options, {
+      stage: "finding",
+      message: "Finding calendar events...",
     });
+    const events = await listGoogleCalendarEvents(
+      services.calendar,
+      settings.googleCalendarId || "primary",
+      {
+        timeMin: start.toISOString(),
+        timeMax: end.toISOString(),
+        singleEvents: true,
+        orderBy: "startTime",
+      },
+    );
 
     const activities = events
       .map((event) => normalizeCalendarEvent(event, user?.email))
       .filter((item): item is NormalizedActivity => Boolean(item));
 
-    return upsertImportedActivities("GOOGLE_CALENDAR", userId, dateString, activities);
+    await emitSyncProgress(options, {
+      stage: "saving",
+      message: `Saving ${activities.length} calendar item${activities.length === 1 ? "" : "s"}...`,
+    });
+    return upsertImportedActivities(
+      "GOOGLE_CALENDAR",
+      userId,
+      dateString,
+      activities,
+    );
   });
 }
 
-export async function syncGoogleTasks(userId: string, dateString: string) {
-  return runSync("GOOGLE_TASKS", userId, dateString, async () => {
+export async function syncGoogleTasks(
+  userId: string,
+  dateString: string,
+  options?: SyncOptions,
+) {
+  return runSync("GOOGLE_TASKS", userId, dateString, options, async () => {
     const { start, end } = zonedDayRange(dateString, DEFAULT_TIMEZONE);
+    await emitSyncProgress(options, {
+      stage: "connecting",
+      message: "Connecting to Google Tasks...",
+    });
     const services = await getGoogleServices(userId);
     const taskLists = await configuredGoogleTaskLists(userId, services.tasks);
 
-    const activities: NormalizedActivity[] = [];
-
-    for (const taskList of taskLists) {
-      if (!taskList.id) {
-        continue;
-      }
-
-      const tasks = await listCompletedGoogleTasksForDate(services.tasks, taskList.id, start, end);
-
-      for (const task of tasks) {
-        const normalized = normalizeGoogleTask(task, taskList.id, taskList.title ?? "Google Tasks");
-
-        if (!normalized) {
-          continue;
+    await emitSyncProgress(options, {
+      stage: "finding",
+      message: "Finding completed tasks...",
+    });
+    const activitiesByList = await mapWithConcurrency(
+      taskLists,
+      4,
+      async (taskList, index) => {
+        if (!taskList.id) {
+          return [];
         }
 
-        if (
-          isInRange(normalized.startedAt, start, end) ||
-          isInRange(normalized.endedAt, start, end) ||
-          reportDateString(normalized.startedAt ?? start, DEFAULT_TIMEZONE) === dateString
-        ) {
-          activities.push({ ...normalized, status: null });
-        }
-      }
-    }
+        await emitSyncProgress(options, {
+          stage: "finding",
+          message: `Reading task list ${index + 1} of ${taskLists.length}...`,
+          current: index + 1,
+          total: taskLists.length,
+        });
+        const tasks = await listCompletedGoogleTasksForDate(
+          services.tasks,
+          taskList.id,
+          start,
+          end,
+        );
+        const listActivities: NormalizedActivity[] = [];
 
-    return upsertImportedActivities("GOOGLE_TASKS", userId, dateString, activities);
+        for (const task of tasks) {
+          const normalized = normalizeGoogleTask(
+            task,
+            taskList.id,
+            taskList.title ?? "Google Tasks",
+          );
+
+          if (!normalized) {
+            continue;
+          }
+
+          if (
+            isInRange(normalized.startedAt, start, end) ||
+            isInRange(normalized.endedAt, start, end) ||
+            reportDateString(
+              normalized.startedAt ?? start,
+              DEFAULT_TIMEZONE,
+            ) === dateString
+          ) {
+            listActivities.push({ ...normalized, status: null });
+          }
+        }
+
+        return listActivities;
+      },
+    );
+    const activities = activitiesByList.flat();
+
+    await emitSyncProgress(options, {
+      stage: "saving",
+      message: `Saving ${activities.length} task${activities.length === 1 ? "" : "s"}...`,
+    });
+    return upsertImportedActivities(
+      "GOOGLE_TASKS",
+      userId,
+      dateString,
+      activities,
+    );
   });
 }

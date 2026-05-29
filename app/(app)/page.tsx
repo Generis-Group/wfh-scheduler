@@ -4,6 +4,7 @@ import { DailyReportApp } from "@/components/reports/daily-report-app";
 import { auth } from "@/lib/auth";
 import { clampReportDateToToday } from "@/lib/dates";
 import { getOAuthProviderConfig } from "@/lib/oauth-config";
+import { withServerTiming } from "@/lib/performance";
 import { prisma } from "@/lib/prisma";
 import { hasUserRole } from "@/lib/roles";
 import { serialize } from "@/lib/serializers";
@@ -41,13 +42,18 @@ export default async function HomePage({
     redirect(`/?date=${date}`);
   }
 
-  const [{ report, activities }, accounts] = await Promise.all([
-    getDailyReportEditorData(session.user.id, date),
-    prisma.account.findMany({
-      where: { userId: session.user.id },
-      select: { provider: true },
-    }),
-  ]);
+  const [{ report, activities }, accounts] = await withServerTiming(
+    "page:daily:data",
+    () =>
+      Promise.all([
+        getDailyReportEditorData(session.user.id, date),
+        prisma.account.findMany({
+          where: { userId: session.user.id },
+          select: { provider: true },
+        }),
+      ]),
+    { date },
+  );
 
   const initialReport = report
     ? serialize({ ...report, activities })

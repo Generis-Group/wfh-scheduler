@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
   revalidateTag: vi.fn(),
-  unstable_cache: (callback: unknown) => callback
+  unstable_cache: (callback: unknown) => callback,
 }));
 
 vi.mock("@/lib/access", () => ({
@@ -12,38 +12,42 @@ vi.mock("@/lib/access", () => ({
       id: "user-1",
       role: "EMPLOYEE",
       roles: ["EMPLOYEE"],
-      status: "ACTIVE"
-    }
+      status: "ACTIVE",
+    },
   })),
   requireRole: vi.fn(async () => ({
     user: {
       id: "admin-1",
       role: "ADMIN",
       roles: ["ADMIN"],
-      status: "ACTIVE"
-    }
+      status: "ACTIVE",
+    },
   })),
   assertCanAccessUser: vi.fn(),
   assertCanAccessUserData: vi.fn(),
   assertCanAccessReport: vi.fn(),
   assertCanReviewReport: vi.fn(),
-  assertCanMutateReport: vi.fn()
+  assertCanMutateReport: vi.fn(),
 }));
 
 vi.mock("@/lib/services/reports", () => ({
   ensureDailyReport: vi.fn(async () => ({ id: "report-1", userId: "user-1" })),
   getDailyReport: vi.fn(async () => ({ id: "report-1" })),
   listReportsForDate: vi.fn(async () => []),
-  getDashboardMetrics: vi.fn(async () => ({ users: 1, submitted: 0, sourceMix: [] })),
+  getDashboardMetrics: vi.fn(async () => ({
+    users: 1,
+    submitted: 0,
+    sourceMix: [],
+  })),
   getReviewDashboardData: vi.fn(async () => ({
     rows: [],
-    metrics: { users: 1, submitted: 0, sourceMix: [] }
+    metrics: { users: 1, submitted: 0, sourceMix: [] },
   })),
   getWeeklyReportForEmployee: vi.fn(async () => ({
     employee: { id: "user-1", name: "Employee", role: "EMPLOYEE" },
     weekStart: "2026-05-11",
     weekEnd: "2026-05-17",
-    reports: []
+    reports: [],
   })),
   listSavedWeeklyReportsForEmployee: vi.fn(async () => ({
     employee: { id: "user-1", name: "Employee", role: "EMPLOYEE" },
@@ -55,9 +59,9 @@ vi.mock("@/lib/services/reports", () => ({
         generatedAt: "2026-05-10T20:00:00.000Z",
         submittedCount: 5,
         expectedDays: 7,
-        activityCount: 12
-      }
-    ]
+        activityCount: 12,
+      },
+    ],
   })),
   getSavedWeeklyReport: vi.fn(async () => ({
     id: "weekly-report-1",
@@ -68,32 +72,59 @@ vi.mock("@/lib/services/reports", () => ({
     submittedCount: 5,
     expectedDays: 7,
     activityCount: 12,
-    reports: []
+    reports: [],
   })),
   getReportById: vi.fn(async () => ({ id: "report-1", userId: "user-1" })),
   updateReport: vi.fn(async () => ({ id: "report-1" })),
   submitReport: vi.fn(async () => ({ id: "report-1", status: "SUBMITTED" })),
   deleteDraftReport: vi.fn(async () => ({ ok: true })),
   addReportComment: vi.fn(async () => ({ id: "report-1" })),
-  setReportReadState: vi.fn(async () => ({ id: "report-1", readReceipts: [{ reviewerId: "admin-1" }] }))
+  setReportReadState: vi.fn(async () => ({
+    id: "report-1",
+    readReceipts: [{ reviewerId: "admin-1" }],
+  })),
 }));
 
 vi.mock("@/lib/services/activity", () => ({
-  listActivities: vi.fn(async () => [])
+  listActivities: vi.fn(async () => []),
 }));
 
 vi.mock("@/lib/services/sync", () => ({
-  syncJira: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0, activities: [] })),
-  syncGoogleCalendar: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0, activities: [] })),
-  syncGoogleTasks: vi.fn(async () => ({ importedCount: 0, skippedCount: 0, staleCount: 0, activities: [] })),
+  syncJira: vi.fn(async () => ({
+    importedCount: 0,
+    skippedCount: 0,
+    staleCount: 0,
+    activities: [],
+  })),
+  syncGoogleCalendar: vi.fn(async () => ({
+    importedCount: 0,
+    skippedCount: 0,
+    staleCount: 0,
+    activities: [],
+  })),
+  syncGoogleTasks: vi.fn(async () => ({
+    importedCount: 0,
+    skippedCount: 0,
+    staleCount: 0,
+    activities: [],
+  })),
   searchIncompleteGoogleTasks: vi.fn(async () => []),
-  addGoogleTaskReference: vi.fn(async () => ({ id: "report-1", userId: "user-1" }))
+  addGoogleTaskReference: vi.fn(async () => ({
+    id: "report-1",
+    userId: "user-1",
+  })),
 }));
 
 vi.mock("@/lib/services/admin", () => ({
-  createAppUser: vi.fn(async () => ({ user: { id: "user-2" }, temporaryPassword: "temporary123" })),
+  createAppUser: vi.fn(async () => ({
+    user: { id: "user-2" },
+    temporaryPassword: "temporary123",
+  })),
   updateAppUser: vi.fn(async () => ({ id: "user-2" })),
-  resetAppUserPassword: vi.fn(async () => ({ user: { id: "user-2" }, temporaryPassword: "temporary456" })),
+  resetAppUserPassword: vi.fn(async () => ({
+    user: { id: "user-2" },
+    temporaryPassword: "temporary456",
+  })),
   changeOwnPassword: vi.fn(async () => ({ id: "user-1" })),
   updateOwnProfile: vi.fn(async () => ({
     id: "user-1",
@@ -103,8 +134,8 @@ vi.mock("@/lib/services/admin", () => ({
     role: "EMPLOYEE",
     roles: ["EMPLOYEE"],
     status: "ACTIVE",
-    mustChangePassword: false
-  }))
+    mustChangePassword: false,
+  })),
 }));
 
 vi.mock("@/lib/services/email-digest", () => ({
@@ -113,8 +144,8 @@ vi.mock("@/lib/services/email-digest", () => ({
     emailRun: {
       id: "email-run-1",
       status: trigger === "SCHEDULED" ? "SKIPPED" : "SUCCEEDED",
-      recipientEmails: ["reviewer@generisgp.com"]
-    }
+      recipientEmails: ["reviewer@generisgp.com"],
+    },
   })),
   sendScheduledReviewDigests: vi.fn(async () => ({
     skipped: true,
@@ -122,9 +153,9 @@ vi.mock("@/lib/services/email-digest", () => ({
       {
         id: "email-run-1",
         status: "SKIPPED",
-        recipientEmails: ["reviewer@generisgp.com"]
-      }
-    ]
+        recipientEmails: ["reviewer@generisgp.com"],
+      },
+    ],
   })),
   getLastReviewDigestRun: vi.fn(async () => null),
   getReviewDigestEmailStatus: vi.fn(() => ({
@@ -132,8 +163,9 @@ vi.mock("@/lib/services/email-digest", () => ({
     provider: "Resend",
     from: "reports@generisgp.com",
     digestTime: "6:00 PM America/Toronto",
-    recipientRule: "Manual digests go to the sender; scheduled digests are scoped per active reviewer/admin"
-  }))
+    recipientRule:
+      "Manual digests go to the sender; scheduled digests are scoped per active reviewer/admin",
+  })),
 }));
 
 vi.mock("@/lib/services/report-reminder-email", () => ({
@@ -141,51 +173,55 @@ vi.mock("@/lib/services/report-reminder-email", () => ({
     employee: {
       id: "user-1",
       name: "Employee",
-      email: "employee@generisgp.com"
+      email: "employee@generisgp.com",
     },
     emailDelivery: {
       status: "SENT",
-      providerMessageId: "reminder-1"
-    }
-  }))
+      providerMessageId: "reminder-1",
+    },
+  })),
 }));
 
 vi.mock("@/lib/services/report-comment-emails", () => ({
   sendReportCommentEmail: vi.fn(async () => ({
     status: "SENT",
-    providerMessageId: "comment-1"
-  }))
+    providerMessageId: "comment-1",
+  })),
 }));
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     user: {
-      findMany: vi.fn(async () => [])
+      findMany: vi.fn(async () => []),
     },
     userIntegrationSettings: {
-      upsert: vi.fn(async () => ({ userId: "user-1", googleTaskListIds: [] }))
+      upsert: vi.fn(async () => ({ userId: "user-1", googleTaskListIds: [] })),
     },
     appSetting: {
       findUnique: vi.fn(async () => null),
-      upsert: vi.fn(async (_input) => ({ value: { jiraProjectKeys: [] } }))
+      upsert: vi.fn(async (_input) => ({ value: { jiraProjectKeys: [] } })),
     },
     account: {
-      deleteMany: vi.fn(async () => ({ count: 1 }))
+      deleteMany: vi.fn(async () => ({ count: 1 })),
     },
     reportReadReceipt: {
       upsert: vi.fn(async () => ({ id: "read-1" })),
-      deleteMany: vi.fn(async () => ({ count: 1 }))
-    }
-  }
+      deleteMany: vi.fn(async () => ({ count: 1 })),
+    },
+  },
 }));
 
 describe("route contracts", () => {
   it("returns a report for an employee date query", async () => {
     const { GET } = await import("@/app/api/reports/route");
-    const response = await GET(new Request("http://localhost/api/reports?date=2026-05-13"));
+    const response = await GET(
+      new Request("http://localhost/api/reports?date=2026-05-13"),
+    );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ report: { id: "report-1" } });
+    await expect(response.json()).resolves.toEqual({
+      report: { id: "report-1" },
+    });
   });
 
   it("returns reviewer dashboard data for a multi-role reviewer date query", async () => {
@@ -204,14 +240,14 @@ describe("route contracts", () => {
     vi.mocked(reports.getReviewDashboardData).mockClear();
 
     const response = await GET(
-      new Request("http://localhost/api/reports?date=2026-05-13")
+      new Request("http://localhost/api/reports?date=2026-05-13"),
     );
 
     expect(response.status).toBe(200);
-    expect(reports.getReviewDashboardData).toHaveBeenCalledWith(
-      "2026-05-13",
-      { userId: "multi-role-1", roles: ["EMPLOYEE", "REVIEWER"] }
-    );
+    expect(reports.getReviewDashboardData).toHaveBeenCalledWith("2026-05-13", {
+      userId: "multi-role-1",
+      roles: ["EMPLOYEE", "REVIEWER"],
+    });
     await expect(response.json()).resolves.toEqual({
       reports: [],
       metrics: { users: 1, submitted: 0, sourceMix: [] },
@@ -228,13 +264,16 @@ describe("route contracts", () => {
         method: "POST",
         body: JSON.stringify({
           date: "2026-05-13",
-          summary: "Autosaved draft"
-        })
-      })
+          summary: "Autosaved draft",
+        }),
+      }),
     );
 
     expect(response.status).toBe(201);
-    expect(reports.ensureDailyReport).toHaveBeenCalledWith("user-1", "2026-05-13");
+    expect(reports.ensureDailyReport).toHaveBeenCalledWith(
+      "user-1",
+      "2026-05-13",
+    );
   });
 
   it("accepts user-triggered sync requests", async () => {
@@ -242,12 +281,82 @@ describe("route contracts", () => {
     const response = await POST(
       new Request("http://localhost/api/sync/jira", {
         method: "POST",
-        body: JSON.stringify({ date: "2026-05-13" })
-      })
+        body: JSON.stringify({ date: "2026-05-13" }),
+      }),
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ importedCount: 0, skippedCount: 0, staleCount: 0, activities: [] });
+    await expect(response.json()).resolves.toEqual({
+      importedCount: 0,
+      skippedCount: 0,
+      staleCount: 0,
+      activities: [],
+    });
+  });
+
+  it("streams sync progress when requested", async () => {
+    const sync = await import("@/lib/services/sync");
+    const { POST } = await import("@/app/api/sync/jira/route");
+
+    vi.mocked(sync.syncJira).mockImplementationOnce(
+      async (_userId, _date, options) => {
+        await options?.onProgress?.({
+          stage: "finding",
+          message: "Finding Jira work items...",
+        });
+
+        return {
+          importedCount: 1,
+          skippedCount: 0,
+          staleCount: 0,
+          activities: [],
+        };
+      },
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/sync/jira", {
+        method: "POST",
+        headers: { Accept: "text/event-stream" },
+        body: JSON.stringify({ date: "2026-05-13" }),
+      }),
+    );
+
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    await expect(response.text()).resolves.toContain("event: progress");
+    expect(sync.syncJira).toHaveBeenCalledWith(
+      "user-1",
+      "2026-05-13",
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    );
+  });
+
+  it("hides unexpected sync errors from streaming responses", async () => {
+    const sync = await import("@/lib/services/sync");
+    const { POST } = await import("@/app/api/sync/jira/route");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(sync.syncJira).mockRejectedValueOnce(
+      new Error("database password leaked"),
+    );
+    let body = "";
+
+    try {
+      const response = await POST(
+        new Request("http://localhost/api/sync/jira", {
+          method: "POST",
+          headers: { Accept: "text/event-stream" },
+          body: JSON.stringify({ date: "2026-05-13" }),
+        }),
+      );
+
+      body = await response.text();
+    } finally {
+      consoleError.mockRestore();
+    }
+
+    expect(body).toContain("event: error");
+    expect(body).toContain("Import failed. Check your connection and try again.");
+    expect(body).not.toContain("database password leaked");
   });
 
   it("creates admin-managed credentials users", async () => {
@@ -259,9 +368,9 @@ describe("route contracts", () => {
           email: "employee@generisgp.com",
           name: "Employee",
           role: "EMPLOYEE",
-          status: "ACTIVE"
-        })
-      })
+          status: "ACTIVE",
+        }),
+      }),
     );
 
     expect(response.status).toBe(201);
@@ -276,9 +385,9 @@ describe("route contracts", () => {
           email: "employee@example.com",
           name: "Employee",
           role: "EMPLOYEE",
-          status: "ACTIVE"
-        })
-      })
+          status: "ACTIVE",
+        }),
+      }),
     );
 
     expect(response.status).toBe(422);
@@ -291,17 +400,17 @@ describe("route contracts", () => {
         method: "PATCH",
         body: JSON.stringify({
           name: "Employee",
-          email: "employee@generisgp.com"
-        })
-      })
+          email: "employee@generisgp.com",
+        }),
+      }),
     );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       user: {
         id: "user-1",
-        email: "employee@generisgp.com"
-      }
+        email: "employee@generisgp.com",
+      },
     });
   });
 
@@ -312,9 +421,9 @@ describe("route contracts", () => {
         method: "PATCH",
         body: JSON.stringify({
           currentPassword: "temporary123",
-          newPassword: "permanent123"
-        })
-      })
+          newPassword: "permanent123",
+        }),
+      }),
     );
 
     expect(response.status).toBe(200);
@@ -329,15 +438,17 @@ describe("route contracts", () => {
     const response = await PUT(
       new Request("http://localhost/api/reports/report-1", {
         method: "PUT",
-        body: JSON.stringify({ summary: "Updated summary" })
+        body: JSON.stringify({ summary: "Updated summary" }),
       }),
-      { params: { id: "report-1" } }
+      { params: { id: "report-1" } },
     );
 
     expect(response.status).toBe(200);
     expect(access.assertCanMutateReport).toHaveBeenCalledWith(
-      expect.objectContaining({ user: expect.objectContaining({ id: "user-1" }) }),
-      expect.objectContaining({ id: "report-1", userId: "user-1" })
+      expect.objectContaining({
+        user: expect.objectContaining({ id: "user-1" }),
+      }),
+      expect.objectContaining({ id: "report-1", userId: "user-1" }),
     );
   });
 
@@ -350,9 +461,9 @@ describe("route contracts", () => {
       new Request("http://localhost/api/reports/report-1", {
         method: "PUT",
         headers: { "x-generis-autosave": "1" },
-        body: JSON.stringify({ summary: "Autosaved summary" })
+        body: JSON.stringify({ summary: "Autosaved summary" }),
       }),
-      { params: { id: "report-1" } }
+      { params: { id: "report-1" } },
     );
 
     expect(response.status).toBe(200);
@@ -364,14 +475,21 @@ describe("route contracts", () => {
     const { POST } = await import("@/app/api/reports/[id]/submit/route");
     vi.mocked(access.assertCanMutateReport).mockClear();
 
-    const response = await POST(new Request("http://localhost/api/reports/report-1/submit", { method: "POST" }), {
-      params: { id: "report-1" }
-    });
+    const response = await POST(
+      new Request("http://localhost/api/reports/report-1/submit", {
+        method: "POST",
+      }),
+      {
+        params: { id: "report-1" },
+      },
+    );
 
     expect(response.status).toBe(200);
     expect(access.assertCanMutateReport).toHaveBeenCalledWith(
-      expect.objectContaining({ user: expect.objectContaining({ id: "user-1" }) }),
-      expect.objectContaining({ id: "report-1", userId: "user-1" })
+      expect.objectContaining({
+        user: expect.objectContaining({ id: "user-1" }),
+      }),
+      expect.objectContaining({ id: "report-1", userId: "user-1" }),
     );
   });
 
@@ -382,14 +500,21 @@ describe("route contracts", () => {
     vi.mocked(access.assertCanMutateReport).mockClear();
     vi.mocked(reports.deleteDraftReport).mockClear();
 
-    const response = await DELETE(new Request("http://localhost/api/reports/report-1", { method: "DELETE" }), {
-      params: { id: "report-1" }
-    });
+    const response = await DELETE(
+      new Request("http://localhost/api/reports/report-1", {
+        method: "DELETE",
+      }),
+      {
+        params: { id: "report-1" },
+      },
+    );
 
     expect(response.status).toBe(200);
     expect(access.assertCanMutateReport).toHaveBeenCalledWith(
-      expect.objectContaining({ user: expect.objectContaining({ id: "user-1" }) }),
-      expect.objectContaining({ id: "report-1", userId: "user-1" })
+      expect.objectContaining({
+        user: expect.objectContaining({ id: "user-1" }),
+      }),
+      expect.objectContaining({ id: "report-1", userId: "user-1" }),
     );
     expect(reports.deleteDraftReport).toHaveBeenCalledWith("report-1");
   });
@@ -404,30 +529,32 @@ describe("route contracts", () => {
     const response = await POST(
       new Request("http://localhost/api/reports/report-1/comments", {
         method: "POST",
-        body: JSON.stringify({ body: "Please add the client follow-up." })
+        body: JSON.stringify({ body: "Please add the client follow-up." }),
       }),
-      { params: { id: "report-1" } }
+      { params: { id: "report-1" } },
     );
 
     expect(response.status).toBe(200);
     expect(access.assertCanReviewReport).toHaveBeenCalledWith(
-      expect.objectContaining({ user: expect.objectContaining({ id: "admin-1" }) }),
-      expect.objectContaining({ id: "report-1", userId: "user-1" })
+      expect.objectContaining({
+        user: expect.objectContaining({ id: "admin-1" }),
+      }),
+      expect.objectContaining({ id: "report-1", userId: "user-1" }),
     );
     expect(comments.sendReportCommentEmail).toHaveBeenCalledWith({
       report: { id: "report-1" },
       commentBody: "Please add the client follow-up.",
       author: {
         name: undefined,
-        email: undefined
-      }
+        email: undefined,
+      },
     });
     await expect(response.json()).resolves.toMatchObject({
       report: { id: "report-1" },
       emailDelivery: {
         status: "SENT",
-        providerMessageId: "comment-1"
-      }
+        providerMessageId: "comment-1",
+      },
     });
   });
 
@@ -439,19 +566,19 @@ describe("route contracts", () => {
         body: JSON.stringify({
           date: "2026-05-13",
           filters: {
-            search: ""
-          }
-        })
-      })
+            search: "",
+          },
+        }),
+      }),
     );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       emailRun: {
         id: "email-run-1",
-        status: "SUCCEEDED"
+        status: "SUCCEEDED",
       },
-      skipped: false
+      skipped: false,
     });
   });
 
@@ -465,24 +592,24 @@ describe("route contracts", () => {
         method: "POST",
         body: JSON.stringify({
           userId: "user-1",
-          date: "2026-05-13"
-        })
-      })
+          date: "2026-05-13",
+        }),
+      }),
     );
 
     expect(response.status).toBe(200);
     expect(reports.getWeeklyReportForEmployee).toHaveBeenCalledWith(
       "user-1",
       "2026-05-13",
-      { userId: "admin-1", roles: ["ADMIN"] }
+      { userId: "admin-1", roles: ["ADMIN"] },
     );
     await expect(response.json()).resolves.toEqual({
       weeklyReport: {
         employee: { id: "user-1", name: "Employee", role: "EMPLOYEE" },
         weekStart: "2026-05-11",
         weekEnd: "2026-05-17",
-        reports: []
-      }
+        reports: [],
+      },
     });
   });
 
@@ -492,19 +619,19 @@ describe("route contracts", () => {
     vi.mocked(reports.listSavedWeeklyReportsForEmployee).mockClear();
 
     const response = await GET(
-      new Request("http://localhost/api/review/weekly-reports?userId=user-1")
+      new Request("http://localhost/api/review/weekly-reports?userId=user-1"),
     );
 
     expect(response.status).toBe(200);
     expect(reports.listSavedWeeklyReportsForEmployee).toHaveBeenCalledWith(
       "user-1",
-      { userId: "admin-1", roles: ["ADMIN"] }
+      { userId: "admin-1", roles: ["ADMIN"] },
     );
     await expect(response.json()).resolves.toMatchObject({
       weeklyReports: {
         employee: { id: "user-1", name: "Employee", role: "EMPLOYEE" },
-        reports: [{ id: "weekly-report-1", submittedCount: 5 }]
-      }
+        reports: [{ id: "weekly-report-1", submittedCount: 5 }],
+      },
     });
   });
 
@@ -515,20 +642,20 @@ describe("route contracts", () => {
 
     const response = await GET(
       new Request("http://localhost/api/review/weekly-reports/weekly-report-1"),
-      { params: { id: "weekly-report-1" } }
+      { params: { id: "weekly-report-1" } },
     );
 
     expect(response.status).toBe(200);
     expect(reports.getSavedWeeklyReport).toHaveBeenCalledWith(
       "weekly-report-1",
-      { userId: "admin-1", roles: ["ADMIN"] }
+      { userId: "admin-1", roles: ["ADMIN"] },
     );
     await expect(response.json()).resolves.toMatchObject({
       weeklyReport: {
         id: "weekly-report-1",
         weekStart: "2026-05-04",
-        weekEnd: "2026-05-10"
-      }
+        weekEnd: "2026-05-10",
+      },
     });
   });
 
@@ -542,27 +669,27 @@ describe("route contracts", () => {
         method: "POST",
         body: JSON.stringify({
           userId: "user-1",
-          date: "2026-05-13"
-        })
-      })
+          date: "2026-05-13",
+        }),
+      }),
     );
 
     expect(response.status).toBe(200);
     expect(reminders.sendReportReminderEmail).toHaveBeenCalledWith({
       userId: "user-1",
       date: "2026-05-13",
-      scope: { userId: "admin-1", roles: ["ADMIN"] }
+      scope: { userId: "admin-1", roles: ["ADMIN"] },
     });
     await expect(response.json()).resolves.toEqual({
       employee: {
         id: "user-1",
         name: "Employee",
-        email: "employee@generisgp.com"
+        email: "employee@generisgp.com",
       },
       emailDelivery: {
         status: "SENT",
-        providerMessageId: "reminder-1"
-      }
+        providerMessageId: "reminder-1",
+      },
     });
   });
 
@@ -573,24 +700,30 @@ describe("route contracts", () => {
     const response = await PATCH(
       new Request("http://localhost/api/reports/report-1/read", {
         method: "PATCH",
-        body: JSON.stringify({ read: true })
+        body: JSON.stringify({ read: true }),
       }),
-      { params: { id: "report-1" } }
+      { params: { id: "report-1" } },
     );
 
     expect(response.status).toBe(200);
     expect(access.assertCanReviewReport).toHaveBeenCalledWith(
-      expect.objectContaining({ user: expect.objectContaining({ id: "admin-1" }) }),
-      expect.objectContaining({ id: "report-1", userId: "user-1" })
+      expect.objectContaining({
+        user: expect.objectContaining({ id: "admin-1" }),
+      }),
+      expect.objectContaining({ id: "report-1", userId: "user-1" }),
     );
-    await expect(response.json()).resolves.toEqual({ report: { id: "report-1", readReceipts: [{ reviewerId: "admin-1" }] } });
+    await expect(response.json()).resolves.toEqual({
+      report: { id: "report-1", readReceipts: [{ reviewerId: "admin-1" }] },
+    });
   });
 
   it("requires a cron secret for scheduled reviewer email digests", async () => {
     const previousSecret = process.env.CRON_SECRET;
     delete process.env.CRON_SECRET;
     const { GET } = await import("@/app/api/cron/review-digest/route");
-    const response = await GET(new Request("http://localhost/api/cron/review-digest"));
+    const response = await GET(
+      new Request("http://localhost/api/cron/review-digest"),
+    );
 
     expect(response.status).toBe(500);
     if (previousSecret === undefined) {
@@ -609,8 +742,8 @@ describe("route contracts", () => {
     const { GET } = await import("@/app/api/cron/review-digest/route");
     const response = await GET(
       new Request("http://localhost/api/cron/review-digest", {
-        headers: { authorization: "Bearer test-cron-secret" }
-      })
+        headers: { authorization: "Bearer test-cron-secret" },
+      }),
     );
 
     expect(response.status).toBe(200);
@@ -618,10 +751,10 @@ describe("route contracts", () => {
       emailRuns: [
         {
           id: "email-run-1",
-          status: "SKIPPED"
-        }
+          status: "SKIPPED",
+        },
       ],
-      skipped: true
+      skipped: true,
     });
 
     vi.useRealTimers();

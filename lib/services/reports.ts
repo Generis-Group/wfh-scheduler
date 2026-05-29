@@ -5,12 +5,18 @@ import { activityMetadataWithLocalTitleState } from "@/lib/activity-title-overri
 import { addReportDateDays, parseReportDate } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import { departmentMembershipSelect, getReviewableEmployeeWhere, type ReviewScope } from "@/lib/services/departments";
+import {
+  departmentMembershipSelect,
+  getReviewableEmployeeWhere,
+  type ReviewScope,
+} from "@/lib/services/departments";
 import type { updateReportSchema } from "@/lib/validation";
 import type { z } from "zod";
 
 type UpdateReportInput = z.infer<typeof updateReportSchema>;
-type ActivityUpdateInput = NonNullable<UpdateReportInput["activityUpdates"]>[number];
+type ActivityUpdateInput = NonNullable<
+  UpdateReportInput["activityUpdates"]
+>[number];
 type ExistingActivityUpdate = {
   id: string;
   dailyReportId: string | null;
@@ -33,7 +39,11 @@ type WeeklyDashboardUser = {
   departments?: Array<{
     departmentId?: string;
     role?: string | null;
-    department?: { id?: string; name?: string | null; slug?: string | null } | null;
+    department?: {
+      id?: string;
+      name?: string | null;
+      slug?: string | null;
+    } | null;
   }>;
 };
 type WeeklyDashboardReport = {
@@ -95,7 +105,7 @@ const weeklyReportSnapshotVersion = 1;
 const userIdentitySelect = {
   id: true,
   name: true,
-  email: true
+  email: true,
 };
 
 const reportUserSelect = {
@@ -103,7 +113,7 @@ const reportUserSelect = {
   role: true,
   roles: true,
   status: true,
-  ...departmentMembershipSelect
+  ...departmentMembershipSelect,
 };
 
 const dashboardUserSelect = {
@@ -111,7 +121,7 @@ const dashboardUserSelect = {
   role: true,
   roles: true,
   status: true,
-  ...departmentMembershipSelect
+  ...departmentMembershipSelect,
 };
 
 const reportActivitySelect = {
@@ -125,7 +135,7 @@ const reportActivitySelect = {
   endedAt: true,
   durationMinutes: true,
   selected: true,
-  employeeNote: true
+  employeeNote: true,
 };
 
 const editorReportSelect = {
@@ -136,17 +146,17 @@ const editorReportSelect = {
   summary: true,
   status: true,
   submittedAt: true,
-  updatedAt: true
+  updatedAt: true,
 };
 
 const reportInclude = {
   user: {
-    select: reportUserSelect
+    select: reportUserSelect,
   },
   activities: {
     where: { staleAt: null },
     orderBy: [{ startedAt: "asc" as const }, { createdAt: "asc" as const }],
-    select: reportActivitySelect
+    select: reportActivitySelect,
   },
   comments: {
     orderBy: { createdAt: "asc" as const },
@@ -155,15 +165,15 @@ const reportInclude = {
       body: true,
       createdAt: true,
       author: {
-        select: userIdentitySelect
-      }
-    }
+        select: userIdentitySelect,
+      },
+    },
   },
   readReceipts: {
     select: {
       reviewerId: true,
-      readAt: true
-    }
+      readAt: true,
+    },
   },
   revisions: {
     orderBy: { createdAt: "desc" as const },
@@ -171,15 +181,15 @@ const reportInclude = {
       id: true,
       createdAt: true,
       editedBy: {
-        select: userIdentitySelect
-      }
-    }
-  }
+        select: userIdentitySelect,
+      },
+    },
+  },
 };
 
 const reportHistoryInclude = {
   user: {
-    select: reportUserSelect
+    select: reportUserSelect,
   },
   activities: {
     where: { selected: true, staleAt: null },
@@ -191,8 +201,8 @@ const reportHistoryInclude = {
       status: true,
       durationMinutes: true,
       employeeNote: true,
-      sourceUrl: true
-    }
+      sourceUrl: true,
+    },
   },
   comments: {
     orderBy: { createdAt: "asc" as const },
@@ -201,9 +211,9 @@ const reportHistoryInclude = {
       body: true,
       createdAt: true,
       author: {
-        select: userIdentitySelect
-      }
-    }
+        select: userIdentitySelect,
+      },
+    },
   },
   revisions: {
     orderBy: { createdAt: "desc" as const },
@@ -211,10 +221,10 @@ const reportHistoryInclude = {
       id: true,
       createdAt: true,
       editedBy: {
-        select: userIdentitySelect
-      }
-    }
-  }
+        select: userIdentitySelect,
+      },
+    },
+  },
 };
 
 function dashboardReportInclude(scope?: ReviewScope) {
@@ -230,8 +240,8 @@ function dashboardReportInclude(scope?: ReviewScope) {
         status: true,
         durationMinutes: true,
         employeeNote: true,
-        sourceUrl: true
-      }
+        sourceUrl: true,
+      },
     },
     comments: {
       orderBy: { createdAt: "asc" as const },
@@ -240,16 +250,16 @@ function dashboardReportInclude(scope?: ReviewScope) {
         body: true,
         createdAt: true,
         author: {
-          select: userIdentitySelect
-        }
-      }
+          select: userIdentitySelect,
+        },
+      },
     },
     readReceipts: {
       ...(scope ? { where: { reviewerId: scope.userId } } : {}),
       select: {
         reviewerId: true,
-        readAt: true
-      }
+        readAt: true,
+      },
     },
     revisions: {
       orderBy: { createdAt: "desc" as const },
@@ -257,10 +267,10 @@ function dashboardReportInclude(scope?: ReviewScope) {
         id: true,
         createdAt: true,
         editedBy: {
-          select: userIdentitySelect
-        }
-      }
-    }
+          select: userIdentitySelect,
+        },
+      },
+    },
   };
 }
 
@@ -271,14 +281,14 @@ export async function ensureDailyReport(userId: string, dateString: string) {
     where: {
       userId_reportDate: {
         userId,
-        reportDate
-      }
+        reportDate,
+      },
     },
     update: {},
     create: {
       userId,
-      reportDate
-    }
+      reportDate,
+    },
   });
 }
 
@@ -289,43 +299,46 @@ export async function getDailyReport(userId: string, dateString: string) {
     where: {
       userId_reportDate: {
         userId,
-        reportDate
-      }
+        reportDate,
+      },
     },
-    include: reportInclude
+    include: reportInclude,
   });
 }
 
-export async function getDailyReportEditorData(userId: string, dateString: string) {
+export async function getDailyReportEditorData(
+  userId: string,
+  dateString: string,
+) {
   const reportDate = parseReportDate(dateString);
 
   const report = await prisma.dailyReport.findUnique({
     where: {
       userId_reportDate: {
         userId,
-        reportDate
-      }
+        reportDate,
+      },
     },
     select: {
       ...editorReportSelect,
       activities: {
         where: { staleAt: null },
         orderBy: [{ startedAt: "asc" }, { createdAt: "asc" }],
-        select: reportActivitySelect
-      }
-    }
+        select: reportActivitySelect,
+      },
+    },
   });
 
   return {
     report,
-    activities: report?.activities ?? []
+    activities: report?.activities ?? [],
   };
 }
 
 export async function getReportById(reportId: string) {
   const report = await prisma.dailyReport.findUnique({
     where: { id: reportId },
-    include: reportInclude
+    include: reportInclude,
   });
 
   if (!report) {
@@ -335,10 +348,13 @@ export async function getReportById(reportId: string) {
   return report;
 }
 
-export async function createReportRevision(reportId: string, editedById: string) {
+export async function createReportRevision(
+  reportId: string,
+  editedById: string,
+) {
   const report = await prisma.dailyReport.findUnique({
     where: { id: reportId },
-    include: { activities: { where: { staleAt: null } } }
+    include: { activities: { where: { staleAt: null } } },
   });
 
   if (!report || report.status !== "SUBMITTED") {
@@ -354,28 +370,33 @@ export async function createReportRevision(reportId: string, editedById: string)
           workLocation: report.workLocation,
           summary: report.summary,
           status: report.status,
-          submittedAt: report.submittedAt?.toISOString()
+          submittedAt: report.submittedAt?.toISOString(),
         },
         activities: report.activities.map((activity) => ({
           id: activity.id,
           selected: activity.selected,
-          employeeNote: activity.employeeNote
-        }))
-      } as Prisma.InputJsonValue
-    }
+          employeeNote: activity.employeeNote,
+        })),
+      } as Prisma.InputJsonValue,
+    },
   });
 }
 
-function reportFieldChanges(report: Awaited<ReturnType<typeof getReportById>>, input: UpdateReportInput) {
+function reportFieldChanges(
+  report: Awaited<ReturnType<typeof getReportById>>,
+  input: UpdateReportInput,
+) {
   return {
     summary: input.summary !== undefined && input.summary !== report.summary,
-    workLocation: input.workLocation !== undefined && input.workLocation !== report.workLocation
+    workLocation:
+      input.workLocation !== undefined &&
+      input.workLocation !== report.workLocation,
   };
 }
 
 async function changedActivityUpdates(
   report: Awaited<ReturnType<typeof getReportById>>,
-  activityUpdates: ActivityUpdateInput[]
+  activityUpdates: ActivityUpdateInput[],
 ): Promise<ChangedActivityUpdate[]> {
   if (activityUpdates.length === 0) {
     return [];
@@ -386,7 +407,7 @@ async function changedActivityUpdates(
       id: { in: activityUpdates.map((activity) => activity.id) },
       userId: report.userId,
       reportDate: report.reportDate,
-      staleAt: null
+      staleAt: null,
     },
     select: {
       id: true,
@@ -394,10 +415,12 @@ async function changedActivityUpdates(
       title: true,
       selected: true,
       employeeNote: true,
-      metadata: true
-    }
+      metadata: true,
+    },
   });
-  const existingById = new Map(existingActivities.map((activity) => [activity.id, activity]));
+  const existingById = new Map(
+    existingActivities.map((activity) => [activity.id, activity]),
+  );
 
   return activityUpdates.flatMap((activity) => {
     const existing = existingById.get(activity.id);
@@ -409,23 +432,37 @@ async function changedActivityUpdates(
     const changed =
       existing.dailyReportId !== report.id ||
       (activity.title !== undefined && activity.title !== existing.title) ||
-      (activity.selected !== undefined && activity.selected !== existing.selected) ||
-      (activity.employeeNote !== undefined && activity.employeeNote !== existing.employeeNote);
+      (activity.selected !== undefined &&
+        activity.selected !== existing.selected) ||
+      (activity.employeeNote !== undefined &&
+        activity.employeeNote !== existing.employeeNote);
 
     return changed ? [{ input: activity, existing }] : [];
   });
 }
 
-export async function updateReport(reportId: string, editedById: string, input: UpdateReportInput) {
+export async function updateReport(
+  reportId: string,
+  editedById: string,
+  input: UpdateReportInput,
+) {
   const report = await getReportById(reportId);
-  const activityUpdates = await changedActivityUpdates(report, input.activityUpdates ?? []);
+  const activityUpdates = await changedActivityUpdates(
+    report,
+    input.activityUpdates ?? [],
+  );
   const fieldChanges = reportFieldChanges(report, input);
   const hasFieldChanges = Object.values(fieldChanges).some(Boolean);
   const hasActivityChanges = activityUpdates.length > 0;
   const hasDeletedActivities = Boolean(input.deletedActivityIds?.length);
   const hasManualActivities = Boolean(input.manualActivities?.length);
 
-  if (!hasFieldChanges && !hasActivityChanges && !hasDeletedActivities && !hasManualActivities) {
+  if (
+    !hasFieldChanges &&
+    !hasActivityChanges &&
+    !hasDeletedActivities &&
+    !hasManualActivities
+  ) {
     return report;
   }
 
@@ -448,26 +485,35 @@ export async function updateReport(reportId: string, editedById: string, input: 
 
     await tx.dailyReport.update({
       where: { id: report.id },
-      data: reportData
+      data: reportData,
     });
 
     for (const { input: activity, existing } of activityUpdates) {
-      const titleChanged = activity.title !== undefined && activity.title !== existing.title;
+      const titleChanged =
+        activity.title !== undefined && activity.title !== existing.title;
 
       await tx.activityItem.updateMany({
-        where: { id: activity.id, userId: report.userId, reportDate: report.reportDate, staleAt: null },
+        where: {
+          id: activity.id,
+          userId: report.userId,
+          reportDate: report.reportDate,
+          staleAt: null,
+        },
         data: {
           dailyReportId: report.id,
           title: titleChanged ? activity.title : undefined,
           selected: activity.selected,
-          employeeNote: activity.employeeNote === undefined ? undefined : activity.employeeNote,
+          employeeNote:
+            activity.employeeNote === undefined
+              ? undefined
+              : activity.employeeNote,
           metadata: titleChanged
             ? activityMetadataWithLocalTitleState(
                 existing.metadata,
-                activity.title!
+                activity.title!,
               )
-            : undefined
-        }
+            : undefined,
+        },
       });
     }
 
@@ -477,8 +523,8 @@ export async function updateReport(reportId: string, editedById: string, input: 
           id: { in: input.deletedActivityIds },
           userId: report.userId,
           dailyReportId: report.id,
-          source: "MANUAL"
-        }
+          source: "MANUAL",
+        },
       });
     }
 
@@ -496,8 +542,8 @@ export async function updateReport(reportId: string, editedById: string, input: 
           durationMinutes: manual.durationMinutes ?? null,
           startedAt: manual.startedAt ? new Date(manual.startedAt) : null,
           endedAt: manual.endedAt ? new Date(manual.endedAt) : null,
-          employeeNote: manual.employeeNote ?? null
-        }
+          employeeNote: manual.employeeNote ?? null,
+        },
       });
     }
   });
@@ -512,8 +558,8 @@ export async function submitReport(reportId: string, editedById: string) {
     await prisma.dailyReport.update({
       where: { id: report.id },
       data: {
-        submittedAt: new Date()
-      }
+        submittedAt: new Date(),
+      },
     });
 
     return getReportById(reportId);
@@ -525,8 +571,8 @@ export async function submitReport(reportId: string, editedById: string) {
     where: { id: report.id },
     data: {
       status: "SUBMITTED",
-      submittedAt: new Date()
-    }
+      submittedAt: new Date(),
+    },
   });
 
   return getReportById(reportId);
@@ -542,41 +588,49 @@ export async function deleteDraftReport(reportId: string) {
   await prisma.$transaction(async (tx) => {
     await tx.activityItem.deleteMany({
       where: {
-        dailyReportId: report.id
-      }
+        dailyReportId: report.id,
+      },
     });
 
     await tx.dailyReport.delete({
       where: {
-        id: report.id
-      }
+        id: report.id,
+      },
     });
   });
 
   return { ok: true };
 }
 
-export async function addReportComment(reportId: string, authorId: string, body: string) {
+export async function addReportComment(
+  reportId: string,
+  authorId: string,
+  body: string,
+) {
   await prisma.reportComment.create({
     data: {
       reportId,
       authorId,
-      body
-    }
+      body,
+    },
   });
 
   return getReportById(reportId);
 }
 
-export async function setReportReadState(reportId: string, reviewerId: string, read: boolean) {
+export async function setReportReadState(
+  reportId: string,
+  reviewerId: string,
+  read: boolean,
+) {
   await getReportById(reportId);
 
   if (!read) {
     await prisma.reportReadReceipt.deleteMany({
       where: {
         reportId,
-        reviewerId
-      }
+        reviewerId,
+      },
     });
 
     return getReportById(reportId);
@@ -586,60 +640,109 @@ export async function setReportReadState(reportId: string, reviewerId: string, r
     where: {
       reportId_reviewerId: {
         reportId,
-        reviewerId
-      }
+        reviewerId,
+      },
     },
     update: {
-      readAt: new Date()
+      readAt: new Date(),
     },
     create: {
       reportId,
-      reviewerId
-    }
+      reviewerId,
+    },
   });
 
   return getReportById(reportId);
 }
 
-export async function listReportsForDate(dateString: string, scope?: ReviewScope) {
+export async function listReportsForDate(
+  dateString: string,
+  scope?: ReviewScope,
+) {
   const reportDate = parseReportDate(dateString);
   const employeeWhere = await getReviewableEmployeeWhere(scope);
 
   return listReportsForDateForWhere(reportDate, employeeWhere, scope);
 }
 
-async function listReportsForDateForWhere(reportDate: Date, employeeWhere: Prisma.UserWhereInput, scope?: ReviewScope) {
+async function listReportsForDateForWhere(
+  reportDate: Date,
+  employeeWhere: Prisma.UserWhereInput,
+  scope?: ReviewScope,
+) {
   const { users, reports } = await prisma.$transaction(async (tx) => {
     const users = await tx.user.findMany({
       where: employeeWhere,
       orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
-      select: dashboardUserSelect
+      select: dashboardUserSelect,
     });
     const reports = await tx.dailyReport.findMany({
       where: {
         reportDate,
-        user: employeeWhere
+        user: employeeWhere,
       },
-      include: dashboardReportInclude(scope)
+      include: dashboardReportInclude(scope),
     });
 
     return { users, reports };
   });
-  const reportsByUserId = new Map(reports.map((report) => [report.userId, report]));
+  const reportsByUserId = new Map(
+    reports.map((report) => [report.userId, report]),
+  );
 
   return users.map((user) => ({
     user,
-    report: reportsByUserId.get(user.id) ?? null
+    report: reportsByUserId.get(user.id) ?? null,
   }));
 }
 
-export async function getReviewDashboardData(dateString: string, scope?: ReviewScope) {
+export async function getReviewDashboardData(
+  dateString: string,
+  scope?: ReviewScope,
+) {
   const reportDate = parseReportDate(dateString);
   const employeeWhere = await getReviewableEmployeeWhere(scope);
-  const rows = await listReportsForDateForWhere(reportDate, employeeWhere, scope);
-  const metrics = await getDashboardMetricsForWhere(reportDate, employeeWhere);
+  const rows = await listReportsForDateForWhere(
+    reportDate,
+    employeeWhere,
+    scope,
+  );
+  const metrics = getDashboardMetricsFromRows(rows);
 
   return { rows, metrics };
+}
+
+function getDashboardMetricsFromRows(
+  rows: Awaited<ReturnType<typeof listReportsForDateForWhere>>,
+) {
+  const sourceCounts = new Map<string, number>();
+  let submitted = 0;
+
+  for (const row of rows) {
+    if (row.report?.status === "SUBMITTED") {
+      submitted += 1;
+    }
+
+    for (const activity of row.report?.activities ?? []) {
+      if (!activity.selected) {
+        continue;
+      }
+
+      sourceCounts.set(
+        activity.source,
+        (sourceCounts.get(activity.source) ?? 0) + 1,
+      );
+    }
+  }
+
+  return {
+    users: rows.length,
+    submitted,
+    sourceMix: [...sourceCounts.entries()].map(([source, count]) => ({
+      source,
+      count,
+    })),
+  };
 }
 
 export function reportWorkWeekRange(dateString: string) {
@@ -949,52 +1052,72 @@ export async function getSavedWeeklyReport(
   return weeklyReportRecordToData(report);
 }
 
-export async function listReportHistory(userId: string, limit = 30, targetReportId?: string | null) {
+export async function listReportHistory(
+  userId: string,
+  limit = 30,
+  targetReportId?: string | null,
+) {
   const reports = await prisma.dailyReport.findMany({
     where: { userId },
     orderBy: { reportDate: "desc" },
     take: limit,
-    include: reportHistoryInclude
+    include: reportHistoryInclude,
   });
 
-  if (!targetReportId || reports.some((report) => report.id === targetReportId)) {
+  if (
+    !targetReportId ||
+    reports.some((report) => report.id === targetReportId)
+  ) {
     return reports;
   }
 
   const targetReport = await prisma.dailyReport.findFirst({
     where: { id: targetReportId, userId },
-    include: reportHistoryInclude
+    include: reportHistoryInclude,
   });
 
   return targetReport ? [targetReport, ...reports] : reports;
 }
 
-async function getDashboardMetricsForWhere(reportDate: Date, employeeWhere: Prisma.UserWhereInput) {
-  const { users, submitted, activities } = await prisma.$transaction(async (tx) => {
-    const users = await tx.user.count({ where: employeeWhere });
-    const submitted = await tx.dailyReport.count({
-      where: { reportDate, status: "SUBMITTED", user: employeeWhere }
-    });
-    const activities = await tx.activityItem.groupBy({
-      by: ["source"],
-      where: { reportDate, selected: true, staleAt: null, user: employeeWhere },
-      _count: true
-    });
+async function getDashboardMetricsForWhere(
+  reportDate: Date,
+  employeeWhere: Prisma.UserWhereInput,
+) {
+  const { users, submitted, activities } = await prisma.$transaction(
+    async (tx) => {
+      const users = await tx.user.count({ where: employeeWhere });
+      const submitted = await tx.dailyReport.count({
+        where: { reportDate, status: "SUBMITTED", user: employeeWhere },
+      });
+      const activities = await tx.activityItem.groupBy({
+        by: ["source"],
+        where: {
+          reportDate,
+          selected: true,
+          staleAt: null,
+          user: employeeWhere,
+        },
+        _count: true,
+      });
 
-    return { users, submitted, activities };
-  });
+      return { users, submitted, activities };
+    },
+  );
 
   return {
     users,
     submitted,
     sourceMix: activities.map((activity) => ({
       source: activity.source,
-      count: activity._count
-    }))
+      count: activity._count,
+    })),
   };
 }
 
-export async function getDashboardMetrics(dateString: string, scope?: ReviewScope) {
+export async function getDashboardMetrics(
+  dateString: string,
+  scope?: ReviewScope,
+) {
   const reportDate = parseReportDate(dateString);
   const employeeWhere = await getReviewableEmployeeWhere(scope);
 

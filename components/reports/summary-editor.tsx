@@ -16,13 +16,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor, JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import {
-  Bold,
-  Heading2,
-  Italic,
-  List,
-  ListOrdered,
-} from "lucide-react";
+import { Bold, Heading2, Italic, List, ListOrdered } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -35,17 +29,11 @@ import {
   type SummaryActivityReferenceMap,
   type SummaryActivitySource,
 } from "@/lib/summary-format";
+import {
+  summaryActivityReferenceDragType,
+  type SummaryActivityReferenceDragPayload,
+} from "@/lib/summary-drag";
 import { cn } from "@/lib/utils";
-
-export const summaryActivityReferenceDragType =
-  "application/x-generis-activity-reference";
-
-export type SummaryActivityReferenceDragPayload = {
-  activityId?: string;
-  source?: string | null;
-  title: string;
-  url?: string | null;
-};
 
 export type SummarySnapshot = {
   summary: string;
@@ -56,7 +44,7 @@ export type SummaryEditorHandle = {
   setSnapshot: (snapshot: SummarySnapshot) => void;
 };
 
-type SummaryEditorProps = {
+export type SummaryEditorProps = {
   initialSummary: string;
   resetKey: string;
   activityReferences?: SummaryActivityReferenceMap;
@@ -173,7 +161,8 @@ function inlineNodeToMarkdown(node: JSONContent): string {
   if (node.type === "activityReference") {
     const attrs = activityReferenceAttributes(node.attrs);
     const href =
-      summaryActivityReferenceHref(attrs.activityId, attrs.source) ?? attrs.href;
+      summaryActivityReferenceHref(attrs.activityId, attrs.source) ??
+      attrs.href;
 
     return summaryActivityReferenceMarkdown(attrs.label, href);
   }
@@ -215,7 +204,9 @@ function inlineContentToMarkdown(node: JSONContent) {
 
 function listItemTextToMarkdown(node: JSONContent) {
   return (node.content ?? [])
-    .filter((child) => child.type !== "bulletList" && child.type !== "orderedList")
+    .filter(
+      (child) => child.type !== "bulletList" && child.type !== "orderedList",
+    )
     .map((child) => {
       if (child.type === "heading" || child.type === "paragraph") {
         return inlineContentToMarkdown(child).trim();
@@ -487,14 +478,11 @@ function markIsActiveAtCursor(editor: Editor, markType: string) {
 
   return Boolean(
     nodeBefore?.isText &&
-      nodeBefore.marks.some((mark) => mark.type.name === markType),
+    nodeBefore.marks.some((mark) => mark.type.name === markType),
   );
 }
 
-function preserveStoredInlineMarks(
-  editor: Editor,
-  command: () => boolean,
-) {
+function preserveStoredInlineMarks(editor: Editor, command: () => boolean) {
   const selectionWasEmpty = editor.state.selection.empty;
   const activeMarks = selectionWasEmpty
     ? preservedInlineMarkTypes.filter((markType) =>
@@ -690,7 +678,7 @@ function SummaryToolbarButton({
   );
 }
 
-function SummaryEditorSkeleton() {
+export function SummaryEditorSkeleton() {
   return (
     <div
       className="summary-tiptap-editor"
@@ -760,9 +748,12 @@ const SummaryEditorComponent = forwardRef<
 
   const editor = useEditor({
     extensions: summaryEditorExtensions,
-    content: summaryHtml({
-      summary: initialSummary,
-    }, activityReferences),
+    content: summaryHtml(
+      {
+        summary: initialSummary,
+      },
+      activityReferences,
+    ),
     immediatelyRender: false,
     editorProps: {
       attributes: {
@@ -833,9 +824,12 @@ const SummaryEditorComponent = forwardRef<
 
   const setEditorSnapshot = useCallback(
     (nextEditor: Editor, snapshot: SummarySnapshot) => {
-      nextEditor.commands.setContent(summaryHtml(snapshot, activityReferencesRef.current), {
-        emitUpdate: false,
-      });
+      nextEditor.commands.setContent(
+        summaryHtml(snapshot, activityReferencesRef.current),
+        {
+          emitUpdate: false,
+        },
+      );
       fallbackSnapshotRef.current = snapshot;
       updateToolbarState(nextEditor);
     },

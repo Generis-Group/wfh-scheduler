@@ -9,12 +9,18 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockRouterPush, mockRouterRefresh, mockSignIn } = vi.hoisted(() => ({
+const {
+  mockRouterPush,
+  mockRouterRefresh,
+  mockSignIn,
+  mockLazySummaryEditorMounted,
+} = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
   mockRouterRefresh: vi.fn(),
   mockSignIn: vi.fn(),
+  mockLazySummaryEditorMounted: { current: true },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -122,6 +128,33 @@ vi.mock("@/components/reports/summary-editor", async () => {
   };
 });
 
+vi.mock("@/components/reports/lazy-summary-editor", async () => {
+  const ReactModule = await vi.importActual<typeof import("react")>("react");
+  const summaryEditor = await vi.importMock<
+    typeof import("@/components/reports/summary-editor")
+  >("@/components/reports/summary-editor");
+  const SummaryEditor = summaryEditor.SummaryEditor;
+
+  return {
+    LazySummaryEditor: ReactModule.forwardRef(function MockLazySummaryEditor(
+      props: React.ComponentProps<typeof SummaryEditor>,
+      ref: React.Ref<React.ElementRef<typeof SummaryEditor>>,
+    ) {
+      if (!mockLazySummaryEditorMounted.current) {
+        return ReactModule.createElement("div", {
+          "aria-label": "Loading summary editor",
+          role: "status",
+        });
+      }
+
+      return ReactModule.createElement(SummaryEditor, {
+        ...props,
+        ref,
+      } as React.ComponentProps<typeof SummaryEditor> & { ref: typeof ref });
+    }),
+  };
+});
+
 import { DailyReportApp } from "@/components/reports/daily-report-app";
 import { todayDateString } from "@/lib/dates";
 
@@ -164,31 +197,33 @@ const importedTask: DailyReportProps["initialReport"]["activities"][number] = {
   employeeNote: null,
 };
 
-const manualGoogleTask: DailyReportProps["initialReport"]["activities"][number] = {
-  id: "task-manual",
-  source: "GOOGLE_TASKS" as const,
-  title: "Draft rollout plan",
-  description: null,
-  status: "in progress",
-  sourceUrl: "#",
-  startedAt: "2026-05-20T12:00:00.000Z",
-  durationMinutes: null,
-  selected: true,
-  employeeNote: null,
-};
+const manualGoogleTask: DailyReportProps["initialReport"]["activities"][number] =
+  {
+    id: "task-manual",
+    source: "GOOGLE_TASKS" as const,
+    title: "Draft rollout plan",
+    description: null,
+    status: "in progress",
+    sourceUrl: "#",
+    startedAt: "2026-05-20T12:00:00.000Z",
+    durationMinutes: null,
+    selected: true,
+    employeeNote: null,
+  };
 
-const linkedJiraTask: DailyReportProps["initialReport"]["activities"][number] = {
-  id: "jira-linked",
-  source: "JIRA" as const,
-  title: "IT-3027: Improve website loading speed and performance",
-  description: null,
-  status: "In Progress",
-  sourceUrl: "https://generisgp.atlassian.net/browse/IT-3027",
-  startedAt: "2026-05-20T13:00:00.000Z",
-  durationMinutes: 60,
-  selected: true,
-  employeeNote: null,
-};
+const linkedJiraTask: DailyReportProps["initialReport"]["activities"][number] =
+  {
+    id: "jira-linked",
+    source: "JIRA" as const,
+    title: "IT-3027: Improve website loading speed and performance",
+    description: null,
+    status: "In Progress",
+    sourceUrl: "https://generisgp.atlassian.net/browse/IT-3027",
+    startedAt: "2026-05-20T13:00:00.000Z",
+    durationMinutes: 60,
+    selected: true,
+    employeeNote: null,
+  };
 
 function renderDailyReportApp(
   initialReport: DailyReportProps["initialReport"] = emptyReport,
@@ -225,6 +260,10 @@ async function flushReact() {
   });
 }
 
+beforeEach(() => {
+  mockLazySummaryEditorMounted.current = true;
+});
+
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
@@ -237,14 +276,14 @@ describe("DailyReportApp auto-draft", () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, _init?: RequestInit) => {
-      if (String(input) === "/api/reports") {
-        return Response.json(
-          { report: { ...savedDraft, summary: "Finished the rollout note" } },
-          { status: 201 },
-        );
-      }
+        if (String(input) === "/api/reports") {
+          return Response.json(
+            { report: { ...savedDraft, summary: "Finished the rollout note" } },
+            { status: 201 },
+          );
+        }
 
-      return Response.json({ error: "Unexpected request." }, { status: 500 });
+        return Response.json({ error: "Unexpected request." }, { status: 500 });
       },
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -317,50 +356,88 @@ describe("DailyReportApp auto-draft", () => {
     ).toBe(false);
   });
 
-  it("adds an unfinished Google Task manually", async () => {
-    vi.useFakeTimers();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-
-      if (url.includes("/api/google-tasks/search")) {
-        return Response.json({
-          tasks: [
-            {
-              taskId: "task-manual",
-              taskListId: "list-1",
-              taskListTitle: "Primary tasks",
-              title: "Draft rollout plan",
-              notes: null,
-              status: "needsAction",
-              due: null,
-              updated: "2026-05-20T12:00:00.000Z",
-              sourceUrl: "#",
-            },
-          ],
-        });
-      }
-
-      if (url === "/api/reports/google-task") {
-        expect(init).toEqual(
-          expect.objectContaining({
-            method: "POST",
-            body: expect.stringContaining("task-manual"),
-          }),
+  it("shows actionable streamed import errors", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/sync/jira")) {
+        return new Response(
+          'event: error\ndata: {"message":"Connect Atlassian before syncing."}\n\n',
+          {
+            headers: { "Content-Type": "text/event-stream" },
+          },
         );
-
-        return Response.json({
-          report: { ...savedDraft, activities: [manualGoogleTask] },
-        });
       }
 
       return Response.json({ error: "Unexpected request." }, { status: 500 });
     });
     vi.stubGlobal("fetch", fetchMock);
 
+    render(
+      <DailyReportApp
+        initialReport={emptyReport}
+        date="2026-05-20"
+        integrationStatus={{ google: true, atlassian: true }}
+        oauthConfig={{ google: true, atlassian: true }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import Jira" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Connect Atlassian before syncing."),
+      ).toBeTruthy();
+    });
+  });
+
+  it("adds an unfinished Google Task manually", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+
+        if (url.includes("/api/google-tasks/search")) {
+          return Response.json({
+            tasks: [
+              {
+                taskId: "task-manual",
+                taskListId: "list-1",
+                taskListTitle: "Primary tasks",
+                title: "Draft rollout plan",
+                notes: null,
+                status: "needsAction",
+                due: null,
+                updated: "2026-05-20T12:00:00.000Z",
+                sourceUrl: "#",
+              },
+            ],
+          });
+        }
+
+        if (url === "/api/reports/google-task") {
+          expect(init).toEqual(
+            expect.objectContaining({
+              method: "POST",
+              body: expect.stringContaining("task-manual"),
+            }),
+          );
+
+          return Response.json({
+            report: { ...savedDraft, activities: [manualGoogleTask] },
+          });
+        }
+
+        return Response.json({ error: "Unexpected request." }, { status: 500 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
     renderDailyReportApp(savedDraft);
 
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
-    fireEvent.click(screen.getByRole("button", { name: "Find unfinished task" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Find unfinished task" }),
+    );
     fireEvent.change(
       screen.getByRole("textbox", { name: "Find unfinished Google Tasks" }),
       { target: { value: "rollout" } },
@@ -547,12 +624,8 @@ describe("DailyReportApp auto-draft", () => {
       today,
     );
 
-    expect(
-      screen.queryByRole("button", { name: "Next day" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Jump to today" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Next day" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Jump to today" })).toBeNull();
   });
 
   it("uses custom date and location pickers", async () => {
@@ -651,7 +724,7 @@ describe("DailyReportApp auto-draft", () => {
         .getByRole("link", {
           name: "IT-3027: Improve website loading speed and performance",
         })
-      .getAttribute("draggable"),
+        .getAttribute("draggable"),
     ).toBe("false");
   });
 
@@ -752,6 +825,61 @@ describe("DailyReportApp auto-draft", () => {
     );
   });
 
+  it("keeps summary reference removals made before the lazy editor mounts", async () => {
+    vi.useFakeTimers();
+    mockLazySummaryEditorMounted.current = false;
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({
+          report: {
+            ...savedDraft,
+            summary: "",
+            activities: [{ ...manualGoogleTask, selected: false }],
+          },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const initialReport = {
+      ...savedDraft,
+      summary:
+        "[Draft rollout plan](https://generis.local/activity/task-manual?source=GOOGLE_TASKS)",
+      activities: [manualGoogleTask],
+    };
+
+    const view = renderDailyReportApp(initialReport);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "More actions for Draft rollout plan",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(screen.queryByRole("textbox", { name: "Summary" })).toBeNull();
+
+    mockLazySummaryEditorMounted.current = true;
+    view.rerender(
+      <DailyReportApp
+        initialReport={initialReport}
+        date="2026-05-20"
+        integrationStatus={{ google: true, atlassian: false }}
+        oauthConfig={{ google: true, atlassian: false }}
+      />,
+    );
+
+    expect(
+      (screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement)
+        .value,
+    ).toBe("");
+
+    await advanceAutoSave();
+
+    const requestBody = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    );
+    expect(requestBody.summary).toBe("");
+  });
+
   it("creates a draft before submitting a new report", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -783,7 +911,9 @@ describe("DailyReportApp auto-draft", () => {
       );
     });
     expect(await screen.findByText("Published")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Resubmit update" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Resubmit update" }),
+    ).toBeTruthy();
   });
 
   it("autosaves submitted report edits through the update route", async () => {
@@ -803,7 +933,9 @@ describe("DailyReportApp auto-draft", () => {
 
     renderDailyReportApp(submittedReport);
 
-    expect(screen.getByRole("button", { name: "Resubmit update" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Resubmit update" }),
+    ).toBeTruthy();
     fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
       target: { value: "Submitted edit" },
     });
@@ -861,25 +993,27 @@ describe("DailyReportApp auto-draft", () => {
     vi.useFakeTimers();
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const deleteRequest = deferred<Response>();
-    const fetchMock = vi.fn(
-      (input: RequestInfo | URL, init?: RequestInit) => {
-        if (
-          String(input) === "/api/reports/report-1" &&
-          init?.method === "DELETE"
-        ) {
-          return deleteRequest.promise;
-        }
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (
+        String(input) === "/api/reports/report-1" &&
+        init?.method === "DELETE"
+      ) {
+        return deleteRequest.promise;
+      }
 
-        if (String(input) === "/api/reports") {
-          return Promise.resolve(Response.json(
+      if (String(input) === "/api/reports") {
+        return Promise.resolve(
+          Response.json(
             { report: { ...savedDraft, summary: "Fresh draft" } },
             { status: 201 },
-          ));
-        }
+          ),
+        );
+      }
 
-        return Promise.resolve(Response.json({ error: "Unexpected request." }, { status: 500 }));
-      },
-    );
+      return Promise.resolve(
+        Response.json({ error: "Unexpected request." }, { status: 500 }),
+      );
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     renderDailyReportApp(savedDraft);

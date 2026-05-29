@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { ReportHistory } from "@/components/reports/report-history";
 import { auth } from "@/lib/auth";
+import { withServerTiming } from "@/lib/performance";
 import { hasUserRole } from "@/lib/roles";
 import { serialize } from "@/lib/serializers";
 import { listReportHistory } from "@/lib/services/reports";
@@ -36,7 +37,11 @@ export default async function ReportsPage({
       ? searchParams.reportId
       : null;
 
-  const reports = await listReportHistory(session.user.id, 30, targetReportId);
+  const reports = await withServerTiming(
+    "page:reports:data",
+    () => listReportHistory(session.user.id, 30, targetReportId),
+    { targetReportId },
+  );
 
   return (
     <ReportHistory

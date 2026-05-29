@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { AdminUsers } from "@/components/admin/admin-users";
 import { auth } from "@/lib/auth";
+import { withServerTiming } from "@/lib/performance";
 import { prisma } from "@/lib/prisma";
 import { hasUserRole } from "@/lib/roles";
 import { serialize } from "@/lib/serializers";
@@ -27,13 +28,15 @@ export default async function AdminPage() {
     redirect("/");
   }
 
-  const [users, departments] = await Promise.all([
-    prisma.user.findMany({
-      orderBy: [{ name: "asc" }, { email: "asc" }],
-      select: adminUserSelect,
-    }),
-    listDepartments(),
-  ]);
+  const [users, departments] = await withServerTiming("page:admin:data", () =>
+    Promise.all([
+      prisma.user.findMany({
+        orderBy: [{ name: "asc" }, { email: "asc" }],
+        select: adminUserSelect,
+      }),
+      listDepartments(),
+    ]),
+  );
 
   return (
     <AdminUsers

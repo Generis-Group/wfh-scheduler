@@ -208,6 +208,17 @@ describe("authenticated app shell loading boundaries", () => {
     expect(fallbackSource).toContain("profileLoading");
   });
 
+  it("keeps uploaded profile images available in the app shell", () => {
+    const appLayoutSource = fs.readFileSync(
+      path.join(root, "app", "(app)", "layout.tsx"),
+      "utf8",
+    );
+
+    expect(appLayoutSource).toContain("prisma.user.findUnique");
+    expect(appLayoutSource).toContain("select: { image: true }");
+    expect(appLayoutSource).toContain("profileImage={profileImage}");
+  });
+
   it("does not keep role-placeholder names in app code", () => {
     const sourceFiles = [
       ...walkFiles(path.join(root, "app")),

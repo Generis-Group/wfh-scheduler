@@ -1,6 +1,7 @@
 import { assertCanMutateReport, requireSession } from "@/lib/access";
 import { revalidateReportRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
+import { withServerTiming } from "@/lib/performance";
 import { getReportById, submitReport } from "@/lib/services/reports";
 
 type Context = {
@@ -15,7 +16,11 @@ export async function POST(_request: Request, { params }: Context) {
     const report = await getReportById(params.id);
     assertCanMutateReport(session, report);
 
-    const submitted = await submitReport(report.id, session.user.id);
+    const submitted = await withServerTiming(
+      "api:reports:submit",
+      () => submitReport(report.id, session.user.id),
+      { reportId: report.id },
+    );
     revalidateReportRoutes();
 
     return json({ report: submitted });

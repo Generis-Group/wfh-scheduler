@@ -1,7 +1,12 @@
 import { assertCanMutateReport, requireSession } from "@/lib/access";
 import { revalidateReportRoutes } from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
-import { deleteDraftReport, getReportById, updateReport } from "@/lib/services/reports";
+import { withServerTiming } from "@/lib/performance";
+import {
+  deleteDraftReport,
+  getReportById,
+  updateReport,
+} from "@/lib/services/reports";
 import { updateReportSchema } from "@/lib/validation";
 
 type Context = {
@@ -21,7 +26,11 @@ export async function PUT(request: Request, { params }: Context) {
     assertCanMutateReport(session, report);
 
     const input = updateReportSchema.parse(await request.json());
-    const updated = await updateReport(report.id, session.user.id, input);
+    const updated = await withServerTiming(
+      "api:reports:update",
+      () => updateReport(report.id, session.user.id, input),
+      { reportId: report.id, autosave: isAutosaveRequest(request) },
+    );
     if (!isAutosaveRequest(request)) {
       revalidateReportRoutes();
     }
@@ -38,7 +47,11 @@ export async function DELETE(_request: Request, { params }: Context) {
     const report = await getReportById(params.id);
     assertCanMutateReport(session, report);
 
-    await deleteDraftReport(report.id);
+    await withServerTiming(
+      "api:reports:delete-draft",
+      () => deleteDraftReport(report.id),
+      { reportId: report.id },
+    );
     revalidateReportRoutes();
 
     return json({ ok: true });
