@@ -5,7 +5,16 @@ import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
   title: "Generis Daily Reporting",
-  description: "Employee activity reporting for Generis"
+  description: "Employee activity reporting for Generis",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.png", type: "image/png", sizes: "512x512" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" }
+    ],
+    apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
+    shortcut: ["/favicon.ico"]
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
