@@ -1,6 +1,8 @@
 import { getOptionalEnv } from "@/lib/env";
 import { HttpError } from "@/lib/http";
 
+export const DEFAULT_EMAIL_FROM = "Generis Reports <reports@generisgp.com>";
+
 export type EmailDelivery =
   | {
       status: "SENT";
@@ -34,14 +36,24 @@ export function appUrl(path = "/") {
   return `${appBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+export function emailFrom() {
+  const configuredFrom = getOptionalEnv("EMAIL_FROM")?.trim();
+
+  if (!configuredFrom || configuredFrom.toLowerCase().includes("@resend.dev")) {
+    return DEFAULT_EMAIL_FROM;
+  }
+
+  return configuredFrom;
+}
+
 export function getEmailStatus() {
   const apiKey = getOptionalEnv("RESEND_API_KEY");
-  const from = getOptionalEnv("EMAIL_FROM");
+  const from = emailFrom();
 
   return {
-    configured: Boolean(apiKey && from),
+    configured: Boolean(apiKey),
     provider: "Resend",
-    from: from ?? null,
+    from,
   };
 }
 
@@ -52,9 +64,9 @@ export async function sendEmail({
   text,
 }: SendEmailInput) {
   const apiKey = getOptionalEnv("RESEND_API_KEY");
-  const from = getOptionalEnv("EMAIL_FROM");
+  const from = emailFrom();
 
-  if (!apiKey || !from) {
+  if (!apiKey) {
     throw new HttpError(500, "Resend email is not configured.");
   }
 

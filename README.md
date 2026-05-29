@@ -21,7 +21,7 @@ Docker is intentionally not used for this MVP.
    - `NEXTAUTH_SECRET`
    - `TOKEN_ENCRYPTION_KEY`
    - Atlassian and Google OAuth client values
-   - Resend email values: `RESEND_API_KEY`, `EMAIL_FROM`, `APP_BASE_URL`, and `CRON_SECRET`
+   - Resend email values: `RESEND_API_KEY`, optional `EMAIL_FROM`, `APP_BASE_URL`, and `CRON_SECRET`
 3. Install dependencies:
 
 ```bash
@@ -55,7 +55,7 @@ npm run db:deploy
 ## Vercel + Managed Postgres
 
 1. Create a managed Postgres database and set `DATABASE_URL` in Vercel.
-2. Set `NEXTAUTH_URL` and `APP_BASE_URL` to the production URL, plus `NEXTAUTH_SECRET`, `TOKEN_ENCRYPTION_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, and `CRON_SECRET`.
+2. Set `NEXTAUTH_URL` and `APP_BASE_URL` to the production URL, plus `NEXTAUTH_SECRET`, `TOKEN_ENCRYPTION_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET`, `RESEND_API_KEY`, and `CRON_SECRET`. `EMAIL_FROM` defaults to `Generis Reports <reports@generisgp.com>` and only needs to be set when overriding that sender.
 3. Configure OAuth redirect URLs:
    - Local: `http://localhost:3000/api/auth/callback/google` and `http://localhost:3000/api/auth/callback/atlassian`
    - Production: `https://YOUR_DOMAIN/api/auth/callback/google` and `https://YOUR_DOMAIN/api/auth/callback/atlassian`
@@ -77,6 +77,6 @@ npm run db:seed
 - OAuth tokens are encrypted before being stored in the Auth.js `Account` table, and refreshes persist updated encrypted tokens.
 - Sign-in and admin-created accounts are restricted to `@generisgp.com` email addresses.
 - Reviewer/admin digest emails use Resend; manual digests go to the sender, scheduled digests are sent separately to each active reviewer/admin with that recipient's review scope, and include coverage, missing reports, late/edit flags, and a link back to the review dashboard.
-- Transactional email also uses Resend for admin-created account invites, temporary password resets, reviewer report reminders, and reviewer comment notifications. After the sending domain is verified in Resend DNS, set `EMAIL_FROM` to that verified sender, for example `Generis Reports <reports@generisgp.com>`.
+- Transactional email also uses Resend for admin-created account invites, temporary password resets, reviewer report reminders, and reviewer comment notifications. The default verified sender is `Generis Reports <reports@generisgp.com>`; set `EMAIL_FROM` only if a different verified sender should be used.
 - Employees can revise submitted reports; previous submitted snapshots are retained in `ReportRevision`.
 - Reviewer access uses the `REVIEWER` role internally.
