@@ -132,11 +132,11 @@ export function AccountSettings({
   const content = (
     <div
       className={cn(
-        "grid items-start gap-4",
+        "grid min-w-0 items-start gap-4",
         user.hasPassword && "min-[1080px]:grid-cols-[minmax(0,1fr)_420px]",
       )}
     >
-      <Card className="overflow-hidden">
+      <Card className="min-h-[420px] overflow-hidden md:min-h-[390px]">
         <CardHeader className="px-5 py-5">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
@@ -152,7 +152,7 @@ export function AccountSettings({
         </CardHeader>
         <CardContent className="px-5 pb-5">
           <form className="space-y-5" onSubmit={saveProfile}>
-            <div className="relative flex flex-wrap items-center gap-5 rounded-[8px] border border-[#dfe7f2] bg-white px-5 py-4 shadow-[inset_0_1px_0_rgba(15,23,42,0.02)] dark:border-[#263a55] dark:bg-[#0b1523]">
+            <div className="relative flex min-h-[114px] flex-wrap items-center gap-5 rounded-[8px] border border-[#dfe7f2] bg-white px-5 py-4 shadow-[inset_0_1px_0_rgba(15,23,42,0.02)] dark:border-[#263a55] dark:bg-[#0b1523]">
               <button
                 type="button"
                 className="group relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[#1d4ed8] bg-cover bg-center text-[30px] font-semibold text-white shadow-[0_20px_45px_rgba(29,78,216,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#1d4ed8]"
@@ -179,7 +179,7 @@ export function AccountSettings({
                   event.target.value = "";
                 }}
               />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1 basis-48">
                 <div className="truncate text-[17px] font-semibold text-[#111827] dark:text-foreground">
                   {name.trim() || "Your name"}
                 </div>
@@ -238,7 +238,7 @@ export function AccountSettings({
       </Card>
 
       {user.hasPassword ? (
-        <Card className="overflow-hidden">
+        <Card className="min-h-[380px] overflow-hidden">
           <CardHeader className="px-5 py-5">
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">

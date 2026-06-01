@@ -12,11 +12,15 @@ type Context = {
 
 export async function PATCH(request: Request, { params }: Context) {
   try {
-    const session = await requireRole(["REVIEWER", "ADMIN"]);
+    const session = await requireRole(["REVIEWER"]);
     const input = reportReadStateSchema.parse(await request.json());
     const existingReport = await getReportById(params.id);
     await assertCanReviewReport(session, existingReport);
-    const report = await setReportReadState(params.id, session.user.id, input.read);
+    const report = await setReportReadState(
+      params.id,
+      session.user.id,
+      input.read,
+    );
     revalidateReportRoutes();
 
     return json({ report });

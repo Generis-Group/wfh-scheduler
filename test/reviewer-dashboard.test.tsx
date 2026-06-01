@@ -228,6 +228,66 @@ describe("ReviewerDashboard weekly reports", () => {
     expect(reviewNotesPanel.className).toContain("report-pdf-screen-only");
   });
 
+  it("keeps opened reports refreshable and warns on unsaved review notes", async () => {
+    window.history.replaceState(null, "", "/review?date=2026-05-13");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ report: submittedReport }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+      ),
+    );
+
+    render(
+      <ReviewerDashboard
+        rows={[{ user: employee, report: submittedReport }]}
+        metrics={metrics}
+        date="2026-05-13"
+        reviewerId="reviewer-1"
+        initialOpenedReportId="report-1"
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Daily Report" }),
+    ).toBeTruthy();
+    expect(new URL(window.location.href).searchParams.get("reportId")).toBe(
+      null,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to review dashboard" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    expect(new URL(window.location.href).searchParams.get("reportId")).toBe(
+      "report-1",
+    );
+
+    fireEvent.change(screen.getByLabelText("Add review note"), {
+      target: { value: "Please add more detail." },
+    });
+    const beforeUnloadEvent = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(beforeUnloadEvent);
+    expect(beforeUnloadEvent.defaultPrevented).toBe(true);
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to review dashboard" }),
+    );
+    expect(screen.getByRole("heading", { name: "Daily Report" })).toBeTruthy();
+    window.history.pushState(null, "", "/review?date=2026-05-13");
+    window.dispatchEvent(new Event("popstate"));
+    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("heading", { name: "Daily Report" })).toBeTruthy();
+    expect(new URL(window.location.href).searchParams.get("reportId")).toBe(
+      "report-1",
+    );
+    confirmSpy.mockRestore();
+  });
+
   it("opens a generated weekly report for an employee", async () => {
     const weeklySubmittedReport = {
       ...submittedReport,
@@ -288,17 +348,14 @@ describe("ReviewerDashboard weekly reports", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Weekly report" }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/review/weekly-report",
-        {
-          body: JSON.stringify({
-            userId: "employee-1",
-            date: "2026-05-13",
-          }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        },
-      );
+      expect(fetchMock).toHaveBeenCalledWith("/api/review/weekly-report", {
+        body: JSON.stringify({
+          userId: "employee-1",
+          date: "2026-05-13",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
     });
 
     expect(

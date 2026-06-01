@@ -482,6 +482,14 @@ function canReviewReport(row: Row) {
   return row.report?.status === "SUBMITTED";
 }
 
+function reportUserIdForReportId(rows: Row[], reportId?: string | null) {
+  if (!reportId) {
+    return null;
+  }
+
+  return rows.find((row) => row.report?.id === reportId)?.user.id ?? null;
+}
+
 function submittedSortValue(row: Row) {
   return toDate(row.report?.submittedAt)?.getTime() ?? null;
 }
@@ -829,16 +837,18 @@ export function ReviewerDashboard({
   metrics: _metrics,
   date,
   reviewerId,
+  initialOpenedReportId,
 }: {
   rows: Row[];
   metrics: Metrics;
   date: string;
   reviewerId?: string | null;
+  initialOpenedReportId?: string | null;
 }) {
   const router = useRouter();
   const [items, setItems] = useState(rows);
   const [activeReportUserId, setActiveReportUserId] = useState<string | null>(
-    null,
+    () => reportUserIdForReportId(rows, initialOpenedReportId),
   );
   const [weeklyReportState, setWeeklyReportState] =
     useState<WeeklyReportState | null>(null);
@@ -870,6 +880,8 @@ export function ReviewerDashboard({
   const pendingDateRef = useRef<string | null>(null);
   const blockedOpenTimerRef = useRef<number | null>(null);
   const rowActionMenuRef = useRef<HTMLDivElement | null>(null);
+  const unsavedReviewNoteRef = useRef(false);
+  const openReportIdRef = useRef<string | null>(null);
   const maxReportDate = todayDateString();
   const currentReviewDate = dateInputValue(date);
   const dateNavigationPending = pendingDateControl !== null;
@@ -962,7 +974,8 @@ export function ReviewerDashboard({
 
   useEffect(() => {
     setItems(rows);
-    setActiveReportUserId(null);
+    setActiveReportUserId(reportUserIdForReportId(rows, initialOpenedReportId));
+    unsavedReviewNoteRef.current = false;
     setWeeklyReportState(null);
     setWeeklyReportArchiveState(null);
     setSelectedReportIds([]);
@@ -972,7 +985,7 @@ export function ReviewerDashboard({
     setPage(1);
     pendingDateRef.current = null;
     setPendingDateControl(null);
-  }, [date, rows]);
+  }, [date, initialOpenedReportId, rows]);
 
   useEffect(() => {
     return () => {
@@ -1022,6 +1035,39 @@ export function ReviewerDashboard({
       window.clearTimeout(fallbackTimer);
     };
   }, [pendingDateControl]);
+
+  useEffect(() => {
+    openReportIdRef.current = activeRow?.report?.id ?? null;
+  }, [activeRow?.report?.id]);
+
+  useEffect(() => {
+    function syncOpenedReportFromUrl() {
+      const reportId = new URL(window.location.href).searchParams.get(
+        "reportId",
+      );
+
+      if (unsavedReviewNoteRef.current) {
+        const shouldDiscard = window.confirm("Discard this unsaved review note?");
+
+        if (!shouldDiscard) {
+          updateOpenedReportParam(openReportIdRef.current, "replace");
+          return;
+        }
+
+        unsavedReviewNoteRef.current = false;
+      }
+
+      setWeeklyReportState(null);
+      setWeeklyReportArchiveState(null);
+      setActiveReportUserId(reportUserIdForReportId(items, reportId));
+    }
+
+    window.addEventListener("popstate", syncOpenedReportFromUrl);
+
+    return () => {
+      window.removeEventListener("popstate", syncOpenedReportFromUrl);
+    };
+  }, [items]);
 
   useEffect(() => {
     const storedControls = readEmployeeTableControls();
@@ -1170,6 +1216,26 @@ export function ReviewerDashboard({
     setPage(1);
   }
 
+  function updateOpenedReportParam(
+    reportId: string | null,
+    mode: "push" | "replace" = "push",
+  ) {
+    const url = new URL(window.location.href);
+
+    if (reportId) {
+      url.searchParams.set("reportId", reportId);
+    } else {
+      url.searchParams.delete("reportId");
+    }
+
+    if (mode === "replace") {
+      window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+      return;
+    }
+
+    window.history.pushState(null, "", `${url.pathname}${url.search}`);
+  }
+
   function toggleEmployeeSort(sortKey: EmployeeSortKey) {
     setSortState((current) => ({
       key: sortKey,
@@ -1191,12 +1257,26 @@ export function ReviewerDashboard({
     }
 
     void setReadState(row, true);
+    setWeeklyReportState(null);
+    setWeeklyReportArchiveState(null);
+    setRowActionMenu(null);
+    unsavedReviewNoteRef.current = false;
+    openReportIdRef.current = row.report?.id ?? null;
     setActiveReportUserId(row.user.id);
+    updateOpenedReportParam(row.report?.id ?? null);
+  }
+
+  function closeReport() {
+    unsavedReviewNoteRef.current = false;
+    openReportIdRef.current = null;
+    setActiveReportUserId(null);
+    updateOpenedReportParam(null);
   }
 
   async function openWeeklyReport(row: Row) {
     setNotice(null);
     setActiveReportUserId(null);
+    updateOpenedReportParam(null);
     setWeeklyReportArchiveState(null);
     setRowActionMenu(null);
     setWeeklyReportState({ status: "loading", employee: row.user });
@@ -1243,6 +1323,7 @@ export function ReviewerDashboard({
   async function openWeeklyReportArchive(row: Row) {
     setNotice(null);
     setActiveReportUserId(null);
+    updateOpenedReportParam(null);
     setWeeklyReportState(null);
     setRowActionMenu(null);
     setWeeklyReportArchiveState({ status: "loading", employee: row.user });
@@ -1339,7 +1420,10 @@ export function ReviewerDashboard({
     const viewportPadding = 12;
     const left = Math.min(
       Math.max(viewportPadding, rect.right - menuWidth),
-      Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding),
+      Math.max(
+        viewportPadding,
+        window.innerWidth - menuWidth - viewportPadding,
+      ),
     );
     const openBelow =
       window.innerHeight - rect.bottom - viewportPadding >= menuHeight;
@@ -1401,7 +1485,7 @@ export function ReviewerDashboard({
     setNotice(
       body.skipped
         ? "Digest was skipped because it was already sent or had no recipients."
-        : `Email digest sent to ${recipients} reviewer/admin recipient${recipients === 1 ? "" : "s"}.`,
+        : `Email digest sent to ${recipients} reviewer recipient${recipients === 1 ? "" : "s"}.`,
     );
     setIsSendingDigest(false);
   }
@@ -1439,9 +1523,7 @@ export function ReviewerDashboard({
       }
 
       if (body.emailDelivery?.status === "SKIPPED") {
-        setNotice(
-          body.emailDelivery.reason ?? "Reminder email was skipped.",
-        );
+        setNotice(body.emailDelivery.reason ?? "Reminder email was skipped.");
         return;
       }
 
@@ -1552,8 +1634,11 @@ export function ReviewerDashboard({
         <ReportReviewPage
           row={activeRow}
           date={date}
-          onBack={() => setActiveReportUserId(null)}
+          onBack={closeReport}
           onAddComment={(body) => addComment(activeRow, body)}
+          onUnsavedCommentChange={(dirty) => {
+            unsavedReviewNoteRef.current = dirty;
+          }}
           onPrint={() => {
             window.print();
             setNotice(
@@ -1977,8 +2062,12 @@ export function ReviewerDashboard({
                                 className="h-8 w-8 rounded-[7px] bg-[#f4f7fb] p-0 text-[#64748b] hover:text-[#2563eb]"
                                 aria-label={`More actions for ${employeeLabel(row)}`}
                                 aria-haspopup="menu"
-                                aria-expanded={rowActionMenu?.userId === row.user.id}
-                                onClick={(event) => toggleRowActionMenu(row, event)}
+                                aria-expanded={
+                                  rowActionMenu?.userId === row.user.id
+                                }
+                                onClick={(event) =>
+                                  toggleRowActionMenu(row, event)
+                                }
                                 onKeyDown={(event) => event.stopPropagation()}
                               >
                                 <MoreHorizontal className="h-4 w-4" />
@@ -2529,8 +2618,8 @@ function WeeklyReportArchivePage({
                     {formatWeekRange(report.weekStart, report.weekEnd)}
                   </p>
                   <p className="mt-1 text-sm text-[#52647a] dark:text-muted-foreground">
-                    {report.submittedCount} of {report.expectedDays} submitted
-                    - {report.activityCount} activities - Generated{" "}
+                    {report.submittedCount} of {report.expectedDays} submitted -{" "}
+                    {report.activityCount} activities - Generated{" "}
                     {formatTimestamp(report.generatedAt)}
                   </p>
                 </div>
@@ -2610,11 +2699,10 @@ function WeeklyReportReviewPage({
   }
 
   const { data } = state;
-  const reports = [...data.reports].sort(
-    (first, second) =>
-      dateInputValue(first.reportDate ?? data.weekStart).localeCompare(
-        dateInputValue(second.reportDate ?? data.weekStart),
-      ),
+  const reports = [...data.reports].sort((first, second) =>
+    dateInputValue(first.reportDate ?? data.weekStart).localeCompare(
+      dateInputValue(second.reportDate ?? data.weekStart),
+    ),
   );
   const weekDates = reportWeekDates(data.weekStart, data.weekEnd);
   const reportsByDate = new Map(
@@ -2741,12 +2829,14 @@ function ReportReviewPage({
   date,
   onBack,
   onAddComment,
+  onUnsavedCommentChange,
   onPrint,
 }: {
   row: Row;
   date: string;
   onBack: () => void;
   onAddComment: (body: string) => Promise<boolean>;
+  onUnsavedCommentChange: (dirty: boolean) => void;
   onPrint: () => void;
 }) {
   const report = row.report;
@@ -2804,6 +2894,42 @@ function ReportReviewPage({
     }
   }
 
+  useEffect(() => {
+    onUnsavedCommentChange(Boolean(commentBody.trim()));
+
+    return () => {
+      onUnsavedCommentChange(false);
+    };
+  }, [commentBody, onUnsavedCommentChange]);
+
+  useEffect(() => {
+    if (!commentBody.trim()) {
+      return;
+    }
+
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", warnBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+    };
+  }, [commentBody]);
+
+  function handleBackClick() {
+    if (
+      commentBody.trim() &&
+      !window.confirm("Discard this unsaved review note?")
+    ) {
+      return;
+    }
+
+    onBack();
+  }
+
   return (
     <ReportPdfDocument
       eyebrow="Generis Daily Report"
@@ -2844,7 +2970,7 @@ function ReportReviewPage({
       backControl={
         <button
           className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
-          onClick={onBack}
+          onClick={handleBackClick}
         >
           <ArrowLeft className="h-4 w-4" />
           Back to review dashboard
@@ -2889,8 +3015,8 @@ function ReportReviewPage({
       footer={
         latestRevision ? (
           <>
-            {revisions.length} revision{revisions.length === 1 ? "" : "s"}.
-            Last edited {formatTimestamp(latestRevision.createdAt)} by{" "}
+            {revisions.length} revision{revisions.length === 1 ? "" : "s"}. Last
+            edited {formatTimestamp(latestRevision.createdAt)} by{" "}
             {latestRevision.editedBy.name ??
               latestRevision.editedBy.email ??
               "User"}

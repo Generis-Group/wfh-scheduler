@@ -11,17 +11,12 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  mockRouterPush,
-  mockRouterRefresh,
-  mockSignIn,
-  mockLazySummaryEditorMounted,
-} = vi.hoisted(() => ({
-  mockRouterPush: vi.fn(),
-  mockRouterRefresh: vi.fn(),
-  mockSignIn: vi.fn(),
-  mockLazySummaryEditorMounted: { current: true },
-}));
+const { mockRouterPush, mockRouterRefresh, mockLazySummaryEditorMounted } =
+  vi.hoisted(() => ({
+    mockRouterPush: vi.fn(),
+    mockRouterRefresh: vi.fn(),
+    mockLazySummaryEditorMounted: { current: true },
+  }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -31,11 +26,6 @@ vi.mock("next/navigation", () => ({
   }),
   usePathname: () => "/",
   useSearchParams: () => new URLSearchParams(),
-}));
-
-vi.mock("next-auth/react", () => ({
-  signIn: mockSignIn,
-  signOut: vi.fn(),
 }));
 
 vi.mock("next/image", async () => {
@@ -234,7 +224,6 @@ function renderDailyReportApp(
       initialReport={initialReport}
       date={date}
       integrationStatus={{ google: true, atlassian: false }}
-      oauthConfig={{ google: true, atlassian: false }}
     />,
   );
 }
@@ -336,7 +325,9 @@ describe("DailyReportApp auto-draft", () => {
     renderDailyReportApp();
 
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
-    fireEvent.click(screen.getByRole("button", { name: "Import Tasks" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import Google Tasks" }),
+    );
 
     await flushReact();
     expect(screen.getByText("Imported task")).toBeTruthy();
@@ -354,6 +345,47 @@ describe("DailyReportApp auto-draft", () => {
         String(input).includes("/api/activity"),
       ),
     ).toBe(false);
+  });
+
+  it("shows unavailable imports as disabled actions before integrations are connected", () => {
+    render(
+      <DailyReportApp
+        initialReport={emptyReport}
+        date="2026-05-20"
+        integrationStatus={{ google: false, atlassian: false }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(
+      (screen.getByRole("button", { name: "Import Jira" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Import Google Calendar",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Import Google Tasks",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Find unfinished Google Tasks",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByRole("link", { name: "Manage integrations" }),
+    ).toBeTruthy();
   });
 
   it("shows actionable streamed import errors", async () => {
@@ -376,7 +408,6 @@ describe("DailyReportApp auto-draft", () => {
         initialReport={emptyReport}
         date="2026-05-20"
         integrationStatus={{ google: true, atlassian: true }}
-        oauthConfig={{ google: true, atlassian: true }}
       />,
     );
 
@@ -436,7 +467,7 @@ describe("DailyReportApp auto-draft", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     fireEvent.click(
-      screen.getByRole("button", { name: "Find unfinished task" }),
+      screen.getByRole("button", { name: "Find unfinished Google Tasks" }),
     );
     fireEvent.change(
       screen.getByRole("textbox", { name: "Find unfinished Google Tasks" }),
@@ -863,7 +894,6 @@ describe("DailyReportApp auto-draft", () => {
         initialReport={initialReport}
         date="2026-05-20"
         integrationStatus={{ google: true, atlassian: false }}
-        oauthConfig={{ google: true, atlassian: false }}
       />,
     );
 

@@ -10,7 +10,7 @@ import {
 } from "@/lib/email";
 import { isGenerisEmail } from "@/lib/auth-domain";
 import { prisma } from "@/lib/prisma";
-import { hasUserRole, normalizeUserRoles, primaryUserRole } from "@/lib/roles";
+import { hasUserRole, normalizeUserRoles } from "@/lib/roles";
 import type { ReviewScope } from "@/lib/services/departments";
 import { listReportsForDate } from "@/lib/services/reports";
 
@@ -47,7 +47,7 @@ type DigestRecipient = {
   id?: string;
   email: string;
   name?: string | null;
-  role?: "REVIEWER" | "ADMIN";
+  role?: "REVIEWER";
   roles?: UserRole[];
 };
 
@@ -70,15 +70,24 @@ function displayName(row: DigestRow) {
 
 export function isReportLate(report: DigestReport | null, date: string) {
   const submittedAt = toDate(report?.submittedAt);
-  return Boolean(submittedAt && submittedAt > reportDayEnd(report?.reportDate ?? date, DEFAULT_TIMEZONE));
+  return Boolean(
+    submittedAt &&
+    submittedAt > reportDayEnd(report?.reportDate ?? date, DEFAULT_TIMEZONE),
+  );
 }
 
-export function isReportEditedAfterDate(report: DigestReport | null, date: string) {
+export function isReportEditedAfterDate(
+  report: DigestReport | null,
+  date: string,
+) {
   return Boolean(
     report?.revisions.some((revision) => {
       const editedAt = toDate(revision.createdAt);
-      return Boolean(editedAt && editedAt > reportDayEnd(report.reportDate ?? date, DEFAULT_TIMEZONE));
-    })
+      return Boolean(
+        editedAt &&
+        editedAt > reportDayEnd(report.reportDate ?? date, DEFAULT_TIMEZONE),
+      );
+    }),
   );
 }
 
@@ -98,11 +107,16 @@ export function reportDigestStatus(row: DigestRow, date: string) {
   return row.report.status === "SUBMITTED" ? "Submitted" : "Draft";
 }
 
-export function applyReviewDigestFilters(rows: DigestRow[], _date: string, filters: ReviewDigestFilters = {}) {
+export function applyReviewDigestFilters(
+  rows: DigestRow[],
+  _date: string,
+  filters: ReviewDigestFilters = {},
+) {
   const query = filters.search?.trim().toLowerCase() ?? "";
 
   return rows.filter((row) => {
-    const employee = `${row.user.name ?? ""} ${row.user.email ?? ""}`.toLowerCase();
+    const employee =
+      `${row.user.name ?? ""} ${row.user.email ?? ""}`.toLowerCase();
     const matchesSearch = !query || employee.includes(query);
 
     return matchesSearch && hasUserRole(row.user, "EMPLOYEE");
@@ -114,7 +128,7 @@ export function buildReviewDigest({
   rows,
   recipients,
   appBaseUrl,
-  filters = {}
+  filters = {},
 }: {
   date: string;
   rows: DigestRow[];
@@ -123,18 +137,28 @@ export function buildReviewDigest({
   filters?: ReviewDigestFilters;
 }) {
   const filteredRows = applyReviewDigestFilters(rows, date, filters);
-  const submittedRows = filteredRows.filter((row) => row.report?.status === "SUBMITTED");
-  const draftRows = filteredRows.filter((row) => row.report?.status === "DRAFT");
+  const submittedRows = filteredRows.filter(
+    (row) => row.report?.status === "SUBMITTED",
+  );
+  const draftRows = filteredRows.filter(
+    (row) => row.report?.status === "DRAFT",
+  );
   const missingRows = filteredRows.filter((row) => !row.report);
   const lateRows = filteredRows.filter((row) => isReportLate(row.report, date));
-  const editedRows = filteredRows.filter((row) => isReportEditedAfterDate(row.report, date));
+  const editedRows = filteredRows.filter((row) =>
+    isReportEditedAfterDate(row.report, date),
+  );
   const expectedCount = filteredRows.length;
-  const coverage = expectedCount ? Math.round((submittedRows.length / expectedCount) * 100) : 0;
+  const coverage = expectedCount
+    ? Math.round((submittedRows.length / expectedCount) * 100)
+    : 0;
   const reviewUrl = `${appBaseUrl.replace(/\/$/, "")}/review?date=${encodeURIComponent(date)}`;
   const subject = `Generis daily report digest - ${date}`;
   const filterSummary = [
-    filters.search?.trim() ? `search "${filters.search.trim()}"` : null
-  ].filter(Boolean).join(", ");
+    filters.search?.trim() ? `search "${filters.search.trim()}"` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   const textLines = [
     `Generis daily report digest for ${date}`,
@@ -145,14 +169,16 @@ export function buildReviewDigest({
     `Late: ${lateRows.length}`,
     `Edited after date: ${editedRows.length}`,
     "",
-    missingRows.length ? `Missing reports: ${missingRows.map(displayName).join(", ")}` : "Missing reports: none",
+    missingRows.length
+      ? `Missing reports: ${missingRows.map(displayName).join(", ")}`
+      : "Missing reports: none",
     lateRows.length || editedRows.length
       ? `Late/edited reports: ${[...new Set([...lateRows, ...editedRows].map(displayName))].join(", ")}`
       : "Late/edited reports: none",
     "",
     `Open review dashboard: ${reviewUrl}`,
     "",
-    `Sent to ${recipients.map((recipient) => recipient.email).join(", ")}`
+    `Sent to ${recipients.map((recipient) => recipient.email).join(", ")}`,
   ].filter((line): line is string => line !== null);
 
   const html = `
@@ -184,9 +210,9 @@ export function buildReviewDigest({
       drafts: draftRows.length,
       missing: missingRows.length,
       late: lateRows.length,
-      edited: editedRows.length
+      edited: editedRows.length,
     },
-    reviewUrl
+    reviewUrl,
   };
 }
 
@@ -198,11 +224,11 @@ export async function selectReviewDigestRecipients(scope?: ReviewScope) {
         ? { id: scope.userId }
         : {
             OR: [
-              { roles: { hasSome: ["REVIEWER", "ADMIN"] as const } },
-              { role: { in: ["REVIEWER", "ADMIN"] as const } }
-            ]
+              { roles: { has: "REVIEWER" as const } },
+              { role: "REVIEWER" as const },
+            ],
           }),
-      email: { not: null }
+      email: { not: null },
     },
     orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
     select: {
@@ -211,25 +237,35 @@ export async function selectReviewDigestRecipients(scope?: ReviewScope) {
       name: true,
       role: true,
       roles: true,
-      status: true
-    }
+      status: true,
+    },
   });
 
   return users
-    .filter((user): user is { id: string; email: string; name: string | null; role: UserRole; roles: UserRole[]; status: "ACTIVE" } =>
-      Boolean(
-        user.email &&
+    .filter(
+      (
+        user,
+      ): user is {
+        id: string;
+        email: string;
+        name: string | null;
+        role: UserRole;
+        roles: UserRole[];
+        status: "ACTIVE";
+      } =>
+        Boolean(
+          user.email &&
           isGenerisEmail(user.email) &&
           user.status === "ACTIVE" &&
-          (hasUserRole(user, "REVIEWER") || hasUserRole(user, "ADMIN"))
-        )
+          hasUserRole(user, "REVIEWER"),
+        ),
     )
     .map((user) => ({
       id: user.id,
       email: user.email,
       name: user.name,
-      role: primaryUserRole(user) as "REVIEWER" | "ADMIN",
-      roles: normalizeUserRoles(user)
+      role: "REVIEWER" as const,
+      roles: normalizeUserRoles(user),
     }));
 }
 
@@ -238,7 +274,7 @@ export async function sendReviewDigest({
   trigger,
   filters,
   scope,
-  throwOnFailure = true
+  throwOnFailure = true,
 }: {
   date: string;
   trigger: DigestTrigger;
@@ -247,7 +283,10 @@ export async function sendReviewDigest({
   throwOnFailure?: boolean;
 }) {
   const reportDate = parseReportDate(date);
-  const dedupeKey = trigger === "SCHEDULED" ? `review-digest:${date}:${scope?.userId ?? "global"}` : null;
+  const dedupeKey =
+    trigger === "SCHEDULED"
+      ? `review-digest:${date}:${scope?.userId ?? "global"}`
+      : null;
   let retryRun: EmailRun | null = null;
 
   if (dedupeKey) {
@@ -260,7 +299,13 @@ export async function sendReviewDigest({
 
   const recipients = await selectReviewDigestRecipients(scope);
   const rows = await listReportsForDate(date, scope);
-  const digest = buildReviewDigest({ date, rows, recipients, appBaseUrl: appBaseUrl(), filters });
+  const digest = buildReviewDigest({
+    date,
+    rows,
+    recipients,
+    appBaseUrl: appBaseUrl(),
+    filters,
+  });
   const emailRun = retryRun
     ? await prisma.emailRun.update({
         where: { id: retryRun.id },
@@ -273,8 +318,8 @@ export async function sendReviewDigest({
           providerMessageId: null,
           errorMessage: null,
           completedAt: null,
-          filters: filters ? (filters as Prisma.InputJsonValue) : undefined
-        }
+          filters: filters ? (filters as Prisma.InputJsonValue) : undefined,
+        },
       })
     : await prisma.emailRun.create({
         data: {
@@ -284,8 +329,8 @@ export async function sendReviewDigest({
           recipientEmails: recipients.map((recipient) => recipient.email),
           subject: digest.subject,
           filters: filters ? (filters as Prisma.InputJsonValue) : undefined,
-          dedupeKey
-        }
+          dedupeKey,
+        },
       });
 
   if (recipients.length === 0) {
@@ -293,9 +338,11 @@ export async function sendReviewDigest({
       where: { id: emailRun.id },
       data: {
         status: "SKIPPED",
-        errorMessage: scope ? "The current reviewer/admin recipient does not have an active @generisgp.com email." : "No active reviewer/admin recipients with @generisgp.com emails.",
-        completedAt: new Date()
-      }
+        errorMessage: scope
+          ? "The current reviewer does not have an active @generisgp.com email."
+          : "No active reviewers with @generisgp.com emails.",
+        completedAt: new Date(),
+      },
     });
 
     return { emailRun: skipped, skipped: true };
@@ -306,15 +353,15 @@ export async function sendReviewDigest({
       to: recipients.map((recipient) => recipient.email),
       subject: digest.subject,
       html: digest.html,
-      text: digest.text
+      text: digest.text,
     });
     const sent = await prisma.emailRun.update({
       where: { id: emailRun.id },
       data: {
         status: "SUCCEEDED",
         providerMessageId,
-        completedAt: new Date()
-      }
+        completedAt: new Date(),
+      },
     });
 
     return { emailRun: sent, skipped: false };
@@ -323,9 +370,10 @@ export async function sendReviewDigest({
       where: { id: emailRun.id },
       data: {
         status: "FAILED",
-        errorMessage: error instanceof Error ? error.message : "Unknown email error.",
-        completedAt: new Date()
-      }
+        errorMessage:
+          error instanceof Error ? error.message : "Unknown email error.",
+        completedAt: new Date(),
+      },
     });
 
     if (!throwOnFailure) {
@@ -345,21 +393,26 @@ export async function sendScheduledReviewDigests({ date }: { date: string }) {
       await sendReviewDigest({
         date,
         trigger: "SCHEDULED",
-        scope: { userId: recipient.id!, roles: recipient.roles ?? (recipient.role ? [recipient.role] : undefined) },
-        throwOnFailure: false
-      })
+        scope: {
+          userId: recipient.id!,
+          roles:
+            recipient.roles ?? (recipient.role ? [recipient.role] : undefined),
+        },
+        throwOnFailure: false,
+      }),
     );
   }
 
   return {
     emailRuns: results.map((result) => result.emailRun),
-    skipped: recipients.length === 0 || results.every((result) => result.skipped)
+    skipped:
+      recipients.length === 0 || results.every((result) => result.skipped),
   };
 }
 
 export async function getLastReviewDigestRun() {
   return prisma.emailRun.findFirst({
-    orderBy: { createdAt: "desc" }
+    orderBy: { createdAt: "desc" },
   });
 }
 
@@ -371,7 +424,8 @@ export function getReviewDigestEmailStatus() {
     provider: emailStatus.provider,
     from: emailStatus.from,
     digestTime: `Weekday evening ${DEFAULT_TIMEZONE}`,
-    recipientRule: "Manual digests go to the sender; scheduled digests are scoped per active reviewer/admin"
+    recipientRule:
+      "Manual digests go to the sender; scheduled digests are scoped per active reviewer",
   };
 }
 

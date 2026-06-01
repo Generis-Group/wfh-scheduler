@@ -123,13 +123,6 @@ const reviewerNav: NavItem[] = [
 
 const adminNav: NavItem[] = [
   {
-    href: "/review",
-    label: "Review",
-    icon: BarChart3,
-    key: "review",
-    prefetch: "eager",
-  },
-  {
     href: "/admin",
     label: "Admin",
     icon: Users,
@@ -176,7 +169,10 @@ export function ReferenceAppShell({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const nav = navForRoles(userRoles, variant);
+  const nav = useMemo(
+    () => navForRoles(userRoles, variant),
+    [userRoles, variant],
+  );
   const active = activeNavKey(pathname);
   const [profileOpen, setProfileOpen] = useState(false);
   const [lastReportDate, setLastReportDate] = useState<string | null>(null);
@@ -194,19 +190,19 @@ export function ReferenceAppShell({
   const searchParamString = searchParams?.toString() ?? "";
   const currentHref = `${pathname}${searchParamString ? `?${searchParamString}` : ""}`;
   const routeDateParam = searchParams?.get("date") ?? null;
+  const displayedNav = useMemo(
+    () => (profileLoading ? [] : nav),
+    [nav, profileLoading],
+  );
   const rememberedDates = useMemo(
     () => ({ lastReportDate, lastReviewDate }),
     [lastReportDate, lastReviewDate],
   );
   const logoHref = getLogoHref(userRoles, variant, lastReviewDate);
   const mobileLogoHref = logoHref;
-  const logoActiveKey = hasShellRole(userRoles, variant, "EMPLOYEE")
-    ? "report"
-    : "review";
+  const logoActiveKey = getLogoActiveKey(userRoles, variant);
   const canUseDaily = hasShellRole(userRoles, variant, "EMPLOYEE");
-  const canUseReview =
-    hasShellRole(userRoles, variant, "REVIEWER") ||
-    hasShellRole(userRoles, variant, "ADMIN");
+  const canUseReview = hasShellRole(userRoles, variant, "REVIEWER");
   const hasStalePrefetchedData = serverDataVersion !== freshServerDataVersion;
   const navigationPending = pendingNavigation !== null;
   const visibleActive = pendingNavigation?.activeKey ?? active;
@@ -326,7 +322,7 @@ export function ReferenceAppShell({
     const hrefs = [
       logoHref,
       mobileLogoHref,
-      ...nav
+      ...displayedNav
         .filter((item) => item.prefetch === "eager")
         .map((item) => getNavHref(item, rememberedDates, currentHref)),
     ];
@@ -338,11 +334,11 @@ export function ReferenceAppShell({
     });
   }, [
     currentHref,
+    displayedNav,
     hasStalePrefetchedData,
     logoHref,
     rememberedDates,
     mobileLogoHref,
-    nav,
     prefetchRoute,
   ]);
 
@@ -424,7 +420,7 @@ export function ReferenceAppShell({
           </span>
         </Link>
         <nav className="reference-sidebar-nav mt-6 space-y-0.5">
-          {nav.map((item) => {
+          {displayedNav.map((item) => {
             const Icon = item.icon;
             const href = getNavHref(item, rememberedDates, currentHref);
 
@@ -469,7 +465,7 @@ export function ReferenceAppShell({
               </Link>
 
               <nav className="hidden h-full items-center gap-1 md:flex">
-                {nav.map((item) => {
+                {displayedNav.map((item) => {
                   const Icon = item.icon;
                   const href = getNavHref(item, rememberedDates, currentHref);
 
@@ -584,7 +580,7 @@ export function ReferenceAppShell({
             </div>
           </div>
           <nav className="flex h-11 items-center gap-2 overflow-x-auto px-[clamp(14px,1.7vw,26px)] shadow-[0_-1px_0_rgba(15,23,42,0.04)] dark:shadow-[0_-1px_0_rgba(255,255,255,0.04)] md:hidden">
-            {nav.map((item) => {
+            {displayedNav.map((item) => {
               const Icon = item.icon;
               const href = getNavHref(item, rememberedDates, currentHref);
 
@@ -669,7 +665,7 @@ function navForRoles(
     );
   }
 
-  if (roles.has("REVIEWER") || roles.has("ADMIN")) {
+  if (roles.has("REVIEWER")) {
     nav.push(
       ...reviewerNav.filter(
         (item) => item.key !== "settings" && item.key !== "bugs",
@@ -692,11 +688,38 @@ function getLogoHref(
   variant: ShellVariant,
   lastReviewDate?: string | null,
 ) {
-  if (!hasShellRole(userRoles, variant, "EMPLOYEE")) {
+  if (hasShellRole(userRoles, variant, "EMPLOYEE")) {
+    return "/";
+  }
+
+  if (hasShellRole(userRoles, variant, "REVIEWER")) {
     return lastReviewDate ? `/review?date=${lastReviewDate}` : "/review";
   }
 
-  return "/";
+  if (hasShellRole(userRoles, variant, "ADMIN")) {
+    return "/admin";
+  }
+
+  return "/settings";
+}
+
+function getLogoActiveKey(
+  userRoles: string[] | null | undefined,
+  variant: ShellVariant,
+): NavKey {
+  if (hasShellRole(userRoles, variant, "EMPLOYEE")) {
+    return "report";
+  }
+
+  if (hasShellRole(userRoles, variant, "REVIEWER")) {
+    return "review";
+  }
+
+  if (hasShellRole(userRoles, variant, "ADMIN")) {
+    return "admin";
+  }
+
+  return "settings";
 }
 
 function getNavHref(

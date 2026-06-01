@@ -290,9 +290,7 @@ describe("authenticated app shell loading boundaries", () => {
 
     renderReferenceShell("Current page content", "admin");
 
-    expect(
-      screen.getAllByRole("link", { name: "Review" }).length,
-    ).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
     expect(uniqueLinkHrefs("Admin")).toEqual(["/admin"]);
   });
 
@@ -372,8 +370,8 @@ describe("authenticated app shell loading boundaries", () => {
 
     renderReferenceShell("Current page content", "admin");
 
-    expect(uniqueLinkHrefs("Review")).toEqual(["/review"]);
-    expect(uniqueLinkHrefs("Generis")).toEqual(["/review"]);
+    expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
+    expect(uniqueLinkHrefs("Generis")).toEqual(["/admin"]);
   });
 
   it("persists fresh dashboard dates across shell navigation", async () => {
@@ -398,7 +396,10 @@ describe("authenticated app shell loading boundaries", () => {
     );
     mockPathname.current = "/admin";
 
-    renderReferenceShell("Current page content", "admin");
+    renderReferenceShell("Current page content", "admin", [
+      "REVIEWER",
+      "ADMIN",
+    ]);
 
     await waitFor(() => {
       expect(uniqueLinkHrefs("Review")).toEqual(["/review?date=2026-05-19"]);

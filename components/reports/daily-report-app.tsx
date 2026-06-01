@@ -12,7 +12,6 @@ import {
 } from "react";
 import type { DragEvent, MouseEvent } from "react";
 import { flushSync } from "react-dom";
-import { signIn } from "next-auth/react";
 import {
   CheckCircle2,
   ChevronDown,
@@ -67,8 +66,6 @@ import {
   refreshStaleServerData,
 } from "@/lib/client-cache-invalidation";
 import { clampReportDateToToday, todayDateString } from "@/lib/dates";
-import type { OAuthProviderConfig } from "@/lib/oauth-config";
-import { ATLASSIAN_OAUTH_SCOPE, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
 import {
   removeSummaryActivityReferences,
   summaryActivityReferenceHref,
@@ -361,12 +358,10 @@ export function DailyReportApp({
   initialReport,
   date,
   integrationStatus = { google: false, atlassian: false },
-  oauthConfig = { google: true, atlassian: true },
 }: {
   initialReport: Report;
   date: string;
   integrationStatus?: IntegrationStatus;
-  oauthConfig?: OAuthProviderConfig;
 }) {
   const router = useRouter();
   const reportDate = dateInputValue(date);
@@ -1388,24 +1383,6 @@ export function DailyReportApp({
     }
   }
 
-  function connectProvider(provider: "google" | "atlassian") {
-    signIn(
-      provider,
-      { callbackUrl: "/" },
-      provider === "google"
-        ? {
-            access_type: "offline",
-            prompt: "consent select_account",
-            scope: GOOGLE_OAUTH_SCOPE,
-          }
-        : {
-            audience: "api.atlassian.com",
-            prompt: "consent",
-            scope: ATLASSIAN_OAUTH_SCOPE,
-          },
-    );
-  }
-
   async function copyActivityTitle(activity: Activity) {
     await navigator.clipboard?.writeText(activity.title);
     setOpenActivityMenu(null);
@@ -1867,54 +1844,64 @@ export function DailyReportApp({
                 {importMenuOpen ? (
                   <div className="absolute right-0 top-12 z-30 w-64 rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
                     <button
-                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
-                      disabled={!canSyncJira && !oauthConfig.atlassian}
-                      onClick={() => {
-                        setImportMenuOpen(false);
+                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                      disabled={!canSyncJira}
+                      title={
                         canSyncJira
-                          ? sync("jira")
-                          : connectProvider("atlassian");
-                      }}
-                    >
-                      {canSyncJira ? "Import Jira" : "Connect Jira"}
-                    </button>
-                    <button
-                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
-                      disabled={!canSyncGoogle && !oauthConfig.google}
+                          ? undefined
+                          : "Connect Jira from Manage integrations first."
+                      }
                       onClick={() => {
                         setImportMenuOpen(false);
-                        canSyncGoogle
-                          ? sync("google-calendar")
-                          : connectProvider("google");
+                        sync("jira");
                       }}
                     >
-                      {canSyncGoogle ? "Import Calendar" : "Connect Google"}
+                      Import Jira
                     </button>
                     <button
-                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
-                      disabled={!canSyncGoogle && !oauthConfig.google}
+                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                      disabled={!canSyncGoogle}
+                      title={
+                        canSyncGoogle
+                          ? undefined
+                          : "Connect Google from Manage integrations first."
+                      }
                       onClick={() => {
                         setImportMenuOpen(false);
-                        canSyncGoogle
-                          ? sync("google-tasks")
-                          : connectProvider("google");
+                        sync("google-calendar");
                       }}
                     >
-                      {canSyncGoogle ? "Import Tasks" : "Connect Google Tasks"}
+                      Import Google Calendar
                     </button>
                     <button
-                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
-                      disabled={!canSyncGoogle && !oauthConfig.google}
+                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                      disabled={!canSyncGoogle}
+                      title={
+                        canSyncGoogle
+                          ? undefined
+                          : "Connect Google from Manage integrations first."
+                      }
                       onClick={() => {
                         setImportMenuOpen(false);
-                        canSyncGoogle
-                          ? setGoogleTaskFinderOpen(true)
-                          : connectProvider("google");
+                        sync("google-tasks");
                       }}
                     >
-                      {canSyncGoogle
-                        ? "Find unfinished task"
-                        : "Connect Google Tasks"}
+                      Import Google Tasks
+                    </button>
+                    <button
+                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                      disabled={!canSyncGoogle}
+                      title={
+                        canSyncGoogle
+                          ? undefined
+                          : "Connect Google from Manage integrations first."
+                      }
+                      onClick={() => {
+                        setImportMenuOpen(false);
+                        setGoogleTaskFinderOpen(true);
+                      }}
+                    >
+                      Find unfinished Google Tasks
                     </button>
                     <Link
                       className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#2563eb] hover:bg-[#eff6ff] dark:text-[#93c5fd] dark:hover:bg-white/5"

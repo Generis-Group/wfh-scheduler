@@ -6,7 +6,7 @@ import { weeklyReportQuerySchema } from "@/lib/validation";
 
 export async function POST(request: Request) {
   try {
-    const session = await requireRole(["REVIEWER", "ADMIN"]);
+    const session = await requireRole(["REVIEWER"]);
     const query = weeklyReportQuerySchema.parse(await request.json());
     const weeklyReport = await getWeeklyReportForEmployee(
       query.userId,

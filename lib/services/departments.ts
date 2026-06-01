@@ -14,14 +14,14 @@ export type ReviewScope = {
 export const departmentMembershipInclude = {
   departments: {
     include: {
-      department: true
+      department: true,
     },
     orderBy: {
       department: {
-        name: "asc" as const
-      }
-    }
-  }
+        name: "asc" as const,
+      },
+    },
+  },
 };
 
 export const departmentMembershipSelect = {
@@ -33,16 +33,16 @@ export const departmentMembershipSelect = {
         select: {
           id: true,
           name: true,
-          slug: true
-        }
-      }
+          slug: true,
+        },
+      },
     },
     orderBy: {
       department: {
-        name: "asc" as const
-      }
-    }
-  }
+        name: "asc" as const,
+      },
+    },
+  },
 };
 
 function slugifyDepartmentName(name: string) {
@@ -55,22 +55,30 @@ function slugifyDepartmentName(name: string) {
 
 export function departmentNames(
   user?: {
-    departments?: Array<{ role?: UserRole | null; department?: { name: string } | null }>;
+    departments?: Array<{
+      role?: UserRole | null;
+      department?: { name: string } | null;
+    }>;
   } | null,
-  role?: UserRole
+  role?: UserRole,
 ) {
-  return user?.departments
-    ?.filter((membership) => !role || membership.role === role)
-    .map((membership) => membership.department?.name)
-    .filter((name): name is string => Boolean(name)) ?? [];
+  return (
+    user?.departments
+      ?.filter((membership) => !role || membership.role === role)
+      .map((membership) => membership.department?.name)
+      .filter((name): name is string => Boolean(name)) ?? []
+  );
 }
 
 export function departmentLabel(
   user?: {
-    departments?: Array<{ role?: UserRole | null; department?: { name: string } | null }>;
+    departments?: Array<{
+      role?: UserRole | null;
+      department?: { name: string } | null;
+    }>;
   } | null,
   fallback = "No department",
-  role?: UserRole
+  role?: UserRole,
 ) {
   const names = departmentNames(user, role);
 
@@ -85,20 +93,27 @@ export const departmentsCacheTag = "departments";
 
 async function readDepartments() {
   return prisma.department.findMany({
-    orderBy: { name: "asc" }
+    orderBy: { name: "asc" },
   });
 }
 
-const getCachedDepartments = unstable_cache(readDepartments, ["departments:list"], {
-  revalidate: 300,
-  tags: [departmentsCacheTag]
-});
+const getCachedDepartments = unstable_cache(
+  readDepartments,
+  ["departments:list"],
+  {
+    revalidate: 300,
+    tags: [departmentsCacheTag],
+  },
+);
 
 export async function listDepartments() {
   try {
     return await getCachedDepartments();
   } catch (error) {
-    if (error instanceof Error && error.message.includes("incrementalCache missing")) {
+    if (
+      error instanceof Error &&
+      error.message.includes("incrementalCache missing")
+    ) {
       return readDepartments();
     }
 
@@ -116,14 +131,17 @@ export async function createDepartment(name: string) {
   const slug = slugifyDepartmentName(trimmedName);
 
   if (!slug) {
-    throw new HttpError(422, "Department name must include letters or numbers.");
+    throw new HttpError(
+      422,
+      "Department name must include letters or numbers.",
+    );
   }
 
   const department = await prisma.department.create({
     data: {
       name: trimmedName,
-      slug
-    }
+      slug,
+    },
   });
 
   revalidateTag(departmentsCacheTag);
@@ -131,20 +149,22 @@ export async function createDepartment(name: string) {
   return department;
 }
 
-export async function getReviewableEmployeeWhere(scope?: ReviewScope): Promise<Prisma.UserWhereInput> {
+export async function getReviewableEmployeeWhere(
+  scope?: ReviewScope,
+): Promise<Prisma.UserWhereInput> {
   const base: Prisma.UserWhereInput = {
     roles: { has: "EMPLOYEE" },
-    status: { not: "DISABLED" }
+    status: { not: "DISABLED" },
   };
 
-  if (!scope || hasUserRole(scope, "ADMIN")) {
+  if (!scope) {
     return base;
   }
 
   if (!hasUserRole(scope, "REVIEWER")) {
     return {
       ...base,
-      id: scope.userId
+      id: scope.userId,
     };
   }
 
@@ -155,22 +175,23 @@ export async function getReviewableEmployeeWhere(scope?: ReviewScope): Promise<P
       departments: {
         where: { role: "REVIEWER" },
         select: {
-          departmentId: true
-        }
-      }
-    }
+          departmentId: true,
+        },
+      },
+    },
   });
 
   if (reviewer?.reviewerAllDepartments) {
     return base;
   }
 
-  const departmentIds = reviewer?.departments.map((department) => department.departmentId) ?? [];
+  const departmentIds =
+    reviewer?.departments.map((department) => department.departmentId) ?? [];
 
   if (departmentIds.length === 0) {
     return {
       ...base,
-      id: { in: [] }
+      id: { in: [] },
     };
   }
 
@@ -179,27 +200,26 @@ export async function getReviewableEmployeeWhere(scope?: ReviewScope): Promise<P
     departments: {
       some: {
         role: "EMPLOYEE",
-        departmentId: { in: departmentIds }
-      }
-    }
+        departmentId: { in: departmentIds },
+      },
+    },
   };
 }
 
-export async function canReviewEmployee(scope: ReviewScope, employeeId: string) {
-  if (hasUserRole(scope, "ADMIN")) {
-    return true;
-  }
-
+export async function canReviewEmployee(
+  scope: ReviewScope,
+  employeeId: string,
+) {
   if (!hasUserRole(scope, "REVIEWER")) {
-    return scope.userId === employeeId;
+    return false;
   }
 
   const employeeWhere = await getReviewableEmployeeWhere(scope);
   const count = await prisma.user.count({
     where: {
       ...employeeWhere,
-      id: employeeId
-    }
+      id: employeeId,
+    },
   });
 
   return count > 0;

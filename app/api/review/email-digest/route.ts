@@ -6,18 +6,21 @@ import { reviewDigestSchema } from "@/lib/validation";
 
 export async function POST(request: Request) {
   try {
-    const session = await requireRole(["REVIEWER", "ADMIN"]);
+    const session = await requireRole(["REVIEWER"]);
     const input = reviewDigestSchema.parse(await request.json());
     const result = await sendReviewDigest({
       date: input.date,
       trigger: "MANUAL",
       filters: input.filters,
-      scope: { userId: session.user.id, roles: normalizeUserRoles(session.user) }
+      scope: {
+        userId: session.user.id,
+        roles: normalizeUserRoles(session.user),
+      },
     });
 
     return json({
       emailRun: result.emailRun,
-      skipped: result.skipped
+      skipped: result.skipped,
     });
   } catch (error) {
     return handleRouteError(error);

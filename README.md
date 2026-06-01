@@ -76,7 +76,7 @@ npm run db:seed
 - Google Tasks imports tasks from selected task lists; if none are selected, all lists are included.
 - OAuth tokens are encrypted before being stored in the Auth.js `Account` table, and refreshes persist updated encrypted tokens.
 - Sign-in and admin-created accounts are restricted to `@generisgp.com` email addresses.
-- Reviewer/admin digest emails use Resend; manual digests go to the sender, scheduled digests are sent separately to each active reviewer/admin with that recipient's review scope, and include coverage, missing reports, late/edit flags, and a link back to the review dashboard.
+- Reviewer digest emails use Resend; manual digests go to the sender, scheduled digests are sent separately to each active reviewer with that recipient's review scope, and include coverage, missing reports, late/edit flags, and a link back to the review dashboard.
 - Transactional email also uses Resend for admin-created account invites, temporary password resets, reviewer report reminders, reviewer comment notifications, and admin bug report notifications. The default verified sender is `Generis Reports <reports@generisgp.com>`; set `EMAIL_FROM` only if a different verified sender should be used.
 - Employees can revise submitted reports; previous submitted snapshots are retained in `ReportRevision`.
 - Reviewer access uses the `REVIEWER` role internally.

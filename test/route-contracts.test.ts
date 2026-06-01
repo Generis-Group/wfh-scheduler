@@ -17,9 +17,9 @@ vi.mock("@/lib/access", () => ({
   })),
   requireRole: vi.fn(async () => ({
     user: {
-      id: "admin-1",
-      role: "ADMIN",
-      roles: ["ADMIN"],
+      id: "reviewer-1",
+      role: "REVIEWER",
+      roles: ["REVIEWER"],
       status: "ACTIVE",
     },
   })),
@@ -81,7 +81,7 @@ vi.mock("@/lib/services/reports", () => ({
   addReportComment: vi.fn(async () => ({ id: "report-1" })),
   setReportReadState: vi.fn(async () => ({
     id: "report-1",
-    readReceipts: [{ reviewerId: "admin-1" }],
+    readReceipts: [{ reviewerId: "reviewer-1" }],
   })),
 }));
 
@@ -164,7 +164,7 @@ vi.mock("@/lib/services/email-digest", () => ({
     from: "reports@generisgp.com",
     digestTime: "Weekday evening America/Toronto",
     recipientRule:
-      "Manual digests go to the sender; scheduled digests are scoped per active reviewer/admin",
+      "Manual digests go to the sender; scheduled digests are scoped per active reviewer",
   })),
 }));
 
@@ -383,7 +383,9 @@ describe("route contracts", () => {
   it("hides unexpected sync errors from streaming responses", async () => {
     const sync = await import("@/lib/services/sync");
     const { POST } = await import("@/app/api/sync/jira/route");
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
     vi.mocked(sync.syncJira).mockRejectedValueOnce(
       new Error("database password leaked"),
     );
@@ -404,7 +406,9 @@ describe("route contracts", () => {
     }
 
     expect(body).toContain("event: error");
-    expect(body).toContain("Import failed. Check your connection and try again.");
+    expect(body).toContain(
+      "Import failed. Check your connection and try again.",
+    );
     expect(body).not.toContain("database password leaked");
   });
 
@@ -652,7 +656,7 @@ describe("route contracts", () => {
     expect(response.status).toBe(200);
     expect(access.assertCanReviewReport).toHaveBeenCalledWith(
       expect.objectContaining({
-        user: expect.objectContaining({ id: "admin-1" }),
+        user: expect.objectContaining({ id: "reviewer-1" }),
       }),
       expect.objectContaining({ id: "report-1", userId: "user-1" }),
     );
@@ -716,7 +720,7 @@ describe("route contracts", () => {
     expect(reports.getWeeklyReportForEmployee).toHaveBeenCalledWith(
       "user-1",
       "2026-05-13",
-      { userId: "admin-1", roles: ["ADMIN"] },
+      { userId: "reviewer-1", roles: ["REVIEWER"] },
     );
     await expect(response.json()).resolves.toEqual({
       weeklyReport: {
@@ -740,7 +744,7 @@ describe("route contracts", () => {
     expect(response.status).toBe(200);
     expect(reports.listSavedWeeklyReportsForEmployee).toHaveBeenCalledWith(
       "user-1",
-      { userId: "admin-1", roles: ["ADMIN"] },
+      { userId: "reviewer-1", roles: ["REVIEWER"] },
     );
     await expect(response.json()).resolves.toMatchObject({
       weeklyReports: {
@@ -763,7 +767,7 @@ describe("route contracts", () => {
     expect(response.status).toBe(200);
     expect(reports.getSavedWeeklyReport).toHaveBeenCalledWith(
       "weekly-report-1",
-      { userId: "admin-1", roles: ["ADMIN"] },
+      { userId: "reviewer-1", roles: ["REVIEWER"] },
     );
     await expect(response.json()).resolves.toMatchObject({
       weeklyReport: {
@@ -793,7 +797,7 @@ describe("route contracts", () => {
     expect(reminders.sendReportReminderEmail).toHaveBeenCalledWith({
       userId: "user-1",
       date: "2026-05-13",
-      scope: { userId: "admin-1", roles: ["ADMIN"] },
+      scope: { userId: "reviewer-1", roles: ["REVIEWER"] },
     });
     await expect(response.json()).resolves.toEqual({
       employee: {
@@ -823,12 +827,12 @@ describe("route contracts", () => {
     expect(response.status).toBe(200);
     expect(access.assertCanReviewReport).toHaveBeenCalledWith(
       expect.objectContaining({
-        user: expect.objectContaining({ id: "admin-1" }),
+        user: expect.objectContaining({ id: "reviewer-1" }),
       }),
       expect.objectContaining({ id: "report-1", userId: "user-1" }),
     );
     await expect(response.json()).resolves.toEqual({
-      report: { id: "report-1", readReceipts: [{ reviewerId: "admin-1" }] },
+      report: { id: "report-1", readReceipts: [{ reviewerId: "reviewer-1" }] },
     });
   });
 

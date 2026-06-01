@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { DailyReportApp } from "@/components/reports/daily-report-app";
 import { auth } from "@/lib/auth";
 import { clampReportDateToToday } from "@/lib/dates";
-import { getOAuthProviderConfig } from "@/lib/oauth-config";
 import { withServerTiming } from "@/lib/performance";
 import { prisma } from "@/lib/prisma";
 import { hasUserRole } from "@/lib/roles";
@@ -32,7 +31,7 @@ export default async function HomePage({
   }
 
   if (!hasUserRole(session.user, "EMPLOYEE")) {
-    redirect("/review");
+    redirect(hasUserRole(session.user, "REVIEWER") ? "/review" : "/admin");
   }
 
   const requestedDate = searchParams?.date;
@@ -78,7 +77,6 @@ export default async function HomePage({
         google: accounts.some((account) => account.provider === "google"),
         atlassian: accounts.some((account) => account.provider === "atlassian"),
       }}
-      oauthConfig={getOAuthProviderConfig()}
     />
   );
 }

@@ -24,11 +24,7 @@ export async function GET(request: Request) {
       userId: url.searchParams.get("userId") ?? undefined,
     });
 
-    if (
-      !query.userId &&
-      (hasUserRole(session.user, "REVIEWER") ||
-        hasUserRole(session.user, "ADMIN"))
-    ) {
+    if (!query.userId && hasUserRole(session.user, "REVIEWER")) {
       const scope = {
         userId: session.user.id,
         roles: normalizeUserRoles(session.user),

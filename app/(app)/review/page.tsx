@@ -13,6 +13,7 @@ export default async function ReviewPage({
 }: {
   searchParams?: {
     date?: string;
+    reportId?: string | string[];
   };
 }) {
   const session = await auth();
@@ -29,11 +30,8 @@ export default async function ReviewPage({
     redirect("/change-password");
   }
 
-  if (
-    !hasUserRole(session.user, "REVIEWER") &&
-    !hasUserRole(session.user, "ADMIN")
-  ) {
-    redirect("/");
+  if (!hasUserRole(session.user, "REVIEWER")) {
+    redirect(hasUserRole(session.user, "ADMIN") ? "/admin" : "/");
   }
 
   const requestedDate = searchParams?.date;
@@ -59,6 +57,12 @@ export default async function ReviewPage({
       metrics={serialize(metrics)}
       date={date}
       reviewerId={session.user.id}
+      initialOpenedReportId={
+        typeof searchParams?.reportId === "string" &&
+        searchParams.reportId.trim()
+          ? searchParams.reportId
+          : null
+      }
     />
   );
 }

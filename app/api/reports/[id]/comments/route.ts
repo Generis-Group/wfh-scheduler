@@ -13,11 +13,15 @@ type Context = {
 
 export async function POST(request: Request, { params }: Context) {
   try {
-    const session = await requireRole(["REVIEWER", "ADMIN"]);
+    const session = await requireRole(["REVIEWER"]);
     const input = commentSchema.parse(await request.json());
     const existingReport = await getReportById(params.id);
     await assertCanReviewReport(session, existingReport);
-    const report = await addReportComment(params.id, session.user.id, input.body);
+    const report = await addReportComment(
+      params.id,
+      session.user.id,
+      input.body,
+    );
     const emailDelivery = await sendReportCommentEmail({
       report,
       commentBody: input.body,

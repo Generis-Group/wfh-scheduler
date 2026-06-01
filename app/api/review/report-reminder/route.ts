@@ -6,12 +6,15 @@ import { reportReminderSchema } from "@/lib/validation";
 
 export async function POST(request: Request) {
   try {
-    const session = await requireRole(["REVIEWER", "ADMIN"]);
+    const session = await requireRole(["REVIEWER"]);
     const input = reportReminderSchema.parse(await request.json());
     const result = await sendReportReminderEmail({
       date: input.date,
       userId: input.userId,
-      scope: { userId: session.user.id, roles: normalizeUserRoles(session.user) },
+      scope: {
+        userId: session.user.id,
+        roles: normalizeUserRoles(session.user),
+      },
     });
 
     return json(result);
