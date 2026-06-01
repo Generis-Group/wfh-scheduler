@@ -1014,8 +1014,8 @@ describe("sync service pagination", () => {
       "user-1",
       "2026-05-14",
       expect.arrayContaining([
-        expect.objectContaining({ sourceId: "task-1", status: null }),
-        expect.objectContaining({ sourceId: "task-2", status: null })
+        expect.objectContaining({ sourceId: "task-1", status: "completed" }),
+        expect.objectContaining({ sourceId: "task-2", status: "completed" })
       ])
     );
   });

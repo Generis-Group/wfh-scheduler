@@ -221,6 +221,8 @@ function listItemTextToMarkdown(node: JSONContent) {
 function listNodeToMarkdown(node: JSONContent, depth: number) {
   const ordered = node.type === "orderedList";
   const indent = "  ".repeat(depth);
+  const start =
+    ordered && typeof node.attrs?.start === "number" ? node.attrs.start : 1;
   const lines: string[] = [];
 
   (node.content ?? []).forEach((item, index) => {
@@ -229,7 +231,7 @@ function listNodeToMarkdown(node: JSONContent, depth: number) {
     }
 
     lines.push(
-      `${indent}${ordered ? `${index + 1}.` : "-"} ${listItemTextToMarkdown(item)}`,
+      `${indent}${ordered ? `${start + index}.` : "-"} ${listItemTextToMarkdown(item)}`,
     );
 
     (item.content ?? [])

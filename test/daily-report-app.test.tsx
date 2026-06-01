@@ -689,6 +689,16 @@ describe("DailyReportApp auto-draft", () => {
     expect(locationPicker.textContent).toContain("Hybrid");
   });
 
+  it("labels completed imported Google Tasks as done", () => {
+    renderDailyReportApp({
+      ...savedDraft,
+      activities: [importedTask],
+    });
+
+    expect(screen.getByText("Done")).toBeTruthy();
+    expect(screen.queryByText("Not set")).toBeNull();
+  });
+
   it("uses a custom drag preview for work item references", async () => {
     const dataTransfer = {
       effectAllowed: "",

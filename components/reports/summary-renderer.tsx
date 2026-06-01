@@ -22,6 +22,7 @@ type MarkdownListLine = {
   content: string;
   level: number;
   ordered: boolean;
+  number: number | null;
 };
 
 export { summaryPlainText };
@@ -223,6 +224,7 @@ function renderMarkdownList(
   activityReferences?: SummaryActivityReferenceMap,
 ) {
   const TagName = ordered ? "ol" : "ul";
+  const start = ordered ? lines[startIndex].number ?? 1 : undefined;
   const items: ReactNode[] = [];
   let index = startIndex;
 
@@ -264,7 +266,11 @@ function renderMarkdownList(
 
   return {
     node: (
-      <TagName key={keyPrefix} className={cn("my-0 pl-5", ordered ? "list-decimal" : "list-disc")}>
+      <TagName
+        key={keyPrefix}
+        className={cn("my-0 pl-5", ordered ? "list-decimal" : "list-disc")}
+        start={ordered && start !== 1 ? start : undefined}
+      >
         {items}
       </TagName>
     ),
@@ -288,10 +294,15 @@ function renderMarkdownListBlock(
       break;
     }
 
+    const number = match[2].endsWith(".")
+      ? Number.parseInt(match[2].slice(0, -1), 10)
+      : null;
+
     listLines.push({
       content: match[3],
       level: markdownListLevel(match[1]),
-      ordered: /^\d+\.$/.test(match[2])
+      ordered: /^\d+\.$/.test(match[2]),
+      number: Number.isFinite(number) ? number : null,
     });
     index += 1;
   }

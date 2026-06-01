@@ -1081,7 +1081,7 @@ export async function syncGoogleTasks(
               DEFAULT_TIMEZONE,
             ) === dateString
           ) {
-            listActivities.push({ ...normalized, status: null });
+            listActivities.push(normalized);
           }
         }
 

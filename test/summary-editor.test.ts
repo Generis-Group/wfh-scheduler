@@ -319,6 +319,12 @@ describe("SummaryEditor", () => {
     expect(readEditorSnapshot(bulletEditor).summary).toBe("- combo");
   });
 
+  test("serializes ordered lists from their rendered start number", () => {
+    const editor = createEditor("<ol start=\"3\"><li><p>third</p></li></ol>");
+
+    expect(readEditorSnapshot(editor).summary).toBe("3. third");
+  });
+
   test("hydrates saved markdown as editor formatting", async () => {
     renderSummaryEditorWithSummary(
       "## **_Header_**\n- **_Bullet_**\n1. _Numbered_",
@@ -331,6 +337,68 @@ describe("SummaryEditor", () => {
     expect(heading.querySelector("strong em")?.textContent).toBe("Header");
     expect(document.querySelector("ul strong")?.textContent).toBe("Bullet");
     expect(document.querySelector("ol em")?.textContent).toBe("Numbered");
+  });
+
+  test("hydrates interrupted numbered lists with their original numbering", async () => {
+    const firstHref = summaryActivityReferenceHref("activity-1", "JIRA");
+    const secondHref = summaryActivityReferenceHref("activity-2", "JIRA");
+    renderSummaryEditorWithSummary(
+      [
+        "1. First task",
+        "2. Second task",
+        `[Imported task](${firstHref})`,
+        "3. Third task",
+        `[Another task](${secondHref})`,
+        "4. Fourth task",
+      ].join("\n"),
+    );
+
+    await screen.findByRole("textbox", { name: "Summary" });
+
+    const orderedLists = Array.from(document.querySelectorAll("ol"));
+
+    expect(orderedLists).toHaveLength(3);
+    expect(orderedLists[0].getAttribute("start")).toBeNull();
+    expect(orderedLists[1].getAttribute("start")).toBe("3");
+    expect(orderedLists[2].getAttribute("start")).toBe("4");
+  });
+
+  test("keeps interrupted numbered list starts when activity references refresh", async () => {
+    const href = summaryActivityReferenceHref("activity-1", "JIRA");
+    const { rerender, onChange } = renderSummaryEditorWithSummary(
+      ["1. First task", `[Imported task](${href})`, "2. Second task"].join(
+        "\n",
+      ),
+    );
+
+    await screen.findByRole("textbox", { name: "Summary" });
+
+    rerender(
+      React.createElement(SummaryEditor, {
+        initialSummary: [
+          "1. First task",
+          `[Imported task](${href})`,
+          "2. Second task",
+        ].join("\n"),
+        resetKey: "test",
+        activityReferences: {
+          "activity-1": {
+            href: "https://generisgp.atlassian.net/browse/IT-3027",
+            source: "JIRA",
+            title: "Renamed imported task",
+          },
+        },
+        onChange,
+      }),
+    );
+
+    await screen.findByText("Renamed imported task");
+
+    const orderedLists = Array.from(document.querySelectorAll("ol"));
+
+    expect(orderedLists).toHaveLength(2);
+    expect(orderedLists[0].getAttribute("start")).toBeNull();
+    expect(orderedLists[1].getAttribute("start")).toBe("2");
   });
 
   test("block commands preserve active inline tools for new text", () => {

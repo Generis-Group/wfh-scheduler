@@ -866,7 +866,7 @@ function OpenedReportView({
       status:
         activity.source === "GOOGLE_TASKS" &&
         activity.status?.toLowerCase() === "completed"
-          ? null
+          ? "Done"
           : activity.status,
     }),
   );

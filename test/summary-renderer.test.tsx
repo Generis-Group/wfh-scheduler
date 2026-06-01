@@ -87,4 +87,25 @@ describe("SummaryRenderer", () => {
     expect(screen.queryByText("Old task title")).toBeNull();
   });
 
+  it("preserves ordered list starts after activity references interrupt the list", () => {
+    const href = summaryActivityReferenceHref("activity-1", "JIRA");
+
+    render(
+      <SummaryRenderer
+        value={[
+          "1. First task",
+          "2. Second task",
+          `[Imported task](${href})`,
+          "3. Third task",
+        ].join("\n")}
+      />,
+    );
+
+    const orderedLists = Array.from(document.querySelectorAll("ol"));
+
+    expect(orderedLists).toHaveLength(2);
+    expect(orderedLists[0].getAttribute("start")).toBeNull();
+    expect(orderedLists[1].getAttribute("start")).toBe("3");
+  });
+
 });

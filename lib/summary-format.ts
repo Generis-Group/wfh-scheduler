@@ -27,6 +27,7 @@ type MarkdownListLine = {
   content: string;
   level: number;
   ordered: boolean;
+  number: number | null;
 };
 
 const summaryActivityReferenceHrefPrefix = "https://generis.local/activity/";
@@ -431,7 +432,11 @@ function renderMarkdownList(
   activityReferences?: SummaryActivityReferenceMap,
 ) {
   const tagName = ordered ? "ol" : "ul";
-  let html = `<${tagName}>`;
+  const start = ordered ? lines[startIndex].number ?? 1 : null;
+  let html =
+    ordered && start !== 1
+      ? `<${tagName} start="${escapeHtml(String(start))}">`
+      : `<${tagName}>`;
   let index = startIndex;
 
   while (index < lines.length) {
@@ -482,10 +487,15 @@ function renderMarkdownListBlock(
       break;
     }
 
+    const number = match[2].endsWith(".")
+      ? Number.parseInt(match[2].slice(0, -1), 10)
+      : null;
+
     listLines.push({
       content: match[3],
       level: markdownListLevel(match[1]),
-      ordered: /^\d+\.$/.test(match[2])
+      ordered: /^\d+\.$/.test(match[2]),
+      number: Number.isFinite(number) ? number : null,
     });
     index += 1;
   }

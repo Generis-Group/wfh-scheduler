@@ -290,7 +290,7 @@ function activityStatusLabel(activity: Activity) {
     activity.source === "GOOGLE_TASKS" &&
     activity.status?.toLowerCase() === "completed"
   ) {
-    return null;
+    return "Done";
   }
 
   return activity.status || "Not set";
