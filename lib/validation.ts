@@ -136,6 +136,10 @@ export const createBugReportSchema = z.object({
   attachments: z.array(bugReportAttachmentSchema).max(4).default([]),
 });
 
+export const updateBugReportStatusSchema = z.object({
+  status: z.enum(["OPEN", "SOLVED"]),
+});
+
 export const companySettingsSchema = z.object({
   jiraProjectKeys: z.array(z.string().min(1)).default([]),
 });

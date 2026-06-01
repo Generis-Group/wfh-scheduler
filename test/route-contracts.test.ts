@@ -202,6 +202,9 @@ vi.mock("@/lib/services/bug-reports", () => ({
     body: "The page is blank.",
     pagePath: "/",
     userAgent: "Vitest",
+    status: "OPEN",
+    solvedAt: null,
+    solvedBy: null,
     createdAt: "2026-05-29T15:00:00.000Z",
     reporter: {
       id: "user-1",
@@ -216,6 +219,9 @@ vi.mock("@/lib/services/bug-reports", () => ({
     body: "The page is blank.",
     pagePath: "/",
     userAgent: "Vitest",
+    status: "OPEN",
+    solvedAt: null,
+    solvedBy: null,
     createdAt: "2026-05-29T15:00:00.000Z",
     reporter: {
       id: "user-1",
@@ -233,6 +239,28 @@ vi.mock("@/lib/services/bug-reports", () => ({
         createdAt: "2026-05-29T15:00:00.000Z",
       },
     ],
+  })),
+  updateBugReportStatus: vi.fn(async () => ({
+    id: "bug-report-1",
+    body: "The page is blank.",
+    pagePath: "/",
+    userAgent: "Vitest",
+    status: "SOLVED",
+    solvedAt: "2026-05-29T15:10:00.000Z",
+    solvedBy: {
+      id: "admin-1",
+      name: "Admin",
+      email: "admin@generisgp.com",
+      image: null,
+    },
+    createdAt: "2026-05-29T15:00:00.000Z",
+    reporter: {
+      id: "user-1",
+      name: "Employee",
+      email: "employee@generisgp.com",
+      image: null,
+    },
+    attachments: [],
   })),
   listVisibleBugReports: vi.fn(async () => []),
   canReviewBugReports: vi.fn(() => false),
@@ -531,6 +559,61 @@ describe("route contracts", () => {
         attachments: [{ dataUrl: "data:image/jpeg;base64,AA==" }],
       },
     });
+  });
+
+  it("allows admins to mark bug reports solved", async () => {
+    const access = await import("@/lib/access");
+    const bugReports = await import("@/lib/services/bug-reports");
+    const { PATCH } = await import("@/app/api/bug-reports/[id]/route");
+
+    vi.mocked(access.requireSession).mockResolvedValueOnce({
+      user: {
+        id: "admin-1",
+        role: "ADMIN",
+        roles: ["ADMIN"],
+        status: "ACTIVE",
+        mustChangePassword: false,
+      },
+    } as Awaited<ReturnType<typeof access.requireSession>>);
+    vi.mocked(bugReports.canReviewBugReports).mockReturnValueOnce(true);
+    vi.mocked(bugReports.updateBugReportStatus).mockClear();
+
+    const response = await PATCH(
+      new Request("http://localhost/api/bug-reports/bug-report-1", {
+        method: "PATCH",
+        body: JSON.stringify({ status: "SOLVED" }),
+      }),
+      { params: { id: "bug-report-1" } },
+    );
+
+    expect(response.status).toBe(200);
+    expect(bugReports.updateBugReportStatus).toHaveBeenCalledWith(
+      "bug-report-1",
+      "admin-1",
+      { status: "SOLVED" },
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      bugReport: { id: "bug-report-1", status: "SOLVED" },
+    });
+  });
+
+  it("blocks employees from marking bug reports solved", async () => {
+    const bugReports = await import("@/lib/services/bug-reports");
+    const { PATCH } = await import("@/app/api/bug-reports/[id]/route");
+
+    vi.mocked(bugReports.canReviewBugReports).mockReturnValueOnce(false);
+    vi.mocked(bugReports.updateBugReportStatus).mockClear();
+
+    const response = await PATCH(
+      new Request("http://localhost/api/bug-reports/bug-report-1", {
+        method: "PATCH",
+        body: JSON.stringify({ status: "SOLVED" }),
+      }),
+      { params: { id: "bug-report-1" } },
+    );
+
+    expect(response.status).toBe(403);
+    expect(bugReports.updateBugReportStatus).not.toHaveBeenCalled();
   });
 
   it("changes a temporary credentials password", async () => {

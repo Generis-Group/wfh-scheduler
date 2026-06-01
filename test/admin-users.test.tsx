@@ -80,6 +80,9 @@ describe("AdminUsers", () => {
 
     expect(screen.getByRole("heading", { name: "Admin" })).toBeTruthy();
     expect(screen.getByText("Team members")).toBeTruthy();
+    expect(screen.getByLabelText("Team member assignments").className).toContain(
+      "overflow-y-auto",
+    );
     expect(screen.getByText("Alex Employee")).toBeTruthy();
     expect(screen.getByText("Riley Reviewer")).toBeTruthy();
     expect(screen.getByLabelText("Roles for Alex Employee")).toBeTruthy();

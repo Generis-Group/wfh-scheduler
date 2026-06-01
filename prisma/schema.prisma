@@ -19,6 +19,11 @@ enum UserStatus {
   DISABLED
 }
 
+enum BugReportStatus {
+  OPEN
+  SOLVED
+}
+
 enum WorkLocation {
   OFFICE
   WFH
@@ -89,6 +94,7 @@ model User {
   weeklyReports          WeeklyReport[]           @relation("WeeklyReportEmployee")
   generatedWeeklyReports WeeklyReport[]           @relation("WeeklyReportGenerator")
   bugReports             BugReport[]              @relation("BugReportReporter")
+  solvedBugReports       BugReport[]              @relation("BugReportSolver")
   syncRuns               SyncRun[]
   integrationSettings    UserIntegrationSettings?
 }
@@ -259,12 +265,18 @@ model BugReport {
   body        String                @db.Text
   pagePath    String?
   userAgent   String?               @db.Text
+  status      BugReportStatus       @default(OPEN)
+  solvedAt    DateTime?
+  solvedById  String?
   createdAt   DateTime              @default(now())
   reporter    User                  @relation("BugReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  solvedBy    User?                 @relation("BugReportSolver", fields: [solvedById], references: [id], onDelete: SetNull)
   attachments BugReportAttachment[]
 
   @@index([createdAt])
   @@index([reporterId, createdAt])
+  @@index([status, createdAt])
+  @@index([solvedById, solvedAt])
 }
 
 model BugReportAttachment {

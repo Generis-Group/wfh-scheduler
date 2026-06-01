@@ -1,10 +1,15 @@
 import type { z } from "zod";
 
+import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { hasUserRole, type RoleBearingUser } from "@/lib/roles";
-import type { createBugReportSchema } from "@/lib/validation";
+import type {
+  createBugReportSchema,
+  updateBugReportStatusSchema,
+} from "@/lib/validation";
 
 type CreateBugReportInput = z.infer<typeof createBugReportSchema>;
+type UpdateBugReportStatusInput = z.infer<typeof updateBugReportStatusSchema>;
 
 const bugReportReporterSelect = {
   id: true,
@@ -15,6 +20,9 @@ const bugReportReporterSelect = {
 
 export const bugReportListInclude = {
   reporter: {
+    select: bugReportReporterSelect,
+  },
+  solvedBy: {
     select: bugReportReporterSelect,
   },
   attachments: {
@@ -31,6 +39,9 @@ export const bugReportListInclude = {
 
 export const bugReportDetailInclude = {
   reporter: {
+    select: bugReportReporterSelect,
+  },
+  solvedBy: {
     select: bugReportReporterSelect,
   },
   attachments: {
@@ -103,6 +114,38 @@ export async function getVisibleBugReport(
 ) {
   return prisma.bugReport.findFirst({
     where: canReviewAll ? { id: reportId } : { id: reportId, reporterId: userId },
+    include: bugReportDetailInclude,
+  });
+}
+
+export async function updateBugReportStatus(
+  reportId: string,
+  solverId: string,
+  input: UpdateBugReportStatusInput,
+) {
+  const existingReport = await prisma.bugReport.findUnique({
+    where: { id: reportId },
+    select: { id: true },
+  });
+
+  if (!existingReport) {
+    throw new HttpError(404, "Bug report not found.");
+  }
+
+  return prisma.bugReport.update({
+    where: { id: reportId },
+    data:
+      input.status === "SOLVED"
+        ? {
+            status: "SOLVED",
+            solvedAt: new Date(),
+            solvedById: solverId,
+          }
+        : {
+            status: "OPEN",
+            solvedAt: null,
+            solvedById: null,
+          },
     include: bugReportDetailInclude,
   });
 }

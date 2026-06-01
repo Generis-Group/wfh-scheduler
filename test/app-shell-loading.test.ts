@@ -204,8 +204,10 @@ describe("authenticated app shell loading boundaries", () => {
 
     expect(appLayoutSource).toContain("<Suspense");
     expect(appLayoutSource).toContain("AppShellLoadingFallback");
-    expect(fallbackSource).not.toContain('displayName="Loading"');
-    expect(fallbackSource).toContain("profileLoading");
+    expect(fallbackSource).not.toContain("ReferenceAppShell");
+    expect(fallbackSource).not.toContain("profileLoading");
+    expect(fallbackSource).toContain("PageLoadingSkeleton");
+    expect(fallbackSource).toContain("lg:grid-cols-[176px_minmax(0,1fr)]");
   });
 
   it("keeps uploaded profile images available in the app shell", () => {

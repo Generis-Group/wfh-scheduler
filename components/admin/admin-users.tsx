@@ -777,7 +777,7 @@ export function AdminUsers({
 
   return (
     <>
-      <main className="reference-page">
+      <main className="reference-page min-[1180px]:flex min-[1180px]:h-full min-[1180px]:min-h-0 min-[1180px]:flex-col">
         <div className="reference-page-header">
           <div>
             <h1 className="reference-title">Admin</h1>
@@ -814,8 +814,8 @@ export function AdminUsers({
           </div>
         ) : null}
 
-        <div className="grid items-start gap-2 min-[1180px]:grid-cols-[minmax(0,1fr)_320px]">
-          <Card>
+        <div className="grid items-start gap-2 min-[1180px]:min-h-0 min-[1180px]:flex-1 min-[1180px]:grid-cols-[minmax(0,1fr)_320px] min-[1180px]:items-stretch">
+          <Card className="min-[1180px]:flex min-[1180px]:min-h-0 min-[1180px]:flex-col">
             <CardHeader className="p-2.5 pb-1.5">
               <CardTitle>Team members</CardTitle>
               <CardDescription className="text-xs leading-4">
@@ -823,7 +823,7 @@ export function AdminUsers({
                 reporting history.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2 p-2 pt-0">
+            <CardContent className="space-y-2 p-2 pt-0 min-[1180px]:flex min-[1180px]:min-h-0 min-[1180px]:flex-1 min-[1180px]:flex-col min-[1180px]:gap-2 min-[1180px]:space-y-0">
               <div className="flex flex-col gap-2 rounded-[8px] bg-[#f8fafc] p-2 ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55] min-[760px]:flex-row min-[760px]:items-center min-[760px]:justify-between">
                 <div className="relative min-w-0 min-[760px]:w-[380px]">
                   <Search
@@ -885,130 +885,135 @@ export function AdminUsers({
                 </div>
               </div>
 
-              {filteredUsers.length === 0 ? (
-                <div className="rounded-[8px] bg-[#f8fafc] py-5 text-center text-xs text-[#64748b] ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]">
-                  {users.length === 0
-                    ? "No users have been created yet."
-                    : "No team members match this search."}
-                </div>
-              ) : (
-                visibleUsers.map((user) => {
-                  const savedDraft = savedDraftForUser(user);
-                  const draft = draftForUser(user);
-                  const draftRoles = draft.roles;
-                  const rolesChanged = !sameRoles(
-                    draft.roles,
-                    savedDraft.roles,
-                  );
-                  const employeeDepartmentsChanged = !sameValues(
-                    draft.employeeDepartmentIds,
-                    savedDraft.employeeDepartmentIds,
-                  );
-                  const reviewerScopeChanged =
-                    draft.reviewerAllDepartments !==
-                      savedDraft.reviewerAllDepartments ||
-                    !sameValues(
-                      draft.reviewerDepartmentIds,
-                      savedDraft.reviewerDepartmentIds,
+              <div
+                aria-label="Team member assignments"
+                className="space-y-2 min-[1180px]:min-h-0 min-[1180px]:flex-1 min-[1180px]:overflow-y-auto min-[1180px]:overscroll-contain min-[1180px]:pr-1 min-[1180px]:[scrollbar-gutter:stable]"
+              >
+                {filteredUsers.length === 0 ? (
+                  <div className="rounded-[8px] bg-[#f8fafc] py-5 text-center text-xs text-[#64748b] ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]">
+                    {users.length === 0
+                      ? "No users have been created yet."
+                      : "No team members match this search."}
+                  </div>
+                ) : (
+                  visibleUsers.map((user) => {
+                    const savedDraft = savedDraftForUser(user);
+                    const draft = draftForUser(user);
+                    const draftRoles = draft.roles;
+                    const rolesChanged = !sameRoles(
+                      draft.roles,
+                      savedDraft.roles,
                     );
-                  const hasEmployeeRole = draftRoles.includes("EMPLOYEE");
-                  const hasReviewerRole = draftRoles.includes("REVIEWER");
-                  const userLabel = user.name ?? user.email ?? "user";
+                    const employeeDepartmentsChanged = !sameValues(
+                      draft.employeeDepartmentIds,
+                      savedDraft.employeeDepartmentIds,
+                    );
+                    const reviewerScopeChanged =
+                      draft.reviewerAllDepartments !==
+                        savedDraft.reviewerAllDepartments ||
+                      !sameValues(
+                        draft.reviewerDepartmentIds,
+                        savedDraft.reviewerDepartmentIds,
+                      );
+                    const hasEmployeeRole = draftRoles.includes("EMPLOYEE");
+                    const hasReviewerRole = draftRoles.includes("REVIEWER");
+                    const userLabel = user.name ?? user.email ?? "user";
 
-                  return (
-                    <article
-                      key={user.id}
-                      aria-label={`${userLabel} assignments`}
-                      className="rounded-[8px] bg-white p-2 shadow-[0_4px_14px_rgba(15,23,42,0.035)] ring-1 ring-[#dbe5f4] transition-colors dark:bg-[#0f1b2a] dark:ring-[#263a55]"
-                    >
-                      <div className="flex flex-col gap-2 min-[720px]:flex-row min-[720px]:items-start min-[720px]:justify-between">
-                        <div className="min-w-0">
-                          <div className="flex min-w-0 items-center gap-1.5">
-                            <h3 className="truncate text-sm font-semibold text-[#0f172a] dark:text-foreground">
-                              {user.name ?? "-"}
-                            </h3>
+                    return (
+                      <article
+                        key={user.id}
+                        aria-label={`${userLabel} assignments`}
+                        className="rounded-[8px] bg-white p-2 shadow-[0_4px_14px_rgba(15,23,42,0.035)] ring-1 ring-[#dbe5f4] transition-colors dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                      >
+                        <div className="flex flex-col gap-2 min-[720px]:flex-row min-[720px]:items-start min-[720px]:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <h3 className="truncate text-sm font-semibold text-[#0f172a] dark:text-foreground">
+                                {user.name ?? "-"}
+                              </h3>
+                            </div>
+                            <div className="mt-0.5 truncate text-xs text-[#64748b] dark:text-muted-foreground">
+                              {user.email}
+                            </div>
                           </div>
-                          <div className="mt-0.5 truncate text-xs text-[#64748b] dark:text-muted-foreground">
-                            {user.email}
-                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 shrink-0 px-2 text-xs"
+                            disabled={resettingPasswordUserId !== null}
+                            onClick={() => resetPassword(user)}
+                          >
+                            {resettingPasswordUserId === user.id ? (
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <KeyRound className="mr-1.5 h-3.5 w-3.5" />
+                            )}
+                            {resettingPasswordUserId === user.id
+                              ? "Resetting..."
+                              : "Reset password"}
+                          </Button>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 shrink-0 px-2 text-xs"
-                          disabled={resettingPasswordUserId !== null}
-                          onClick={() => resetPassword(user)}
-                        >
-                          {resettingPasswordUserId === user.id ? (
-                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <KeyRound className="mr-1.5 h-3.5 w-3.5" />
-                          )}
-                          {resettingPasswordUserId === user.id
-                            ? "Resetting..."
-                            : "Reset password"}
-                        </Button>
-                      </div>
 
-                      <div className="mt-2 grid gap-1.5 min-[900px]:grid-cols-[minmax(180px,0.64fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                        <MultiSelect
-                          options={roleOptionsForUser(user)}
-                          value={draftRoles}
-                          onChange={(nextRoles) =>
-                            updateUserRoleDraft(user, nextRoles)
-                          }
-                          minSelected={1}
-                          disabled={isSavingPage}
-                          aria-label={`Roles for ${userLabel}`}
-                          triggerClassName={cn(
-                            "h-8 text-xs",
-                            rolesChanged && dirtyControlClassName,
-                          )}
-                        />
+                        <div className="mt-2 grid gap-1.5 min-[900px]:grid-cols-[minmax(180px,0.64fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                          <MultiSelect
+                            options={roleOptionsForUser(user)}
+                            value={draftRoles}
+                            onChange={(nextRoles) =>
+                              updateUserRoleDraft(user, nextRoles)
+                            }
+                            minSelected={1}
+                            disabled={isSavingPage}
+                            aria-label={`Roles for ${userLabel}`}
+                            triggerClassName={cn(
+                              "h-8 text-xs",
+                              rolesChanged && dirtyControlClassName,
+                            )}
+                          />
 
-                        <DepartmentSelector
-                          departments={departments}
-                          selectedIds={draft.employeeDepartmentIds}
-                          disabled={!hasEmployeeRole || isSavingPage}
-                          placeholder={
-                            hasEmployeeRole
-                              ? "Select departments"
-                              : "Enable employee role"
-                          }
-                          emptyText="Create departments to assign employees."
-                          aria-label={`Employee departments for ${userLabel}`}
-                          dirty={employeeDepartmentsChanged}
-                          onChange={(departmentIds) =>
-                            updateUserDepartmentDraft(
-                              user,
-                              "EMPLOYEE",
-                              departmentIds,
-                            )
-                          }
-                        />
+                          <DepartmentSelector
+                            departments={departments}
+                            selectedIds={draft.employeeDepartmentIds}
+                            disabled={!hasEmployeeRole || isSavingPage}
+                            placeholder={
+                              hasEmployeeRole
+                                ? "Select departments"
+                                : "Enable employee role"
+                            }
+                            emptyText="Create departments to assign employees."
+                            aria-label={`Employee departments for ${userLabel}`}
+                            dirty={employeeDepartmentsChanged}
+                            onChange={(departmentIds) =>
+                              updateUserDepartmentDraft(
+                                user,
+                                "EMPLOYEE",
+                                departmentIds,
+                              )
+                            }
+                          />
 
-                        <DepartmentSelector
-                          departments={departments}
-                          selectedIds={reviewerScopeValue(draft)}
-                          includeAllOption
-                          disabled={!hasReviewerRole || isSavingPage}
-                          placeholder={
-                            hasReviewerRole
-                              ? "Select scope"
-                              : "Enable reviewer role"
-                          }
-                          emptyText="Create departments to scope reviewer access."
-                          aria-label={`Reviewer scope for ${userLabel}`}
-                          dirty={reviewerScopeChanged}
-                          onChange={(values) =>
-                            updateReviewerScopeDraft(user, values)
-                          }
-                        />
-                      </div>
-                    </article>
-                  );
-                })
-              )}
+                          <DepartmentSelector
+                            departments={departments}
+                            selectedIds={reviewerScopeValue(draft)}
+                            includeAllOption
+                            disabled={!hasReviewerRole || isSavingPage}
+                            placeholder={
+                              hasReviewerRole
+                                ? "Select scope"
+                                : "Enable reviewer role"
+                            }
+                            emptyText="Create departments to scope reviewer access."
+                            aria-label={`Reviewer scope for ${userLabel}`}
+                            dirty={reviewerScopeChanged}
+                            onChange={(values) =>
+                              updateReviewerScopeDraft(user, values)
+                            }
+                          />
+                        </div>
+                      </article>
+                    );
+                  })
+                )}
+              </div>
               {filteredUsers.length > 0 ? (
                 <div className="flex flex-col gap-2 rounded-[8px] bg-white px-2 py-1.5 text-xs text-[#64748b] ring-1 ring-[#dbe5f4] dark:bg-[#0f1b2a] dark:text-muted-foreground dark:ring-[#263a55] min-[640px]:flex-row min-[640px]:items-center min-[640px]:justify-between">
                   <div>
@@ -1143,7 +1148,7 @@ export function AdminUsers({
                 </form>
                 <div
                   aria-label="Existing departments"
-                  className="max-h-32 overflow-y-auto pr-1 [scrollbar-gutter:stable]"
+                  className="max-h-32 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]"
                 >
                   {departments.length === 0 ? (
                     <span className="text-xs text-[#64748b] dark:text-muted-foreground">
