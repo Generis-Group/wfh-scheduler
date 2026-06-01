@@ -670,22 +670,22 @@ async function listReportsForDateForWhere(
   employeeWhere: Prisma.UserWhereInput,
   scope?: ReviewScope,
 ) {
-  const { users, reports } = await prisma.$transaction(async (tx) => {
-    const users = await tx.user.findMany({
-      where: employeeWhere,
-      orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
-      select: dashboardUserSelect,
-    });
-    const reports = await tx.dailyReport.findMany({
-      where: {
-        reportDate,
-        user: employeeWhere,
-      },
-      include: dashboardReportInclude(scope),
-    });
-
-    return { users, reports };
+  const users = await prisma.user.findMany({
+    where: employeeWhere,
+    orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
+    select: dashboardUserSelect,
   });
+
+  const userIds = users.map((user) => user.id);
+  const reports = userIds.length
+    ? await prisma.dailyReport.findMany({
+        where: {
+          reportDate,
+          userId: { in: userIds },
+        },
+        include: dashboardReportInclude(scope),
+      })
+    : [];
   const reportsByUserId = new Map(
     reports.map((report) => [report.userId, report]),
   );
