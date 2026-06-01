@@ -12,6 +12,7 @@ import {
   Save,
   Search,
   UserPlus,
+  X,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -91,10 +92,10 @@ function emailDeliveryMessage(emailDelivery?: EmailDelivery | null) {
   }
 
   if (emailDelivery.status === "SKIPPED") {
-    return `${emailDelivery.reason ?? "Email was not sent."} Copy the password below.`;
+    return `${emailDelivery.reason ?? "Email was not sent."} Copy it from this popup.`;
   }
 
-  return `${emailDelivery.error ?? "Email delivery failed."} Copy the password below.`;
+  return `${emailDelivery.error ?? "Email delivery failed."} Copy it from this popup.`;
 }
 
 const roleOptions: Array<{ value: UserRole; label: string }> = [
@@ -104,6 +105,8 @@ const roleOptions: Array<{ value: UserRole; label: string }> = [
 ];
 const allDepartmentsValue = "__ALL_DEPARTMENTS__";
 const userPageSizeOptions = [10, 25, 50];
+const dirtyControlClassName =
+  "bg-[#f8fbff] ring-[#93c5fd] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.08),0_0_0_3px_rgba(37,99,235,0.08)] dark:bg-blue-400/10 dark:ring-blue-300/45";
 
 type NameSortDirection = "asc" | "desc";
 
@@ -394,7 +397,7 @@ export function AdminUsers({
       setMessage(
         data.emailDelivery?.status === "SENT"
           ? "User created and temporary password emailed."
-          : "User created. Copy the temporary password below.",
+          : "User created. Temporary password opened.",
       );
     } catch {
       setMessage("Unable to create user. Check your connection and try again.");
@@ -692,7 +695,7 @@ export function AdminUsers({
       setMessage(
         data.emailDelivery?.status === "SENT"
           ? "Temporary password emailed."
-          : "Temporary password created. Copy it below.",
+          : "Temporary password opened.",
       );
     } catch {
       setMessage(
@@ -811,48 +814,6 @@ export function AdminUsers({
           </div>
         ) : null}
 
-        {temporaryCredentials ? (
-          <div className="mb-4 rounded-[12px] border border-[#bfdbfe] bg-[#eff6ff] p-4 text-sm shadow-[0_8px_24px_rgba(15,23,42,0.05)] dark:border-[#1d4ed8]/40 dark:bg-[#132239]">
-            <div className="flex flex-col gap-3 min-[760px]:flex-row min-[760px]:items-start min-[760px]:justify-between">
-              <div>
-                <div className="font-semibold text-[#0f172a] dark:text-foreground">
-                  Temporary sign-in password
-                </div>
-                <p className="mt-1 text-[#475569] dark:text-muted-foreground">
-                  {emailDeliveryMessage(temporaryCredentials.emailDelivery)}{" "}
-                  They will be asked to change it after signing in.
-                </p>
-                <div className="mt-3 grid gap-2 min-[760px]:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)]">
-                  <div className="rounded-[8px] bg-white px-3 py-2 ring-1 ring-[#dbe5f4] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
-                    <div className="text-xs font-medium uppercase tracking-wide text-[#64748b]">
-                      Email
-                    </div>
-                    <div className="mt-1 break-all font-mono text-[#111827] dark:text-foreground">
-                      {temporaryCredentials.email || "-"}
-                    </div>
-                  </div>
-                  <div className="rounded-[8px] bg-white px-3 py-2 ring-1 ring-[#dbe5f4] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
-                    <div className="text-xs font-medium uppercase tracking-wide text-[#64748b]">
-                      Password
-                    </div>
-                    <div className="mt-1 break-all font-mono text-[#111827] dark:text-foreground">
-                      {temporaryCredentials.password}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                className="shrink-0 bg-white dark:bg-[#0f1b2a]"
-                onClick={copyTemporaryPassword}
-              >
-                <Copy className="mr-2 h-4 w-4" />
-                Copy password
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
         <div className="grid items-start gap-2 min-[1180px]:grid-cols-[minmax(0,1fr)_320px]">
           <Card>
             <CardHeader className="p-2.5 pb-1.5">
@@ -935,7 +896,21 @@ export function AdminUsers({
                   const savedDraft = savedDraftForUser(user);
                   const draft = draftForUser(user);
                   const draftRoles = draft.roles;
-                  const userChanged = !sameUserDraft(draft, savedDraft);
+                  const rolesChanged = !sameRoles(
+                    draft.roles,
+                    savedDraft.roles,
+                  );
+                  const employeeDepartmentsChanged = !sameValues(
+                    draft.employeeDepartmentIds,
+                    savedDraft.employeeDepartmentIds,
+                  );
+                  const reviewerScopeChanged =
+                    draft.reviewerAllDepartments !==
+                      savedDraft.reviewerAllDepartments ||
+                    !sameValues(
+                      draft.reviewerDepartmentIds,
+                      savedDraft.reviewerDepartmentIds,
+                    );
                   const hasEmployeeRole = draftRoles.includes("EMPLOYEE");
                   const hasReviewerRole = draftRoles.includes("REVIEWER");
                   const userLabel = user.name ?? user.email ?? "user";
@@ -944,11 +919,7 @@ export function AdminUsers({
                     <article
                       key={user.id}
                       aria-label={`${userLabel} assignments`}
-                      className={cn(
-                        "rounded-[8px] bg-white p-2 shadow-[0_4px_14px_rgba(15,23,42,0.035)] ring-1 ring-[#dbe5f4] transition-colors dark:bg-[#0f1b2a] dark:ring-[#263a55]",
-                        userChanged &&
-                          "bg-[#f8fbff] shadow-[inset_2px_0_0_#2563eb,0_4px_14px_rgba(37,99,235,0.08)] ring-[#93c5fd] dark:bg-[#10213a] dark:ring-blue-300/35",
-                      )}
+                      className="rounded-[8px] bg-white p-2 shadow-[0_4px_14px_rgba(15,23,42,0.035)] ring-1 ring-[#dbe5f4] transition-colors dark:bg-[#0f1b2a] dark:ring-[#263a55]"
                     >
                       <div className="flex flex-col gap-2 min-[720px]:flex-row min-[720px]:items-start min-[720px]:justify-between">
                         <div className="min-w-0">
@@ -989,7 +960,10 @@ export function AdminUsers({
                           minSelected={1}
                           disabled={isSavingPage}
                           aria-label={`Roles for ${userLabel}`}
-                          triggerClassName="h-8 text-xs"
+                          triggerClassName={cn(
+                            "h-8 text-xs",
+                            rolesChanged && dirtyControlClassName,
+                          )}
                         />
 
                         <DepartmentSelector
@@ -1003,6 +977,7 @@ export function AdminUsers({
                           }
                           emptyText="Create departments to assign employees."
                           aria-label={`Employee departments for ${userLabel}`}
+                          dirty={employeeDepartmentsChanged}
                           onChange={(departmentIds) =>
                             updateUserDepartmentDraft(
                               user,
@@ -1024,6 +999,7 @@ export function AdminUsers({
                           }
                           emptyText="Create departments to scope reviewer access."
                           aria-label={`Reviewer scope for ${userLabel}`}
+                          dirty={reviewerScopeChanged}
                           onChange={(values) =>
                             updateReviewerScopeDraft(user, values)
                           }
@@ -1195,8 +1171,93 @@ export function AdminUsers({
           </div>
         </div>
       </main>
+      <TemporaryCredentialsPopup
+        credentials={temporaryCredentials}
+        onCopy={copyTemporaryPassword}
+        onDismiss={() => setTemporaryCredentials(null)}
+      />
       <FixedToast message={message} onDismiss={() => setMessage(null)} />
     </>
+  );
+}
+
+function TemporaryCredentialsPopup({
+  credentials,
+  onCopy,
+  onDismiss,
+}: {
+  credentials: {
+    email: string;
+    password: string;
+    emailDelivery?: EmailDelivery | null;
+  } | null;
+  onCopy: () => void;
+  onDismiss: () => void;
+}) {
+  if (!credentials) {
+    return null;
+  }
+
+  return (
+    <aside
+      className="fixed right-4 top-4 z-50 w-[min(560px,calc(100vw-2rem))] rounded-[12px] bg-white p-4 text-sm text-[#0f172a] shadow-[0_24px_70px_rgba(15,23,42,0.22)] ring-1 ring-[#dbe5f4] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-white/[0.08]"
+      role="dialog"
+      aria-labelledby="temporary-password-title"
+      aria-live="polite"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div
+            id="temporary-password-title"
+            className="font-semibold text-[#0f172a] dark:text-foreground"
+          >
+            Temporary sign-in password
+          </div>
+          <p className="mt-1 text-[#475569] dark:text-muted-foreground">
+            {emailDeliveryMessage(credentials.emailDelivery)} They will be asked
+            to change it after signing in.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[#64748b] transition-colors hover:bg-[#eef2f7] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+          aria-label="Close temporary password"
+          onClick={onDismiss}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="min-w-0 rounded-[8px] bg-[#f7f9fc] px-3 py-2 ring-1 ring-[#dbe5f4] dark:bg-white/[0.04] dark:ring-white/[0.08]">
+          <div className="text-xs font-medium uppercase tracking-wide text-[#64748b] dark:text-muted-foreground">
+            Email
+          </div>
+          <div className="mt-1 break-all font-mono text-[#111827] dark:text-foreground">
+            {credentials.email || "-"}
+          </div>
+        </div>
+        <div className="min-w-0 rounded-[8px] bg-[#f7f9fc] px-3 py-2 ring-1 ring-[#dbe5f4] dark:bg-white/[0.04] dark:ring-white/[0.08]">
+          <div className="text-xs font-medium uppercase tracking-wide text-[#64748b] dark:text-muted-foreground">
+            Password
+          </div>
+          <div className="mt-1 break-all font-mono text-[#111827] dark:text-foreground">
+            {credentials.password}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 flex justify-end">
+        <Button
+          variant="outline"
+          className="h-9 bg-white dark:bg-white/[0.04]"
+          onClick={onCopy}
+        >
+          <Copy className="mr-2 h-4 w-4" />
+          Copy password
+        </Button>
+      </div>
+    </aside>
   );
 }
 
@@ -1204,6 +1265,7 @@ function DepartmentSelector({
   departments,
   selectedIds,
   disabled,
+  dirty = false,
   placeholder,
   emptyText,
   includeAllOption = false,
@@ -1213,6 +1275,7 @@ function DepartmentSelector({
   departments: Department[];
   selectedIds: string[];
   disabled?: boolean;
+  dirty?: boolean;
   placeholder: string;
   emptyText: string;
   includeAllOption?: boolean;
@@ -1243,7 +1306,10 @@ function DepartmentSelector({
           placeholder={placeholder}
           disabled={disabled}
           aria-label={ariaLabel}
-          triggerClassName="h-8 text-xs"
+          triggerClassName={cn(
+            "h-8 text-xs",
+            dirty && dirtyControlClassName,
+          )}
         />
       )}
     </>

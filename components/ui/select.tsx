@@ -1,5 +1,4 @@
 import * as React from "react";
-import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -70,15 +69,8 @@ export const Select = React.forwardRef<
     const generatedId = React.useId();
     const selectRef = React.useRef<HTMLSelectElement>(null);
     const wrapperRef = React.useRef<HTMLSpanElement>(null);
-    const menuRef = React.useRef<HTMLDivElement>(null);
     const options = React.useMemo(() => selectOptions(children), [children]);
     const [open, setOpen] = React.useState(false);
-    const [menuRect, setMenuRect] = React.useState<{
-      left: number;
-      maxHeight: number;
-      top: number;
-      width: number;
-    } | null>(null);
     const [internalValue, setInternalValue] = React.useState(() =>
       selectValue(defaultValue ?? options[0]?.value ?? ""),
     );
@@ -91,51 +83,15 @@ export const Select = React.forwardRef<
 
     React.useImperativeHandle(ref, () => selectRef.current as HTMLSelectElement);
 
-    const updateMenuPosition = React.useCallback(() => {
-      const rect = wrapperRef.current?.getBoundingClientRect();
-
-      if (!rect) {
-        return;
-      }
-
-      const gap = 6;
-      const viewportPadding = 12;
-      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
-      const spaceAbove = rect.top - viewportPadding;
-      const openBelow = spaceBelow >= 180 || spaceBelow >= spaceAbove;
-      const availableHeight = Math.max(
-        160,
-        openBelow ? spaceBelow - gap : spaceAbove - gap,
-      );
-
-      setMenuRect({
-        left: Math.min(
-          Math.max(viewportPadding, rect.left),
-          Math.max(viewportPadding, window.innerWidth - rect.width - viewportPadding),
-        ),
-        maxHeight: Math.min(256, availableHeight),
-        top: openBelow
-          ? rect.bottom + gap
-          : Math.max(viewportPadding, rect.top - gap - Math.min(256, availableHeight)),
-        width: rect.width,
-      });
-    }, []);
-
     React.useEffect(() => {
       if (!open) {
-        setMenuRect(null);
         return;
       }
-
-      updateMenuPosition();
 
       function handlePointerDown(event: PointerEvent) {
         const target = event.target as Node;
 
-        if (
-          !wrapperRef.current?.contains(target) &&
-          !menuRef.current?.contains(target)
-        ) {
+        if (!wrapperRef.current?.contains(target)) {
           setOpen(false);
         }
       }
@@ -148,16 +104,12 @@ export const Select = React.forwardRef<
 
       document.addEventListener("pointerdown", handlePointerDown);
       document.addEventListener("keydown", handleKeyDown);
-      window.addEventListener("resize", updateMenuPosition);
-      window.addEventListener("scroll", updateMenuPosition, true);
 
       return () => {
         document.removeEventListener("pointerdown", handlePointerDown);
         document.removeEventListener("keydown", handleKeyDown);
-        window.removeEventListener("resize", updateMenuPosition);
-        window.removeEventListener("scroll", updateMenuPosition, true);
       };
-    }, [open, updateMenuPosition]);
+    }, [open]);
 
     function chooseOption(nextValue: string) {
       if (disabled || nextValue === selectedValue) {
@@ -194,7 +146,8 @@ export const Select = React.forwardRef<
       <span
         ref={wrapperRef}
         className={cn(
-          "relative flex h-10 w-full min-w-0 items-center rounded-[8px] bg-white text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] transition-colors focus-within:ring-2 focus-within:ring-[#2563eb] dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55]",
+          "relative flex h-10 w-full min-w-0 items-center rounded-[8px] bg-[hsl(var(--field))] text-sm font-medium text-foreground shadow-[inset_0_1px_1px_rgba(15,23,42,0.025),0_1px_2px_rgba(15,23,42,0.035)] ring-1 ring-input transition-[background-color,box-shadow] focus-within:ring-2 focus-within:ring-[#2563eb] dark:bg-[hsl(var(--field))] dark:ring-input",
+          open && "z-[80]",
           disabled && "cursor-not-allowed opacity-50",
           className,
         )}
@@ -247,20 +200,12 @@ export const Select = React.forwardRef<
             aria-hidden="true"
           />
         </button>
-        {open && menuRect && typeof document !== "undefined"
-          ? createPortal(
+        {open ? (
           <div
-            ref={menuRef}
             id={listboxId}
             role="listbox"
             aria-labelledby={triggerId}
-            className="fixed z-50 min-w-[12rem] overflow-y-auto rounded-[8px] bg-white p-1.5 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
-            style={{
-              left: menuRect.left,
-              maxHeight: menuRect.maxHeight,
-              top: menuRect.top,
-              width: menuRect.width,
-            }}
+            className="absolute left-0 top-[calc(100%+0.375rem)] z-[90] max-h-64 w-full min-w-[12rem] overflow-y-auto rounded-[8px] bg-white p-1.5 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-black/[0.06] dark:bg-[#0f1b2a] dark:ring-white/[0.08]"
           >
             {options.map((option) => {
               const selected = option.value === selectedValue;
@@ -276,7 +221,7 @@ export const Select = React.forwardRef<
                     "flex w-full items-center justify-between gap-2 rounded-[7px] px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-45",
                     selected
                       ? "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-blue-100"
-                      : "text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5",
+                      : "text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/[0.055]",
                   )}
                   onClick={() => chooseOption(option.value)}
                 >
@@ -285,10 +230,8 @@ export const Select = React.forwardRef<
                 </button>
               );
             })}
-          </div>,
-            document.body,
-          )
-          : null}
+          </div>
+        ) : null}
       </span>
     );
   },

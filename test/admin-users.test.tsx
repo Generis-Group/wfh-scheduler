@@ -155,7 +155,16 @@ describe("AdminUsers", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByText("Employee, Reviewer, Admin")).toBeTruthy();
     expect(screen.getByText("Engineering, Operations")).toBeTruthy();
-    expect(alexAssignments!.className).toContain("ring-[#93c5fd]");
+    expect(alexAssignments!.className).not.toContain("ring-[#93c5fd]");
+    expect(screen.getByLabelText("Roles for Alex Employee").className).toContain(
+      "ring-[#93c5fd]",
+    );
+    expect(
+      screen.getByLabelText("Employee departments for Alex Employee").className,
+    ).toContain("ring-[#93c5fd]");
+    expect(
+      screen.getByLabelText("Reviewer scope for Alex Employee").className,
+    ).toContain("ring-[#93c5fd]");
     expect(within(alexAssignments!).queryByText("Saved")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -253,5 +262,70 @@ describe("AdminUsers", () => {
       (screen.getByRole("option", { name: "Admin" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it("shows temporary credentials in a fixed popup instead of an in-flow panel", async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            user: {
+              id: "new-user",
+              name: "Morgan Small",
+              email: "morgan@generisgp.com",
+              role: "EMPLOYEE",
+              roles: ["EMPLOYEE"],
+              status: "ACTIVE",
+              reviewerAllDepartments: false,
+              departments: [],
+            },
+            temporaryPassword: "TempPass123!",
+            emailDelivery: {
+              status: "SKIPPED",
+              reason: "Email was skipped in tests.",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <AdminUsers
+        initialUsers={initialUsers}
+        initialDepartments={initialDepartments}
+        currentUserId="employee-1"
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Morgan Small" },
+    });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "morgan@generisgp.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    const popup = await screen.findByRole("dialog", {
+      name: "Temporary sign-in password",
+    });
+
+    expect(popup.className).toContain("fixed");
+    expect(within(popup).getByText("morgan@generisgp.com")).toBeTruthy();
+    expect(within(popup).getByText("TempPass123!")).toBeTruthy();
+    expect(screen.queryByText("Copy the password below.")).toBeNull();
+
+    fireEvent.click(
+      within(popup).getByRole("button", {
+        name: "Close temporary password",
+      }),
+    );
+
+    expect(
+      screen.queryByRole("dialog", { name: "Temporary sign-in password" }),
+    ).toBeNull();
   });
 });
