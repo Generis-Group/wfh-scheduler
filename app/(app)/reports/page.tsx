@@ -29,7 +29,9 @@ export default async function ReportsPage({
   }
 
   if (!hasUserRole(session.user, "EMPLOYEE")) {
-    redirect(hasUserRole(session.user, "REVIEWER") ? "/review" : "/admin");
+    redirect(
+      hasUserRole(session.user, "REVIEWER") ? "/review" : "/admin/team",
+    );
   }
 
   const targetReportId =

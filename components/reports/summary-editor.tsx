@@ -688,7 +688,7 @@ export function SummaryEditorSkeleton() {
       aria-label="Loading summary editor"
       role="status"
     >
-      <div className="h-[480px] rounded-[7px] bg-white px-3.5 py-3.5 ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+      <div className="h-[clamp(22rem,52dvh,30rem)] rounded-[7px] bg-white px-3.5 py-3.5 ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
         <Skeleton className="h-4 w-11/12 rounded-[4px]" />
         <Skeleton className="mt-3 h-4 w-4/5 rounded-[4px]" />
         <Skeleton className="mt-3 h-4 w-9/12 rounded-[4px]" />
@@ -893,7 +893,7 @@ const SummaryEditorComponent = forwardRef<
   }
 
   return (
-    <div className="mt-4 rounded-[10px] bg-[#f7f9fc] p-2 ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]">
+    <div className="summary-tiptap-panel mt-4 rounded-[10px] bg-[#f7f9fc] p-2 ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]">
       <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
         <SummaryToolbarButton
           active={toolbarState.heading}

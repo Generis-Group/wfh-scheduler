@@ -69,6 +69,7 @@ export const Select = React.forwardRef<
     const generatedId = React.useId();
     const selectRef = React.useRef<HTMLSelectElement>(null);
     const wrapperRef = React.useRef<HTMLSpanElement>(null);
+    const listboxRef = React.useRef<HTMLDivElement>(null);
     const options = React.useMemo(() => selectOptions(children), [children]);
     const [open, setOpen] = React.useState(false);
     const [internalValue, setInternalValue] = React.useState(() =>
@@ -109,6 +110,24 @@ export const Select = React.forwardRef<
         document.removeEventListener("pointerdown", handlePointerDown);
         document.removeEventListener("keydown", handleKeyDown);
       };
+    }, [open]);
+
+    React.useEffect(() => {
+      if (!open) {
+        return;
+      }
+
+      const timeout = window.setTimeout(() => {
+        if (typeof listboxRef.current?.scrollIntoView === "function") {
+          listboxRef.current.scrollIntoView({
+            block: "nearest",
+            inline: "nearest",
+            behavior: "smooth",
+          });
+        }
+      }, 0);
+
+      return () => window.clearTimeout(timeout);
     }, [open]);
 
     function chooseOption(nextValue: string) {
@@ -202,10 +221,11 @@ export const Select = React.forwardRef<
         </button>
         {open ? (
           <div
+            ref={listboxRef}
             id={listboxId}
             role="listbox"
             aria-labelledby={triggerId}
-            className="absolute left-0 top-[calc(100%+0.375rem)] z-[90] max-h-64 w-full min-w-[12rem] overflow-y-auto rounded-[8px] bg-white p-1.5 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-black/[0.06] dark:bg-[#0f1b2a] dark:ring-white/[0.08]"
+            className="absolute left-0 top-[calc(100%+0.375rem)] z-[90] max-h-64 w-full min-w-[12rem] scroll-mb-3 scroll-mt-3 overflow-y-auto rounded-[8px] bg-white p-1.5 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-black/[0.06] dark:bg-[#0f1b2a] dark:ring-white/[0.08]"
           >
             {options.map((option) => {
               const selected = option.value === selectedValue;

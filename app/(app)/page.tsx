@@ -31,7 +31,9 @@ export default async function HomePage({
   }
 
   if (!hasUserRole(session.user, "EMPLOYEE")) {
-    redirect(hasUserRole(session.user, "REVIEWER") ? "/review" : "/admin");
+    redirect(
+      hasUserRole(session.user, "REVIEWER") ? "/review" : "/admin/team",
+    );
   }
 
   const requestedDate = searchParams?.date;

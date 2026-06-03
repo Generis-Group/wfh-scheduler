@@ -6,6 +6,10 @@ import { addReportDateDays, parseReportDate } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import {
+  emptyReportSubmitMessage,
+  hasSubmitReadyContent,
+} from "@/lib/report-submit-readiness";
+import {
   departmentMembershipSelect,
   getReviewableEmployeeWhere,
   type ReviewScope,
@@ -554,6 +558,16 @@ export async function updateReport(
 export async function submitReport(reportId: string, editedById: string) {
   const report = await getReportById(reportId);
 
+  if (
+    !hasSubmitReadyContent({
+      summary: report.summary,
+      workLocation: report.workLocation,
+      activities: report.activities,
+    })
+  ) {
+    throw new HttpError(400, emptyReportSubmitMessage);
+  }
+
   if (report.status === "SUBMITTED") {
     await prisma.dailyReport.update({
       where: { id: report.id },
@@ -578,11 +592,58 @@ export async function submitReport(reportId: string, editedById: string) {
   return getReportById(reportId);
 }
 
+export async function reopenSubmittedReport(
+  reportId: string,
+  editedById: string,
+) {
+  const report = await getReportById(reportId);
+
+  if (report.status !== "SUBMITTED") {
+    throw new HttpError(400, "Only submitted reports can be reopened.");
+  }
+
+  await createReportRevision(report.id, editedById);
+
+  await prisma.dailyReport.update({
+    where: { id: report.id },
+    data: {
+      status: "DRAFT",
+      submittedAt: null,
+    },
+  });
+
+  return getReportById(report.id);
+}
+
 export async function deleteDraftReport(reportId: string) {
   const report = await getReportById(reportId);
 
   if (report.status !== "DRAFT") {
     throw new HttpError(400, "Submitted reports cannot be deleted.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.activityItem.deleteMany({
+      where: {
+        dailyReportId: report.id,
+      },
+    });
+
+    await tx.dailyReport.delete({
+      where: {
+        id: report.id,
+      },
+    });
+  });
+
+  return { ok: true };
+}
+
+export async function deleteSubmittedReport(reportId: string) {
+  const report = await getReportById(reportId);
+
+  if (report.status !== "SUBMITTED") {
+    throw new HttpError(400, "Only submitted reports can be deleted by admins.");
   }
 
   await prisma.$transaction(async (tx) => {
@@ -1077,6 +1138,32 @@ export async function listReportHistory(
   });
 
   return targetReport ? [targetReport, ...reports] : reports;
+}
+
+export async function listReportsForAdminManagement(limit = 200) {
+  return prisma.dailyReport.findMany({
+    orderBy: [{ reportDate: "desc" }, { updatedAt: "desc" }],
+    take: limit,
+    select: {
+      id: true,
+      reportDate: true,
+      status: true,
+      workLocation: true,
+      summary: true,
+      submittedAt: true,
+      updatedAt: true,
+      user: {
+        select: reportUserSelect,
+      },
+      _count: {
+        select: {
+          activities: true,
+          comments: true,
+          revisions: true,
+        },
+      },
+    },
+  });
 }
 
 async function getDashboardMetricsForWhere(

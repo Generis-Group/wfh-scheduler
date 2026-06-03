@@ -1,9 +1,17 @@
-import { assertCanMutateReport, requireSession } from "@/lib/access";
-import { revalidateReportRoutes } from "@/lib/cache-invalidation";
+import {
+  assertCanAdminManageReport,
+  assertCanMutateReport,
+  requireSession,
+} from "@/lib/access";
+import {
+  revalidateAdminRoutes,
+  revalidateReportRoutes,
+} from "@/lib/cache-invalidation";
 import { handleRouteError, json } from "@/lib/http";
 import { withServerTiming } from "@/lib/performance";
 import {
   deleteDraftReport,
+  deleteSubmittedReport,
   getReportById,
   updateReport,
 } from "@/lib/services/reports";
@@ -45,6 +53,35 @@ export async function DELETE(_request: Request, { params }: Context) {
   try {
     const session = await requireSession();
     const report = await getReportById(params.id);
+
+    if (report.status === "SUBMITTED") {
+      assertCanAdminManageReport(session);
+
+      await withServerTiming(
+        "api:reports:delete-submitted",
+        () => deleteSubmittedReport(report.id),
+        { reportId: report.id },
+      );
+      revalidateReportRoutes();
+      revalidateAdminRoutes();
+
+      return json({ ok: true });
+    }
+
+    if (session.user.roles?.includes("ADMIN") || session.user.role === "ADMIN") {
+      assertCanAdminManageReport(session);
+
+      await withServerTiming(
+        "api:reports:delete-draft-admin",
+        () => deleteDraftReport(report.id),
+        { reportId: report.id },
+      );
+      revalidateReportRoutes();
+      revalidateAdminRoutes();
+
+      return json({ ok: true });
+    }
+
     assertCanMutateReport(session, report);
 
     await withServerTiming(
@@ -53,6 +90,7 @@ export async function DELETE(_request: Request, { params }: Context) {
       { reportId: report.id },
     );
     revalidateReportRoutes();
+    revalidateAdminRoutes();
 
     return json({ ok: true });
   } catch (error) {

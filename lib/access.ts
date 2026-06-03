@@ -127,3 +127,9 @@ export function assertCanMutateReport(
     );
   }
 }
+
+export function assertCanAdminManageReport(session: NonNullable<AppSession>) {
+  if (!hasUserRole(session.user, "ADMIN")) {
+    throw new HttpError(403, "Only admins can manage submitted reports.");
+  }
+}

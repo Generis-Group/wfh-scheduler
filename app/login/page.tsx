@@ -23,14 +23,23 @@ export default async function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center bg-[#f4f7fb] px-4 py-10 dark:bg-background">
-      <div className="absolute left-6 top-6">
-        <Image src={generisLogo} alt="Generis" className="h-auto w-[162px]" priority />
+    <main className="relative flex min-h-[100dvh] items-center justify-center overflow-x-hidden bg-[#f4f7fb] px-3 py-4 dark:bg-background sm:min-h-screen sm:px-4 sm:py-10">
+      <div className="flex w-full max-w-md flex-col gap-4 sm:contents">
+        <div className="flex min-w-0 items-center justify-between gap-3 sm:contents">
+          <div className="min-w-0 sm:absolute sm:left-6 sm:top-6">
+            <Image
+              src={generisLogo}
+              alt="Generis"
+              className="h-auto w-[min(162px,calc(100vw-5.25rem))] sm:w-[162px]"
+              priority
+            />
+          </div>
+          <div className="shrink-0 sm:absolute sm:right-6 sm:top-6">
+            <ThemeToggle />
+          </div>
+        </div>
+        <LoginForm oauthConfig={getOAuthProviderConfig()} />
       </div>
-      <div className="absolute right-6 top-6">
-        <ThemeToggle />
-      </div>
-      <LoginForm oauthConfig={getOAuthProviderConfig()} />
     </main>
   );
 }

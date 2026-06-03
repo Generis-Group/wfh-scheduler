@@ -30,8 +30,12 @@ export default async function ReviewPage({
     redirect("/change-password");
   }
 
-  if (!hasUserRole(session.user, "REVIEWER")) {
-    redirect(hasUserRole(session.user, "ADMIN") ? "/admin" : "/");
+  const userRoles = normalizeUserRoles(session.user);
+  const canUseReviewDashboard =
+    hasUserRole(session.user, "REVIEWER") || hasUserRole(session.user, "ADMIN");
+
+  if (!canUseReviewDashboard) {
+    redirect("/");
   }
 
   const requestedDate = searchParams?.date;
@@ -43,7 +47,7 @@ export default async function ReviewPage({
 
   const scope = {
     userId: session.user.id,
-    roles: normalizeUserRoles(session.user),
+    roles: userRoles,
   };
   const { rows, metrics } = await withServerTiming(
     "page:review:data",
@@ -57,6 +61,7 @@ export default async function ReviewPage({
       metrics={serialize(metrics)}
       date={date}
       reviewerId={session.user.id}
+      viewerRoles={userRoles}
       initialOpenedReportId={
         typeof searchParams?.reportId === "string" &&
         searchParams.reportId.trim()

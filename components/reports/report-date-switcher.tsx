@@ -224,7 +224,7 @@ export function ReportDateSwitcher({
         aria-label="Select report date"
       />
       {pickerOpen ? (
-        <div className="absolute left-0 top-11 z-30 w-full min-w-[300px] rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+        <div className="absolute left-0 top-11 z-30 w-[min(300px,calc(100vw-2rem))] min-w-0 rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[520px]:w-full">
           <div className="mb-2 flex items-center justify-between gap-2">
             <button
               type="button"

@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: { id: string } },
 ) {
   try {
-    const session = await requireRole(["REVIEWER"]);
+    const session = await requireRole(["REVIEWER", "ADMIN"]);
     const { id } = weeklyReportIdSchema.parse(params);
     const weeklyReport = await getSavedWeeklyReport(id, {
       userId: session.user.id,

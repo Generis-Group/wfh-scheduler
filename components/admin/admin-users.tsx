@@ -4,18 +4,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownAZ,
   ArrowUpZA,
-  ChevronLeft,
-  ChevronRight,
   Copy,
   KeyRound,
   Loader2,
   Save,
   Search,
+  Trash2,
   UserPlus,
   X,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import {
+  AdminSectionFrame,
+  type AdminSectionId,
+} from "@/components/admin/admin-section-frame";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -104,7 +106,6 @@ const roleOptions: Array<{ value: UserRole; label: string }> = [
   { value: "ADMIN", label: "Admin" },
 ];
 const allDepartmentsValue = "__ALL_DEPARTMENTS__";
-const userPageSizeOptions = [10, 25, 50];
 const dirtyControlClassName =
   "bg-[#f8fbff] ring-[#93c5fd] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.08),0_0_0_3px_rgba(37,99,235,0.08)] dark:bg-blue-400/10 dark:ring-blue-300/45";
 
@@ -202,10 +203,12 @@ export function AdminUsers({
   initialUsers,
   initialDepartments,
   currentUserId,
+  section = "team",
 }: {
   initialUsers: User[];
   initialDepartments: Department[];
   currentUserId?: string | null;
+  section?: Exclude<AdminSectionId, "reports">;
 }) {
   const [users, setUsers] = useState(initialUsers);
   const [departments, setDepartments] = useState(initialDepartments);
@@ -216,8 +219,6 @@ export function AdminUsers({
   const [userSearch, setUserSearch] = useState("");
   const [nameSortDirection, setNameSortDirection] =
     useState<NameSortDirection>("asc");
-  const [userPage, setUserPage] = useState(1);
-  const [userPageSize, setUserPageSize] = useState(10);
   const [message, setMessage] = useState<string | null>(null);
   const [userDrafts, setUserDrafts] = useState<Record<string, UserDraft>>({});
   const [temporaryCredentials, setTemporaryCredentials] = useState<{
@@ -227,6 +228,11 @@ export function AdminUsers({
   } | null>(null);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [creatingDepartment, setCreatingDepartment] = useState(false);
+  const [departmentToDelete, setDepartmentToDelete] =
+    useState<Department | null>(null);
+  const [deletingDepartmentId, setDeletingDepartmentId] = useState<
+    string | null
+  >(null);
   const [resettingPasswordUserId, setResettingPasswordUserId] = useState<
     string | null
   >(null);
@@ -244,31 +250,10 @@ export function AdminUsers({
         ),
     [nameSortDirection, normalizedUserSearch, users],
   );
-  const userPageCount = Math.max(
-    1,
-    Math.ceil(filteredUsers.length / userPageSize),
-  );
-  const currentUserPage = Math.min(userPage, userPageCount);
-  const visibleUsers = useMemo(() => {
-    const startIndex = (currentUserPage - 1) * userPageSize;
-
-    return filteredUsers.slice(startIndex, startIndex + userPageSize);
-  }, [currentUserPage, filteredUsers, userPageSize]);
-  const firstVisibleUser = filteredUsers.length
-    ? (currentUserPage - 1) * userPageSize + 1
-    : 0;
-  const lastVisibleUser = Math.min(
-    currentUserPage * userPageSize,
-    filteredUsers.length,
-  );
   const userResultLabel =
     filteredUsers.length === users.length
       ? `${users.length} team member${users.length === 1 ? "" : "s"}`
       : `${filteredUsers.length} of ${users.length} team members`;
-
-  useEffect(() => {
-    setUserPage((current) => Math.max(1, Math.min(current, userPageCount)));
-  }, [userPageCount]);
 
   useEffect(() => {
     if (!hasPendingChanges) {
@@ -473,6 +458,66 @@ export function AdminUsers({
       );
     } finally {
       setCreatingDepartment(false);
+    }
+  }
+
+  async function deleteDepartment(department: Department) {
+    if (deletingDepartmentId) {
+      return;
+    }
+
+    setDeletingDepartmentId(department.id);
+    setMessage(null);
+
+    try {
+      const response = await fetch(
+        `/api/admin/departments/${encodeURIComponent(department.id)}`,
+        { method: "DELETE" },
+      );
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setMessage(data.error ?? "Unable to remove department.");
+        return;
+      }
+
+      setDepartments((current) =>
+        current.filter((item) => item.id !== department.id),
+      );
+      setUsers((current) =>
+        current.map((user) => ({
+          ...user,
+          departments:
+            user.departments?.filter(
+              (membership) => membership.departmentId !== department.id,
+            ) ?? [],
+        })),
+      );
+      setUserDrafts((current) =>
+        Object.fromEntries(
+          Object.entries(current).map(([userId, draft]) => [
+            userId,
+            {
+              ...draft,
+              employeeDepartmentIds: draft.employeeDepartmentIds.filter(
+                (departmentId) => departmentId !== department.id,
+              ),
+              reviewerDepartmentIds: draft.reviewerDepartmentIds.filter(
+                (departmentId) => departmentId !== department.id,
+              ),
+            },
+          ]),
+        ),
+      );
+      setDepartmentToDelete(null);
+      markServerDataStale();
+      setMessage("Department removed.");
+    } catch {
+      setMessage(
+        "Unable to remove department. Check your connection and try again.",
+      );
+    } finally {
+      setDeletingDepartmentId(null);
     }
   }
 
@@ -777,15 +822,10 @@ export function AdminUsers({
 
   return (
     <>
-      <main className="reference-page min-[1180px]:flex min-[1180px]:h-full min-[1180px]:min-h-0 min-[1180px]:flex-col">
-        <div className="reference-page-header">
-          <div>
-            <h1 className="reference-title">Admin</h1>
-            <p className="reference-subtitle">
-              Manage employees, reviewers, admins, departments, and password
-              access.
-            </p>
-          </div>
+      <AdminSectionFrame
+        activeSection={section}
+        action={
+          section === "team" ? (
           <Button
             type="button"
             className="min-w-[132px] bg-[#2563eb] hover:bg-[#1d4ed8]"
@@ -803,19 +843,20 @@ export function AdminUsers({
                 ? "Save changes"
                 : "Saved"}
           </Button>
-        </div>
+          ) : null
+        }
+      >
 
-        {isSavingPage ? (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-white/60 backdrop-blur-[2px] dark:bg-[#07111f]/65">
-            <div className="flex items-center gap-3 rounded-[12px] bg-white px-4 py-3 text-sm font-semibold text-[#1d4ed8] shadow-[0_20px_60px_rgba(15,23,42,0.18)] ring-1 ring-[#dbe5f4] dark:bg-[#0f1b2a] dark:text-blue-200 dark:ring-[#263a55]">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Saving admin changes
-            </div>
-          </div>
-        ) : null}
-
-        <div className="grid items-start gap-2 min-[1180px]:min-h-0 min-[1180px]:flex-1 min-[1180px]:grid-cols-[minmax(0,1fr)_320px] min-[1180px]:items-stretch">
-          <Card className="min-[1180px]:flex min-[1180px]:min-h-0 min-[1180px]:flex-col">
+        <div
+          className={cn(
+            "grid items-start gap-3 min-[1180px]:h-full min-[1180px]:min-h-0 min-[1180px]:items-stretch",
+            section === "team"
+              ? "min-[1180px]:grid-cols-[minmax(0,1fr)_320px]"
+              : "min-[900px]:grid-cols-[minmax(0,1fr)]",
+          )}
+        >
+          {section === "team" ? (
+          <Card className="ring-0 shadow-[0_12px_34px_rgba(15,23,42,0.06)] dark:ring-0 min-[1180px]:flex min-[1180px]:min-h-0 min-[1180px]:flex-col">
             <CardHeader className="p-2.5 pb-1.5">
               <CardTitle>Team members</CardTitle>
               <CardDescription className="text-xs leading-4">
@@ -824,38 +865,34 @@ export function AdminUsers({
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 p-2 pt-0 min-[1180px]:flex min-[1180px]:min-h-0 min-[1180px]:flex-1 min-[1180px]:flex-col min-[1180px]:gap-2 min-[1180px]:space-y-0">
-              <div className="flex flex-col gap-2 rounded-[8px] bg-[#f8fafc] p-2 ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55] min-[760px]:flex-row min-[760px]:items-center min-[760px]:justify-between">
-                <div className="relative min-w-0 min-[760px]:w-[380px]">
+              <div className="grid gap-2 rounded-[8px] bg-[#f8fafc]/70 p-2 dark:bg-white/[0.025] min-[900px]:grid-cols-[minmax(240px,1fr)_auto] min-[900px]:items-center">
+                <div className="relative min-w-0">
                   <Search
                     className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b] dark:text-muted-foreground"
                     aria-hidden="true"
                   />
                   <Input
                     aria-label="Search team members by name"
-                    className="h-9 border-[#cbd5e1] bg-white pl-9 text-sm ring-1 ring-[#dbe5f4] dark:border-[#263a55] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                    className="h-9 border-transparent bg-white/95 pl-9 text-sm ring-0 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)] dark:border-transparent dark:bg-[#111d2d] dark:ring-0"
                     placeholder="Search by name"
                     value={userSearch}
-                    onChange={(event) => {
-                      setUserSearch(event.target.value);
-                      setUserPage(1);
-                    }}
+                    onChange={(event) => setUserSearch(event.target.value)}
                   />
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-xs font-medium text-[#64748b] dark:text-muted-foreground">
+                <div className="grid gap-2 min-[520px]:grid-cols-[auto_auto] min-[520px]:items-center min-[900px]:justify-end">
+                  <div className="whitespace-nowrap text-xs font-medium text-[#64748b] dark:text-muted-foreground">
                     {userResultLabel}
                   </div>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-8 min-w-[104px] justify-start bg-white px-2 text-xs dark:bg-[#0f1b2a]"
+                    className="h-8 min-w-[104px] justify-start whitespace-nowrap bg-white px-2 text-xs dark:bg-[#0f1b2a]"
                     onClick={() => {
                       setNameSortDirection((current) =>
                         current === "asc" ? "desc" : "asc",
                       );
-                      setUserPage(1);
                     }}
                   >
                     <span className="mr-1.5 flex h-3.5 w-3.5 items-center justify-center">
@@ -867,21 +904,6 @@ export function AdminUsers({
                     </span>
                     {nameSortDirection === "asc" ? "Name A-Z" : "Name Z-A"}
                   </Button>
-                  <Select
-                    aria-label="Team members per page"
-                    className="h-8 w-[116px] bg-white text-xs dark:bg-[#0f1b2a]"
-                    value={String(userPageSize)}
-                    onChange={(event) => {
-                      setUserPageSize(Number(event.currentTarget.value));
-                      setUserPage(1);
-                    }}
-                  >
-                    {userPageSizeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option} / page
-                      </option>
-                    ))}
-                  </Select>
                 </div>
               </div>
 
@@ -890,13 +912,13 @@ export function AdminUsers({
                 className="space-y-2 min-[1180px]:min-h-0 min-[1180px]:flex-1 min-[1180px]:overflow-y-auto min-[1180px]:overscroll-contain min-[1180px]:pr-1 min-[1180px]:[scrollbar-gutter:stable]"
               >
                 {filteredUsers.length === 0 ? (
-                  <div className="rounded-[8px] bg-[#f8fafc] py-5 text-center text-xs text-[#64748b] ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]">
+                  <div className="rounded-[8px] bg-[#f8fafc] py-5 text-center text-xs text-[#64748b] dark:bg-[#0b1523]">
                     {users.length === 0
                       ? "No users have been created yet."
                       : "No team members match this search."}
                   </div>
                 ) : (
-                  visibleUsers.map((user) => {
+                  filteredUsers.map((user) => {
                     const savedDraft = savedDraftForUser(user);
                     const draft = draftForUser(user);
                     const draftRoles = draft.roles;
@@ -923,7 +945,7 @@ export function AdminUsers({
                       <article
                         key={user.id}
                         aria-label={`${userLabel} assignments`}
-                        className="rounded-[8px] bg-white p-2 shadow-[0_4px_14px_rgba(15,23,42,0.035)] ring-1 ring-[#dbe5f4] transition-colors dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                        className="rounded-[8px] bg-[#f8fafc]/82 p-2 shadow-[0_4px_14px_rgba(15,23,42,0.028)] transition-colors dark:bg-white/[0.035]"
                       >
                         <div className="flex flex-col gap-2 min-[720px]:flex-row min-[720px]:items-start min-[720px]:justify-between">
                           <div className="min-w-0">
@@ -939,18 +961,17 @@ export function AdminUsers({
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-8 shrink-0 px-2 text-xs"
+                            className="h-8 w-8 shrink-0 bg-white p-0 dark:bg-[#0f1b2a]"
                             disabled={resettingPasswordUserId !== null}
+                            aria-label={`Reset password for ${userLabel}`}
+                            title={`Reset password for ${userLabel}`}
                             onClick={() => resetPassword(user)}
                           >
                             {resettingPasswordUserId === user.id ? (
-                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             ) : (
-                              <KeyRound className="mr-1.5 h-3.5 w-3.5" />
+                              <KeyRound className="h-3.5 w-3.5" />
                             )}
-                            {resettingPasswordUserId === user.id
-                              ? "Resetting..."
-                              : "Reset password"}
                           </Button>
                         </div>
 
@@ -1014,52 +1035,19 @@ export function AdminUsers({
                   })
                 )}
               </div>
-              {filteredUsers.length > 0 ? (
-                <div className="flex flex-col gap-2 rounded-[8px] bg-white px-2 py-1.5 text-xs text-[#64748b] ring-1 ring-[#dbe5f4] dark:bg-[#0f1b2a] dark:text-muted-foreground dark:ring-[#263a55] min-[640px]:flex-row min-[640px]:items-center min-[640px]:justify-between">
-                  <div>
-                    Showing {firstVisibleUser}-{lastVisibleUser} of{" "}
-                    {filteredUsers.length}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 w-7 bg-white p-0 dark:bg-[#0f1b2a]"
-                      aria-label="Previous team member page"
-                      disabled={currentUserPage <= 1}
-                      onClick={() =>
-                        setUserPage((current) => Math.max(1, current - 1))
-                      }
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="min-w-[62px] text-center font-medium text-[#334155] dark:text-foreground">
-                      {currentUserPage} / {userPageCount}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 w-7 bg-white p-0 dark:bg-[#0f1b2a]"
-                      aria-label="Next team member page"
-                      disabled={currentUserPage >= userPageCount}
-                      onClick={() =>
-                        setUserPage((current) =>
-                          Math.min(userPageCount, current + 1),
-                        )
-                      }
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
             </CardContent>
           </Card>
+          ) : null}
 
-          <div className="space-y-2">
-            <Card>
+          <div
+            className={cn(
+              "space-y-2",
+              section === "departments" &&
+                "min-[900px]:flex min-[900px]:h-full min-[900px]:min-h-0 min-[900px]:flex-col min-[900px]:space-y-0",
+            )}
+          >
+            {section === "team" ? (
+            <Card className="ring-0 shadow-[0_12px_34px_rgba(15,23,42,0.055)] dark:ring-0">
               <CardHeader className="p-2.5 pb-1.5">
                 <CardTitle>Create team member</CardTitle>
                 <CardDescription className="text-xs leading-4">
@@ -1115,16 +1103,30 @@ export function AdminUsers({
                 </form>
               </CardContent>
             </Card>
+            ) : null}
 
-            <Card>
+            {section === "departments" ? (
+            <Card
+              className={cn(
+                "ring-0 shadow-[0_12px_34px_rgba(15,23,42,0.055)] dark:ring-0",
+                section === "departments" &&
+                  "min-[900px]:flex min-[900px]:min-h-0 min-[900px]:flex-1 min-[900px]:flex-col",
+              )}
+            >
               <CardHeader className="p-2.5 pb-1.5">
                 <CardTitle>Departments</CardTitle>
                 <CardDescription className="text-xs leading-4">
                   Create departments, then assign employees and reviewer access
-                  above.
+                  from Team members.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2 p-2 pt-0">
+              <CardContent
+                className={cn(
+                  "space-y-2 p-2 pt-0",
+                  section === "departments" &&
+                    "min-[900px]:flex min-[900px]:min-h-0 min-[900px]:flex-1 min-[900px]:flex-col",
+                )}
+              >
                 <form className="flex gap-2" onSubmit={createDepartment}>
                   <Input
                     className="h-8 text-xs"
@@ -1148,34 +1150,94 @@ export function AdminUsers({
                 </form>
                 <div
                   aria-label="Existing departments"
-                  className="max-h-32 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]"
+                  className={cn(
+                    "overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]",
+                    section === "departments"
+                      ? "min-h-0 flex-1"
+                      : "max-h-40",
+                  )}
                 >
                   {departments.length === 0 ? (
                     <span className="text-xs text-[#64748b] dark:text-muted-foreground">
                       No departments created yet.
                     </span>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="grid gap-1.5">
                       {departments.map((department) => (
-                        <Badge
+                        <div
                           key={department.id}
-                          variant="outline"
-                          className="max-w-full overflow-hidden"
+                          className="flex min-w-0 items-center gap-1.5 rounded-[8px] bg-[#f8fafc] px-2 py-1.5 ring-1 ring-[#e2e8f0] dark:bg-white/[0.04] dark:ring-white/[0.08]"
                           title={department.name}
                         >
-                          <span className="min-w-0 truncate">
+                          <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[#334155] dark:text-foreground">
                             {department.name}
                           </span>
-                        </Badge>
+                          <button
+                            type="button"
+                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-[#64748b] transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:pointer-events-none disabled:opacity-50 dark:text-muted-foreground dark:hover:bg-red-400/10 dark:hover:text-red-300"
+                            aria-label={`Remove ${department.name} department`}
+                            title={`Remove ${department.name} department`}
+                            disabled={
+                              deletingDepartmentId !== null || isSavingPage
+                            }
+                            onClick={() => setDepartmentToDelete(department)}
+                          >
+                            {deletingDepartmentId === department.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}
                 </div>
+                {departmentToDelete ? (
+                  <div
+                    className="rounded-[8px] bg-red-50 p-2 ring-1 ring-red-200 dark:bg-red-400/10 dark:ring-red-400/25"
+                    aria-live="polite"
+                  >
+                    <div className="text-xs font-semibold text-red-700 dark:text-red-200">
+                      Remove {departmentToDelete.name}?
+                    </div>
+                    <p className="mt-1 text-xs leading-4 text-red-700/85 dark:text-red-100/80">
+                      This removes it from employee and reviewer assignments.
+                      Users and reports stay intact.
+                    </p>
+                    <div className="mt-2 flex justify-end gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-7 bg-white px-2 text-xs dark:bg-[#0f1b2a]"
+                        disabled={deletingDepartmentId !== null}
+                        onClick={() => setDepartmentToDelete(null)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        className="h-7 px-2 text-xs"
+                        disabled={deletingDepartmentId !== null}
+                        onClick={() => deleteDepartment(departmentToDelete)}
+                      >
+                        {deletingDepartmentId === departmentToDelete.id ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
+            ) : null}
           </div>
         </div>
-      </main>
+      </AdminSectionFrame>
       <TemporaryCredentialsPopup
         credentials={temporaryCredentials}
         onCopy={copyTemporaryPassword}

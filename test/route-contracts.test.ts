@@ -28,6 +28,7 @@ vi.mock("@/lib/access", () => ({
   assertCanAccessReport: vi.fn(),
   assertCanReviewReport: vi.fn(),
   assertCanMutateReport: vi.fn(),
+  assertCanAdminManageReport: vi.fn(),
 }));
 
 vi.mock("@/lib/services/reports", () => ({
@@ -77,7 +78,12 @@ vi.mock("@/lib/services/reports", () => ({
   getReportById: vi.fn(async () => ({ id: "report-1", userId: "user-1" })),
   updateReport: vi.fn(async () => ({ id: "report-1" })),
   submitReport: vi.fn(async () => ({ id: "report-1", status: "SUBMITTED" })),
+  reopenSubmittedReport: vi.fn(async () => ({
+    id: "report-1",
+    status: "DRAFT",
+  })),
   deleteDraftReport: vi.fn(async () => ({ ok: true })),
+  deleteSubmittedReport: vi.fn(async () => ({ ok: true })),
   addReportComment: vi.fn(async () => ({ id: "report-1" })),
   setReportReadState: vi.fn(async () => ({
     id: "report-1",
@@ -136,6 +142,16 @@ vi.mock("@/lib/services/admin", () => ({
     status: "ACTIVE",
     mustChangePassword: false,
   })),
+}));
+
+vi.mock("@/lib/services/departments", () => ({
+  listDepartments: vi.fn(async () => []),
+  createDepartment: vi.fn(async (name: string) => ({
+    id: "department-1",
+    name,
+    slug: name.toLowerCase(),
+  })),
+  deleteDepartment: vi.fn(async () => ({ ok: true })),
 }));
 
 vi.mock("@/lib/services/email-digest", () => ({
@@ -262,6 +278,7 @@ vi.mock("@/lib/services/bug-reports", () => ({
     },
     attachments: [],
   })),
+  deleteBugReport: vi.fn(async () => ({ ok: true })),
   listVisibleBugReports: vi.fn(async () => []),
   canReviewBugReports: vi.fn(() => false),
 }));
@@ -474,6 +491,29 @@ describe("route contracts", () => {
     expect(response.status).toBe(422);
   });
 
+  it("allows admins to delete departments", async () => {
+    const access = await import("@/lib/access");
+    const departments = await import("@/lib/services/departments");
+    const { DELETE } = await import("@/app/api/admin/departments/[id]/route");
+
+    vi.mocked(access.requireRole).mockClear();
+    vi.mocked(departments.deleteDepartment).mockClear();
+
+    const response = await DELETE(
+      new Request("http://localhost/api/admin/departments/dept-engineering", {
+        method: "DELETE",
+      }),
+      { params: { id: "dept-engineering" } },
+    );
+
+    expect(response.status).toBe(200);
+    expect(access.requireRole).toHaveBeenCalledWith(["ADMIN"]);
+    expect(departments.deleteDepartment).toHaveBeenCalledWith(
+      "dept-engineering",
+    );
+    await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+
   it("updates account profile settings", async () => {
     const { PATCH } = await import("@/app/api/account/profile/route");
     const response = await PATCH(
@@ -616,6 +656,53 @@ describe("route contracts", () => {
     expect(bugReports.updateBugReportStatus).not.toHaveBeenCalled();
   });
 
+  it("allows admins to delete bug reports", async () => {
+    const access = await import("@/lib/access");
+    const bugReports = await import("@/lib/services/bug-reports");
+    const { DELETE } = await import("@/app/api/bug-reports/[id]/route");
+
+    vi.mocked(access.requireSession).mockResolvedValueOnce({
+      user: {
+        id: "admin-1",
+        role: "ADMIN",
+        roles: ["ADMIN"],
+        status: "ACTIVE",
+        mustChangePassword: false,
+      },
+    } as Awaited<ReturnType<typeof access.requireSession>>);
+    vi.mocked(bugReports.canReviewBugReports).mockReturnValueOnce(true);
+    vi.mocked(bugReports.deleteBugReport).mockClear();
+
+    const response = await DELETE(
+      new Request("http://localhost/api/bug-reports/bug-report-1", {
+        method: "DELETE",
+      }),
+      { params: { id: "bug-report-1" } },
+    );
+
+    expect(response.status).toBe(200);
+    expect(bugReports.deleteBugReport).toHaveBeenCalledWith("bug-report-1");
+    await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+
+  it("blocks employees from deleting bug reports", async () => {
+    const bugReports = await import("@/lib/services/bug-reports");
+    const { DELETE } = await import("@/app/api/bug-reports/[id]/route");
+
+    vi.mocked(bugReports.canReviewBugReports).mockReturnValueOnce(false);
+    vi.mocked(bugReports.deleteBugReport).mockClear();
+
+    const response = await DELETE(
+      new Request("http://localhost/api/bug-reports/bug-report-1", {
+        method: "DELETE",
+      }),
+      { params: { id: "bug-report-1" } },
+    );
+
+    expect(response.status).toBe(403);
+    expect(bugReports.deleteBugReport).not.toHaveBeenCalled();
+  });
+
   it("changes a temporary credentials password", async () => {
     const { PATCH } = await import("@/app/api/account/password/route");
     const response = await PATCH(
@@ -719,6 +806,62 @@ describe("route contracts", () => {
       expect.objectContaining({ id: "report-1", userId: "user-1" }),
     );
     expect(reports.deleteDraftReport).toHaveBeenCalledWith("report-1");
+  });
+
+  it("requires admin access when reopening a submitted report", async () => {
+    const access = await import("@/lib/access");
+    const reports = await import("@/lib/services/reports");
+    const { POST } = await import("@/app/api/reports/[id]/reopen/route");
+    vi.mocked(access.assertCanAdminManageReport).mockClear();
+    vi.mocked(reports.reopenSubmittedReport).mockClear();
+
+    const response = await POST(
+      new Request("http://localhost/api/reports/report-1/reopen", {
+        method: "POST",
+      }),
+      {
+        params: { id: "report-1" },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(access.assertCanAdminManageReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user: expect.objectContaining({ id: "user-1" }),
+      }),
+    );
+    expect(reports.reopenSubmittedReport).toHaveBeenCalledWith(
+      "report-1",
+      "user-1",
+    );
+  });
+
+  it("requires admin access when deleting a submitted report", async () => {
+    const access = await import("@/lib/access");
+    const reports = await import("@/lib/services/reports");
+    const { DELETE } = await import("@/app/api/reports/[id]/route");
+    vi.mocked(access.assertCanAdminManageReport).mockClear();
+    vi.mocked(access.assertCanMutateReport).mockClear();
+    vi.mocked(reports.deleteSubmittedReport).mockClear();
+    vi.mocked(reports.getReportById).mockResolvedValueOnce({
+      id: "report-1",
+      userId: "user-1",
+      status: "SUBMITTED",
+    } as Awaited<ReturnType<typeof reports.getReportById>>);
+
+    const response = await DELETE(
+      new Request("http://localhost/api/reports/report-1", {
+        method: "DELETE",
+      }),
+      {
+        params: { id: "report-1" },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(access.assertCanAdminManageReport).toHaveBeenCalled();
+    expect(access.assertCanMutateReport).not.toHaveBeenCalled();
+    expect(reports.deleteSubmittedReport).toHaveBeenCalledWith("report-1");
   });
 
   it("emails an employee when a reviewer adds a report comment", async () => {

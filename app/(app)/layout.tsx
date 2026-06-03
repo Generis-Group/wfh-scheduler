@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
 import type { ReactNode } from "react";
 
-import { AppShellLoadingFallback } from "@/components/reports/app-shell-loading-fallback";
 import { ReferenceAppShell } from "@/components/reports/reference-shell";
 import { auth } from "@/lib/auth";
 import { withServerTiming } from "@/lib/performance";
@@ -12,11 +10,7 @@ import { hasUserRole, roleListLabel } from "@/lib/roles";
 export const dynamic = "force-dynamic";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  return (
-    <Suspense fallback={<AppShellLoadingFallback />}>
-      <AuthenticatedAppShell>{children}</AuthenticatedAppShell>
-    </Suspense>
-  );
+  return <AuthenticatedAppShell>{children}</AuthenticatedAppShell>;
 }
 
 async function AuthenticatedAppShell({ children }: { children: ReactNode }) {

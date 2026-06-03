@@ -208,8 +208,6 @@ function statusTone(report: HistoryReport): "green" | "orange" | "neutral" {
   return "neutral";
 }
 
-const PAGE_SIZE = 8;
-
 export function ReportHistory({
   reports,
   initialOpenedReportId = null,
@@ -234,7 +232,6 @@ export function ReportHistory({
   const [message, setMessage] = useState<string | null>(null);
   const [pendingReportAction, setPendingReportAction] =
     useState<PendingReportAction | null>(null);
-  const [page, setPage] = useState(1);
   const [pendingPrintReportId, setPendingPrintReportId] = useState<
     string | null
   >(null);
@@ -276,12 +273,6 @@ export function ReportHistory({
 
   const openedReport =
     items.find((report) => report.id === openedReportId) ?? null;
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const paginatedReports = filtered.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  );
   const dateRangeLabel = useMemo(() => {
     if (fromDate || toDateValue) {
       return `${fromDate ? formatReportDate(fromDate) : "Start"} - ${toDateValue ? formatReportDate(toDateValue) : "Today"}`;
@@ -298,18 +289,8 @@ export function ReportHistory({
   }, [fromDate, items, toDateValue]);
 
   useEffect(() => {
-    setPage(1);
-  }, [fromDate, query, statusFilter, toDateValue]);
-
-  useEffect(() => {
     setOpenedReportId(initialOpenedReportId ?? "");
   }, [initialOpenedReportId]);
-
-  useEffect(() => {
-    if (page > pageCount) {
-      setPage(pageCount);
-    }
-  }, [page, pageCount]);
 
   useEffect(() => {
     if (!pendingPrintReportId || openedReport?.id !== pendingPrintReportId) {
@@ -529,8 +510,8 @@ export function ReportHistory({
           onDownload={downloadPdf}
         />
       ) : (
-        <main className="reference-page">
-          <div className="mb-3">
+        <main className="reference-page min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
+          <div className="mb-3 shrink-0">
             <h1 className="text-[24px] font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">
               Reports
             </h1>
@@ -539,7 +520,7 @@ export function ReportHistory({
             </p>
           </div>
 
-          <section className="mb-3 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
+          <section className="mb-3 shrink-0 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
             <div className="grid gap-3 min-[980px]:grid-cols-[minmax(260px,1fr)_190px_320px_150px]">
               <label className="relative min-w-0">
                 <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#667085]" />
@@ -635,8 +616,8 @@ export function ReportHistory({
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
-            <div className="grid grid-cols-[170px_190px_minmax(0,1fr)_190px] border-b border-[#e8ecf3] px-4 py-3 text-sm font-semibold text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">
+          <section className="overflow-hidden rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43] min-[1024px]:flex min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:flex-col">
+            <div className="hidden border-b border-[#e8ecf3] px-4 py-3 text-sm font-semibold text-[#667085] dark:border-[#263a55] dark:text-muted-foreground min-[860px]:grid min-[860px]:grid-cols-[140px_130px_minmax(0,1fr)_150px] min-[1180px]:grid-cols-[170px_190px_minmax(0,1fr)_190px]">
               <div className="flex items-center gap-2">
                 Date
                 <ArrowUpDown className="h-3.5 w-3.5" />
@@ -646,6 +627,7 @@ export function ReportHistory({
               <div className="text-right">Actions</div>
             </div>
 
+            <div className="min-[1024px]:min-h-0 min-[1024px]:flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable]">
             {filtered.length === 0 ? (
               <div className="p-6">
                 <EmptyReferenceState>
@@ -654,12 +636,15 @@ export function ReportHistory({
                 </EmptyReferenceState>
               </div>
             ) : (
-              paginatedReports.map((report) => (
+              filtered.map((report) => (
                 <article
                   key={report.id}
-                  className="grid min-h-[86px] grid-cols-[170px_190px_minmax(0,1fr)_190px] items-center border-b border-[#e8ecf3] px-4 py-3 last:border-b-0 dark:border-[#263a55]"
+                  className="space-y-3 border-b border-[#e8ecf3] px-4 py-3 last:border-b-0 dark:border-[#263a55] min-[860px]:grid min-[860px]:min-h-[86px] min-[860px]:grid-cols-[140px_130px_minmax(0,1fr)_150px] min-[860px]:items-center min-[860px]:space-y-0 min-[1180px]:grid-cols-[170px_190px_minmax(0,1fr)_190px]"
                 >
                   <div>
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
+                      Date
+                    </div>
                     <div className="text-sm font-medium text-[#111827] dark:text-foreground">
                       {formatReportDate(report.reportDate)}
                     </div>
@@ -668,11 +653,17 @@ export function ReportHistory({
                     </div>
                   </div>
                   <div>
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
+                      Status
+                    </div>
                     <StatusPill tone={statusTone(report)}>
                       {statusLabel(report)}
                     </StatusPill>
                   </div>
                   <div className="min-w-0">
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
+                      Summary
+                    </div>
                     <div className="truncate text-base text-[#111827] dark:text-foreground">
                       {summaryPlainText(report.summary)}
                     </div>
@@ -681,7 +672,7 @@ export function ReportHistory({
                       {report.activities.length === 1 ? "y" : "ies"} included
                     </div>
                   </div>
-                  <div className="flex items-center justify-end gap-3">
+                  <div className="flex items-center justify-start gap-3 min-[860px]:justify-end">
                     <Button
                       variant="outline"
                       className="h-9 rounded-[7px] bg-white px-4 text-sm font-medium ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
@@ -701,38 +692,8 @@ export function ReportHistory({
                 </article>
               ))
             )}
-
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e8ecf3] px-4 py-3 text-sm text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">
-              <span>
-                Showing{" "}
-                {filtered.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}-
-                {Math.min(currentPage * PAGE_SIZE, filtered.length)} of{" "}
-                {filtered.length} reports
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage === 1}
-                  onClick={() => setPage((value) => Math.max(1, value - 1))}
-                >
-                  Previous
-                </Button>
-                <span className="flex h-9 min-w-9 items-center justify-center rounded-[8px] px-3 text-sm font-semibold text-[#2563eb] ring-1 ring-[#2563eb]">
-                  {currentPage}/{pageCount}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage === pageCount}
-                  onClick={() =>
-                    setPage((value) => Math.min(pageCount, value + 1))
-                  }
-                >
-                  Next
-                </Button>
-              </div>
             </div>
+
           </section>
 
           {menuReport && rowMenu ? (

@@ -61,8 +61,8 @@ function DailySkeleton() {
           <LoadingBar className="h-10 w-full max-w-[240px] rounded-[7px]" />
         </div>
       </LoadingCard>
-      <div className="grid gap-3 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
-        <LoadingCard className="min-h-[560px]">
+      <div className="daily-report-layout grid gap-3 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
+        <LoadingCard className="daily-report-panel min-h-[520px]">
           <div className="flex items-center justify-between gap-4">
             <LoadingBar className="h-6 w-32 rounded-[4px]" />
             <LoadingBar className="h-9 w-28 rounded-[7px]" />
@@ -76,9 +76,9 @@ function DailySkeleton() {
             <LoadingBar className="h-[68px] rounded-[8px]" />
           </div>
         </LoadingCard>
-        <LoadingCard className="min-h-[560px]">
+        <LoadingCard className="daily-report-panel daily-summary-panel min-h-[520px]">
           <LoadingBar className="h-6 w-32 rounded-[4px]" />
-          <LoadingBar className="mt-4 h-[480px] rounded-[7px]" />
+          <LoadingBar className="mt-4 h-[clamp(22rem,52dvh,30rem)] rounded-[7px]" />
         </LoadingCard>
       </div>
     </>
@@ -237,7 +237,7 @@ export function loadingKindFromHref(
     return "review";
   }
 
-  if (path.endsWith("/admin") || path.endsWith("/employees")) {
+  if (path.startsWith("/admin") || path.endsWith("/employees")) {
     return "admin";
   }
 
@@ -266,7 +266,11 @@ export function PageLoadingSkeleton({
   kind?: PageLoadingKind;
 }) {
   return (
-    <main className="reference-page" aria-busy="true" aria-label="Loading page">
+    <main
+      className="reference-page min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:overflow-hidden"
+      aria-busy="true"
+      aria-label="Loading page"
+    >
       {kind === "daily" ? <DailySkeleton /> : null}
       {kind === "reports" ? <ReportsSkeleton /> : null}
       {kind === "review" ? <ReviewSkeleton /> : null}

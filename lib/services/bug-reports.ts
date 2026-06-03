@@ -149,3 +149,20 @@ export async function updateBugReportStatus(
     include: bugReportDetailInclude,
   });
 }
+
+export async function deleteBugReport(reportId: string) {
+  const existingReport = await prisma.bugReport.findUnique({
+    where: { id: reportId },
+    select: { id: true },
+  });
+
+  if (!existingReport) {
+    throw new HttpError(404, "Bug report not found.");
+  }
+
+  await prisma.bugReport.delete({
+    where: { id: reportId },
+  });
+
+  return { ok: true };
+}

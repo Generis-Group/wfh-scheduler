@@ -147,6 +147,7 @@ vi.mock("@/components/reports/lazy-summary-editor", async () => {
 
 import { DailyReportApp } from "@/components/reports/daily-report-app";
 import { todayDateString } from "@/lib/dates";
+import { emptyReportSubmitMessage } from "@/lib/report-submit-readiness";
 
 type DailyReportProps = React.ComponentProps<typeof DailyReportApp>;
 
@@ -754,6 +755,34 @@ describe("DailyReportApp auto-draft", () => {
     });
   });
 
+  it("does not start a work item reference drag from row controls", () => {
+    const dataTransfer = {
+      effectAllowed: "",
+      setData: vi.fn(),
+      setDragImage: vi.fn(),
+    };
+
+    renderDailyReportApp({
+      ...savedDraft,
+      activities: [manualGoogleTask],
+    });
+
+    fireEvent.dragStart(
+      screen.getByRole("button", {
+        name: "More actions for Draft rollout plan",
+      }),
+      {
+        clientX: 80,
+        clientY: 96,
+        dataTransfer,
+      },
+    );
+
+    expect(dataTransfer.setData).not.toHaveBeenCalled();
+    expect(dataTransfer.setDragImage).not.toHaveBeenCalled();
+    expect(document.querySelector(".activity-drag-preview")).toBeNull();
+  });
+
   it("prevents source links from showing the browser native drag preview", () => {
     renderDailyReportApp({
       ...savedDraft,
@@ -788,18 +817,32 @@ describe("DailyReportApp auto-draft", () => {
       activities: [manualGoogleTask],
     });
 
+    const searchField = screen.getByRole("textbox", {
+      name: "Search work items",
+    }) as HTMLInputElement;
+    fireEvent.change(searchField, {
+      target: { value: "Draft rollout plan" },
+    });
     fireEvent.click(
       screen.getByRole("button", {
         name: "More actions for Draft rollout plan",
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Rename" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Task title" }), {
+    expect(screen.queryByRole("menu")).toBeNull();
+    window.dispatchEvent(new Event("scroll"));
+    const titleInput = screen.getByRole("textbox", {
+      name: "Task title",
+    }) as HTMLInputElement;
+    expect(titleInput.value).toBe("Draft rollout plan");
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    fireEvent.change(titleInput, {
       target: { value: "Renamed rollout plan" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.keyDown(titleInput, { key: "Enter" });
 
     expect(screen.getByText("Renamed rollout plan")).toBeTruthy();
+    expect(searchField.value).toBe("Renamed rollout plan");
 
     await advanceAutoSave();
 
@@ -920,16 +963,34 @@ describe("DailyReportApp auto-draft", () => {
     expect(requestBody.summary).toBe("");
   });
 
+  it("blocks submitting an empty draft", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit update" }));
+
+    expect(await screen.findByText(emptyReportSubmitMessage)).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("creates a draft before submitting a new report", async () => {
+    const submittedSummary = "Reviewed launch tasks.";
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
 
       if (url === "/api/reports") {
-        return Response.json({ report: savedDraft }, { status: 201 });
+        return Response.json(
+          { report: { ...savedDraft, summary: submittedSummary } },
+          { status: 201 },
+        );
       }
 
       if (url === "/api/reports/report-1/submit") {
-        return Response.json({ report: submittedReport });
+        return Response.json({
+          report: { ...submittedReport, summary: submittedSummary },
+        });
       }
 
       return Response.json({ error: "Unexpected request." }, { status: 500 });
@@ -938,12 +999,18 @@ describe("DailyReportApp auto-draft", () => {
 
     renderDailyReportApp();
 
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
+      target: { value: submittedSummary },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Submit update" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/reports",
-        expect.objectContaining({ method: "POST" }),
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining(submittedSummary),
+        }),
       );
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/reports/report-1/submit",
@@ -954,6 +1021,52 @@ describe("DailyReportApp auto-draft", () => {
     expect(
       screen.getByRole("button", { name: "Resubmit update" }),
     ).toBeTruthy();
+  });
+
+  it("allows submitting a PTO report without work items or summary", async () => {
+    const ptoDraft = { ...savedDraft, workLocation: "PTO" as const };
+    const ptoSubmittedReport = {
+      ...submittedReport,
+      workLocation: "PTO" as const,
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/reports") {
+        return Response.json({ report: ptoDraft }, { status: 201 });
+      }
+
+      if (url === "/api/reports/report-1/submit") {
+        return Response.json({ report: ptoSubmittedReport });
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+
+    fireEvent.click(
+      screen.getByRole("combobox", {
+        name: "Work location",
+      }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: "PTO" }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit update" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining('"workLocation":"PTO"'),
+        }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports/report-1/submit",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
   });
 
   it("autosaves submitted report edits through the update route", async () => {
@@ -993,12 +1106,16 @@ describe("DailyReportApp auto-draft", () => {
   });
 
   it("resubmits an already published report", async () => {
+    const publishedReport = {
+      ...submittedReport,
+      summary: "Published daily note.",
+    };
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, _init?: RequestInit) => {
         if (String(input) === "/api/reports/report-1/submit") {
           return Response.json({
             report: {
-              ...submittedReport,
+              ...publishedReport,
               submittedAt: "2026-05-20T14:30:00.000Z",
             },
           });
@@ -1009,7 +1126,7 @@ describe("DailyReportApp auto-draft", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    renderDailyReportApp(submittedReport);
+    renderDailyReportApp(publishedReport);
 
     fireEvent.click(screen.getByRole("button", { name: "Resubmit update" }));
 

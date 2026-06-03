@@ -6,10 +6,6 @@ import {
   ArrowLeft,
   CalendarRange,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Clock3,
   Download,
   Edit3,
@@ -23,7 +19,9 @@ import {
   Mail,
   MapPin,
   MoreHorizontal,
+  RotateCcw,
   ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import type { FormEvent, MouseEvent, ReactNode } from "react";
 
@@ -48,7 +46,7 @@ import {
   ReportSurface,
 } from "@/components/reports/report-ui";
 import { SummaryRenderer } from "@/components/reports/summary-renderer";
-import { Button, type ButtonProps } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FixedToast } from "@/components/ui/fixed-toast";
 import { Select } from "@/components/ui/select";
@@ -765,60 +763,30 @@ function SortableHeader({
   );
 }
 
-function ReportRowActionButton({
-  icon,
-  children,
-  className,
-  onClick,
-  onKeyDown,
-  ...props
-}: ButtonProps & { icon: ReactNode }) {
-  return (
-    <Button
-      {...props}
-      variant="outline"
-      data-testid="employee-report-row-action"
-      className={cn(
-        "h-8 w-full min-w-0 gap-1.5 rounded-[7px] px-2.5 text-xs text-[#2563eb]",
-        className,
-      )}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick?.(event);
-      }}
-      onKeyDown={(event) => {
-        event.stopPropagation();
-        onKeyDown?.(event);
-      }}
-    >
-      <span
-        className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center [&_svg]:h-3.5 [&_svg]:w-3.5"
-        aria-hidden="true"
-      >
-        {icon}
-      </span>
-      <span className="min-w-0 truncate">{children}</span>
-    </Button>
-  );
-}
-
 function ReviewerRowMenuButton({
   icon,
   children,
   onClick,
   disabled = false,
+  tone = "default",
 }: {
   icon: ReactNode;
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  tone?: "default" | "danger";
 }) {
   return (
     <button
       type="button"
       role="menuitem"
       disabled={disabled}
-      className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#334155] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:text-foreground dark:hover:bg-white/5"
+      className={cn(
+        "flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60",
+        tone === "danger"
+          ? "text-[#dc2626] hover:bg-[#fef2f2] dark:text-red-300 dark:hover:bg-red-400/10"
+          : "text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5",
+      )}
       onClick={onClick}
     >
       <span
@@ -837,13 +805,23 @@ export function ReviewerDashboard({
   metrics: _metrics,
   date,
   reviewerId,
+  viewerRoles,
   initialOpenedReportId,
+  basePath = "/review",
+  title = "Review Dashboard",
+  description = "Track report submissions across the team.",
+  embedded = false,
 }: {
   rows: Row[];
   metrics: Metrics;
   date: string;
   reviewerId?: string | null;
+  viewerRoles?: string[] | null;
   initialOpenedReportId?: string | null;
+  basePath?: string;
+  title?: string;
+  description?: string;
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const [items, setItems] = useState(rows);
@@ -864,9 +842,11 @@ export function ReviewerDashboard({
     defaultEmployeeSortState,
   );
   const [hasLoadedTableControls, setHasLoadedTableControls] = useState(false);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
+  const [adminReportAction, setAdminReportAction] = useState<{
+    reportId: string;
+    action: "reopen" | "delete";
+  } | null>(null);
   const [rowActionMenu, setRowActionMenu] = useState<{
     userId: string;
     top: number;
@@ -885,6 +865,12 @@ export function ReviewerDashboard({
   const maxReportDate = todayDateString();
   const currentReviewDate = dateInputValue(date);
   const dateNavigationPending = pendingDateControl !== null;
+  const viewerRoleSet = useMemo(
+    () => new Set(viewerRoles ?? (reviewerId ? ["REVIEWER"] : [])),
+    [reviewerId, viewerRoles],
+  );
+  const canUseReviewerActions = viewerRoleSet.has("REVIEWER");
+  const canAdminManageReports = viewerRoleSet.has("ADMIN");
 
   const departmentOptions = useMemo(() => {
     return [
@@ -923,17 +909,14 @@ export function ReviewerDashboard({
       );
   }, [date, departmentFilter, items, search, sortState, statusFilter]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredItems.length / pageSize));
-  const currentPage = Math.min(page, pageCount);
-  const pageItems = filteredItems.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
-  const visibleReportIds = pageItems.flatMap((row) =>
-    canReviewReport(row) && row.report ? [row.report.id] : [],
-  );
+  const visibleReportIds = canUseReviewerActions
+    ? filteredItems.flatMap((row) =>
+        canReviewReport(row) && row.report ? [row.report.id] : [],
+      )
+    : [];
   const selectedRows = items.filter(
     (row) =>
+      canUseReviewerActions &&
       canReviewReport(row) &&
       row.report &&
       selectedReportIds.includes(row.report.id),
@@ -951,20 +934,6 @@ export function ReviewerDashboard({
   const menuRow = rowActionMenu
     ? (items.find((row) => row.user.id === rowActionMenu.userId) ?? null)
     : null;
-  const total = filteredItems.length;
-  const submitted = filteredItems.filter(
-    (row) => row.report?.status === "SUBMITTED",
-  ).length;
-  const unread = filteredItems.filter(
-    (row) =>
-      canReviewReport(row) && isUnreadForReviewer(row.report, reviewerId),
-  ).length;
-  const lateEdits = filteredItems.filter(
-    (row) =>
-      canReviewReport(row) &&
-      (editedAfterDate(row.report, date) || isLate(row.report, date)),
-  ).length;
-  const coverage = total ? Math.round((submitted / total) * 100) : 0;
   const hasActiveTableControls =
     search.trim().length > 0 ||
     departmentFilter !== "ALL" ||
@@ -979,10 +948,10 @@ export function ReviewerDashboard({
     setWeeklyReportState(null);
     setWeeklyReportArchiveState(null);
     setSelectedReportIds([]);
+    setAdminReportAction(null);
     setRowActionMenu(null);
     setBlockedOpenUserId(null);
     setRemindingUserId(null);
-    setPage(1);
     pendingDateRef.current = null;
     setPendingDateControl(null);
   }, [date, initialOpenedReportId, rows]);
@@ -1110,10 +1079,6 @@ export function ReviewerDashboard({
     statusFilter,
   ]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [departmentFilter, search, sortState, statusFilter]);
-
   function goToDate(nextDate: string, control: ReportDateControl = "picker") {
     if (!nextDate) {
       return;
@@ -1131,7 +1096,7 @@ export function ReviewerDashboard({
 
     pendingDateRef.current = targetDate;
     setPendingDateControl(control);
-    router.push(`/review?date=${targetDate}`);
+    router.push(`${basePath}?date=${targetDate}`);
   }
 
   function downloadCsv() {
@@ -1213,7 +1178,6 @@ export function ReviewerDashboard({
     setDepartmentFilter("ALL");
     setStatusFilter("ALL");
     setSortState(defaultEmployeeSortState);
-    setPage(1);
   }
 
   function updateOpenedReportParam(
@@ -1248,7 +1212,6 @@ export function ReviewerDashboard({
             ? "desc"
             : "asc",
     }));
-    setPage(1);
   }
 
   function openReport(row: Row) {
@@ -1256,7 +1219,10 @@ export function ReviewerDashboard({
       return;
     }
 
-    void setReadState(row, true);
+    if (canUseReviewerActions) {
+      void setReadState(row, true);
+    }
+
     setWeeklyReportState(null);
     setWeeklyReportArchiveState(null);
     setRowActionMenu(null);
@@ -1408,6 +1374,11 @@ export function ReviewerDashboard({
 
   function toggleRowActionMenu(row: Row, event: MouseEvent<HTMLButtonElement>) {
     event.stopPropagation();
+    event.currentTarget.scrollIntoView?.({
+      block: "nearest",
+      inline: "nearest",
+      behavior: "smooth",
+    });
 
     if (rowActionMenu?.userId === row.user.id) {
       setRowActionMenu(null);
@@ -1416,7 +1387,18 @@ export function ReviewerDashboard({
 
     const rect = event.currentTarget.getBoundingClientRect();
     const menuWidth = 220;
-    const menuHeight = row.report && canReviewReport(row) ? 154 : 110;
+    const hasOpenReportAction = canReviewReport(row);
+    const hasReviewerReportAction =
+      canUseReviewerActions && row.report && canReviewReport(row);
+    const hasReminderAction = canUseReviewerActions && !row.report;
+    const hasAdminReportActions =
+      canAdminManageReports && row.report?.status === "SUBMITTED";
+    const menuHeight =
+      108 +
+      (hasOpenReportAction ? 44 : 0) +
+      (hasReviewerReportAction ? 44 : 0) +
+      (hasReminderAction ? 44 : 0) +
+      (hasAdminReportActions ? 116 : 0);
     const viewportPadding = 12;
     const left = Math.min(
       Math.max(viewportPadding, rect.right - menuWidth),
@@ -1534,7 +1516,7 @@ export function ReviewerDashboard({
   }
 
   async function setReadState(row: Row, read: boolean) {
-    if (!row.report) {
+    if (!row.report || !canUseReviewerActions) {
       return;
     }
 
@@ -1570,6 +1552,104 @@ export function ReviewerDashboard({
       ),
     );
     markServerDataStale();
+  }
+
+  async function reopenSubmittedReport(row: Row) {
+    if (!row.report || adminReportAction) {
+      return;
+    }
+
+    const employee = employeeLabel(row);
+
+    if (
+      !window.confirm(
+        `Reopen ${employee}'s submitted report? It will move back to draft.`,
+      )
+    ) {
+      return;
+    }
+
+    const reportId = row.report.id;
+    setNotice(null);
+    setRowActionMenu(null);
+    setAdminReportAction({ reportId, action: "reopen" });
+
+    try {
+      const response = await fetch(`/api/reports/${reportId}/reopen`, {
+        method: "POST",
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setNotice(result.error ?? "Unable to reopen report.");
+        return;
+      }
+
+      setItems((current) =>
+        current.map((item) =>
+          item.report?.id === reportId
+            ? { ...item, report: result.report as DashboardReport }
+            : item,
+        ),
+      );
+      setSelectedReportIds((current) =>
+        current.filter((id) => id !== reportId),
+      );
+      markServerDataStale();
+      setNotice(`${employee}'s report was reopened to draft.`);
+    } catch {
+      setNotice("Unable to reopen report.");
+    } finally {
+      setAdminReportAction(null);
+    }
+  }
+
+  async function deleteSubmittedReport(row: Row) {
+    if (!row.report || adminReportAction) {
+      return;
+    }
+
+    const employee = employeeLabel(row);
+
+    if (
+      !window.confirm(
+        `Delete ${employee}'s submitted report? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    const reportId = row.report.id;
+    setNotice(null);
+    setRowActionMenu(null);
+    setAdminReportAction({ reportId, action: "delete" });
+
+    try {
+      const response = await fetch(`/api/reports/${reportId}`, {
+        method: "DELETE",
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setNotice(result.error ?? "Unable to delete report.");
+        return;
+      }
+
+      setItems((current) =>
+        current.map((item) =>
+          item.report?.id === reportId ? { ...item, report: null } : item,
+        ),
+      );
+      setSelectedReportIds((current) =>
+        current.filter((id) => id !== reportId),
+      );
+      markServerDataStale();
+      setNotice(`${employee}'s submitted report was deleted.`);
+    } catch {
+      setNotice("Unable to delete report.");
+    } finally {
+      setAdminReportAction(null);
+    }
   }
 
   async function addComment(row: Row, body: string) {
@@ -1634,6 +1714,7 @@ export function ReviewerDashboard({
         <ReportReviewPage
           row={activeRow}
           date={date}
+          canAddReviewNote={canUseReviewerActions}
           onBack={closeReport}
           onAddComment={(body) => addComment(activeRow, body)}
           onUnsavedCommentChange={(dirty) => {
@@ -1647,13 +1728,19 @@ export function ReviewerDashboard({
           }}
         />
       ) : (
-        <main className="reference-page">
-          <ReportPageHeader
-            title="Review Dashboard"
-            description="Track report coverage and submissions across the team."
-          />
+        <main
+          className={cn(
+            embedded
+              ? "min-w-0"
+              : "reference-page",
+            "min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col",
+          )}
+        >
+          {embedded ? null : (
+            <ReportPageHeader title={title} description={description} />
+          )}
 
-          <ReportSurface className="mb-3">
+          <ReportSurface className="mb-3 shrink-0">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <ReportDateSwitcher
                 value={currentReviewDate}
@@ -1669,6 +1756,7 @@ export function ReviewerDashboard({
                   className="h-10 min-w-[118px] shrink-0 justify-center rounded-[8px] bg-white px-3 text-xs shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]"
                   onClick={sendEmailDigest}
                   disabled={isSendingDigest}
+                  hidden={!canUseReviewerActions}
                 >
                   <Mail className="mr-1.5 h-3.5 w-3.5" />
                   {isSendingDigest ? "Sending..." : "Email digest"}
@@ -1684,40 +1772,12 @@ export function ReviewerDashboard({
             </div>
           </ReportSurface>
 
-          <ReportSurface className="mb-3">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="min-w-[240px] flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <h2 className="text-sm font-semibold text-[#101828] dark:text-foreground">
-                    Coverage
-                  </h2>
-                  <span className="text-xs font-medium text-[#667085] dark:text-muted-foreground">
-                    {submitted}/{total} submitted
-                  </span>
-                </div>
-                <div className="mt-2 flex items-center gap-3">
-                  <span className="w-14 text-[26px] font-semibold leading-none text-[#2563eb]">
-                    {coverage}%
-                  </span>
-                  <div className="h-2 flex-1 rounded-full bg-[#e9edf5] dark:bg-[#263a55]">
-                    <div
-                      className="h-2 rounded-full bg-[#2563eb]"
-                      style={{ width: `${coverage}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <CompactMetric label="Unread" value={unread} tone="blue" />
-                <CompactMetric label="Late" value={lateEdits} tone="purple" />
-              </div>
-            </div>
-          </ReportSurface>
-
-          <ReportSurface padded={false}>
-            <div className="grid gap-3 p-3 min-[1180px]:grid-cols-[minmax(360px,0.9fr)_minmax(0,1fr)] min-[1180px]:items-center">
-              <div className="flex min-w-0 items-center gap-3">
+          <ReportSurface
+            padded={false}
+            className="min-[1024px]:flex min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:flex-col"
+          >
+            <div className="grid shrink-0 gap-3 p-3 min-[1180px]:grid-cols-[auto_minmax(0,1fr)] min-[1180px]:items-start">
+              <div className="flex min-w-0 items-center gap-3 pt-1">
                 <h2 className="text-lg font-semibold text-[#101828] dark:text-foreground">
                   Employee Reports
                 </h2>
@@ -1740,14 +1800,13 @@ export function ReviewerDashboard({
                 </div>
               </div>
 
-              <div className="flex w-full flex-wrap items-center gap-2 min-[760px]:w-auto min-[1180px]:justify-end">
+              <div className="grid w-full gap-2 min-[760px]:grid-cols-[minmax(220px,1fr)_minmax(190px,260px)] min-[1040px]:grid-cols-[minmax(220px,1fr)_minmax(190px,260px)_minmax(232px,280px)_auto] min-[1180px]:justify-self-end">
                 <ReportSearchField
                   value={search}
                   onValueChange={(value) => {
                     setSearch(value);
-                    setPage(1);
                   }}
-                  className="flex-1 min-[560px]:w-[260px] min-[560px]:flex-none"
+                  className="w-full"
                   placeholder="Search employees"
                   aria-label="Search employees"
                 />
@@ -1755,7 +1814,7 @@ export function ReviewerDashboard({
                 <Select
                   value={departmentFilter}
                   onChange={(event) => setDepartmentFilter(event.target.value)}
-                  className="h-10 w-full min-[560px]:w-[240px]"
+                  className="h-10 w-full"
                   aria-label="Filter by department"
                 >
                   <option value="ALL">All departments</option>
@@ -1767,7 +1826,7 @@ export function ReviewerDashboard({
                 </Select>
 
                 <div
-                  className="grid h-9 w-full grid-cols-3 rounded-[7px] bg-white p-0.5 ring-1 ring-[#dfe4ee] min-[560px]:w-auto dark:bg-[#0b1523] dark:ring-[#263a55]"
+                  className="grid h-10 w-full grid-cols-3 rounded-[7px] bg-white p-0.5 ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]"
                   aria-label="Filter by report status"
                   role="group"
                 >
@@ -1790,7 +1849,7 @@ export function ReviewerDashboard({
                 {hasActiveTableControls ? (
                   <button
                     type="button"
-                    className="h-9 rounded-[7px] px-2 text-xs font-semibold text-[#64748b] transition-colors hover:bg-[#f1f5f9] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+                    className="h-10 rounded-[7px] px-2 text-xs font-semibold text-[#64748b] transition-colors hover:bg-[#f1f5f9] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
                     onClick={clearTableControls}
                   >
                     Clear
@@ -1798,11 +1857,11 @@ export function ReviewerDashboard({
                 ) : null}
               </div>
             </div>
-            <div className="overflow-x-auto px-3">
-              <table className="w-full min-w-[1080px] text-xs">
+            <div className="min-[1024px]:min-h-0 min-[1024px]:flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 [scrollbar-gutter:stable]">
+              <table className="w-full table-fixed text-xs">
                 <thead>
                   <tr className="border-b border-[#e5eaf2] text-left text-[10px] font-semibold uppercase tracking-[0.02em] text-[#64748b] dark:border-[#263a55] dark:text-muted-foreground">
-                    <th className="w-[36px] px-2 py-2">
+                    <th className="w-[32px] px-1 py-2 min-[700px]:w-[36px] min-[700px]:px-2">
                       <Checkbox
                         checked={allVisibleReportsSelected}
                         disabled={visibleReportIds.length === 0}
@@ -1813,7 +1872,7 @@ export function ReviewerDashboard({
                       />
                     </th>
                     <th
-                      className="w-[22%] px-2 py-2"
+                      className="w-[43%] px-2 py-2 min-[700px]:w-[30%] min-[980px]:w-[24%] min-[1180px]:w-[22%]"
                       aria-sort={sortAriaValue(sortState, "employee")}
                     >
                       <SortableHeader
@@ -1824,7 +1883,7 @@ export function ReviewerDashboard({
                       />
                     </th>
                     <th
-                      className="w-[14%] px-2 py-2"
+                      className="hidden w-[15%] px-2 py-2 min-[760px]:table-cell"
                       aria-sort={sortAriaValue(sortState, "department")}
                     >
                       <SortableHeader
@@ -1835,7 +1894,7 @@ export function ReviewerDashboard({
                       />
                     </th>
                     <th
-                      className="w-[10%] px-2 py-2"
+                      className="w-[24%] px-2 py-2 min-[700px]:w-[16%] min-[980px]:w-[12%]"
                       aria-sort={sortAriaValue(sortState, "status")}
                     >
                       <SortableHeader
@@ -1846,7 +1905,7 @@ export function ReviewerDashboard({
                       />
                     </th>
                     <th
-                      className="w-[18%] px-2 py-2"
+                      className="hidden w-[16%] px-2 py-2 min-[1180px]:table-cell"
                       aria-sort={sortAriaValue(sortState, "flags")}
                     >
                       <SortableHeader
@@ -1857,7 +1916,7 @@ export function ReviewerDashboard({
                       />
                     </th>
                     <th
-                      className="w-[10%] px-2 py-2"
+                      className="hidden w-[12%] px-2 py-2 min-[980px]:table-cell"
                       aria-sort={sortAriaValue(sortState, "location")}
                     >
                       <SortableHeader
@@ -1868,7 +1927,7 @@ export function ReviewerDashboard({
                       />
                     </th>
                     <th
-                      className="w-[14%] px-2 py-2"
+                      className="hidden w-[16%] px-2 py-2 min-[700px]:table-cell min-[980px]:w-[14%]"
                       aria-sort={sortAriaValue(sortState, "submitted")}
                     >
                       <SortableHeader
@@ -1878,11 +1937,13 @@ export function ReviewerDashboard({
                         onSort={toggleEmployeeSort}
                       />
                     </th>
-                    <th className="w-[14%] px-2 py-2 text-right">Actions</th>
+                    <th className="w-[44px] px-1 py-2 text-right min-[700px]:w-[56px] min-[700px]:px-2">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pageItems.length === 0 ? (
+                  {filteredItems.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-8">
                         <EmptyReferenceState>
@@ -1891,7 +1952,7 @@ export function ReviewerDashboard({
                       </td>
                     </tr>
                   ) : (
-                    pageItems.map((row) => {
+                    filteredItems.map((row) => {
                       const status = reportStatus(row, date);
                       const canReview = canReviewReport(row);
                       const blockedReason =
@@ -1900,41 +1961,11 @@ export function ReviewerDashboard({
                           : "No report has been submitted yet";
                       const unavailablePulse =
                         blockedOpenUserId === row.user.id;
-                      const reminderPending = remindingUserId === row.user.id;
                       const flags = canReview ? dashboardFlags(row, date) : [];
                       const unread =
+                        canUseReviewerActions &&
                         canReview &&
                         isUnreadForReviewer(row.report, reviewerId);
-                      const primaryAction: {
-                        key: string;
-                        label: string;
-                        icon: ReactNode;
-                        title?: string;
-                        disabled?: boolean;
-                        ariaLabel?: string;
-                        onClick: () => void;
-                      } = canReview
-                        ? {
-                            key: "review",
-                            label: "Review",
-                            icon: <FileText />,
-                            onClick: () => openReport(row),
-                          }
-                        : {
-                            key: "remind",
-                            label: reminderPending ? "Sending" : "Remind",
-                            icon: reminderPending ? (
-                              <Loader2 className="animate-spin" />
-                            ) : (
-                              <Mail />
-                            ),
-                            title: blockedReason,
-                            disabled: remindingUserId !== null,
-                            ariaLabel: `Send reminder to ${employeeLabel(row)}`,
-                            onClick: () => {
-                              void sendReportReminder(row);
-                            },
-                          };
 
                       return (
                         <tr
@@ -1958,8 +1989,8 @@ export function ReviewerDashboard({
                             nudgeUnavailableReport(row);
                           }}
                         >
-                          <td className="px-2 py-2.5">
-                            {canReview && row.report ? (
+                          <td className="px-1 py-2.5 min-[700px]:px-2">
+                            {canUseReviewerActions && canReview && row.report ? (
                               <Checkbox
                                 checked={selectedReportIds.includes(
                                   row.report.id,
@@ -1976,8 +2007,8 @@ export function ReviewerDashboard({
                               />
                             ) : null}
                           </td>
-                          <td className="px-2 py-2.5">
-                            <div className="flex items-center gap-3">
+                          <td className="min-w-0 px-2 py-2.5">
+                            <div className="flex min-w-0 items-center gap-2 min-[700px]:gap-3">
                               <span
                                 className={cn(
                                   "h-2 w-2 rounded-full",
@@ -1985,12 +2016,12 @@ export function ReviewerDashboard({
                                 )}
                               />
                               <Avatar name={row.user.name ?? row.user.email} />
-                              <span className="truncate text-xs font-semibold text-[#101828] dark:text-foreground">
+                              <span className="min-w-0 truncate text-xs font-semibold text-[#101828] dark:text-foreground">
                                 {row.user.name ?? row.user.email ?? "Employee"}
                               </span>
                             </div>
                           </td>
-                          <td className="px-2 py-2.5 text-xs text-[#475467] dark:text-muted-foreground">
+                          <td className="hidden px-2 py-2.5 text-xs text-[#475467] dark:text-muted-foreground min-[760px]:table-cell">
                             {userDepartmentLabel(row.user)}
                           </td>
                           <td className="px-2 py-2.5">
@@ -1999,8 +2030,8 @@ export function ReviewerDashboard({
                               className="px-2.5 py-1 text-[11px] font-semibold"
                             />
                           </td>
-                          <td className="px-2 py-2.5">
-                            <div className="flex min-w-[120px] flex-wrap items-center gap-1.5">
+                          <td className="hidden px-2 py-2.5 min-[1180px]:table-cell">
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                               {flags.length === 0 ? (
                                 <span className="text-[#98a2b3]">-</span>
                               ) : (
@@ -2024,17 +2055,17 @@ export function ReviewerDashboard({
                               )}
                             </div>
                           </td>
-                          <td className="px-2 py-2.5 text-xs">
+                          <td className="hidden px-2 py-2.5 text-xs min-[980px]:table-cell">
                             {canReview && row.report
                               ? titleCase(row.report.workLocation)
                               : "-"}
                           </td>
-                          <td className="px-2 py-2.5 text-xs">
+                          <td className="hidden px-2 py-2.5 text-xs min-[700px]:table-cell">
                             {formatTimestamp(row.report?.submittedAt)}
                           </td>
-                          <td className="px-2 py-2.5 text-right">
+                          <td className="px-1 py-2.5 text-right min-[700px]:px-2">
                             <div
-                              className="relative ml-auto grid w-[132px] grid-cols-[minmax(0,1fr)_34px] items-center gap-1.5"
+                              className="relative ml-auto flex w-9 items-center justify-end"
                               data-testid="employee-report-row-actions"
                             >
                               {unavailablePulse ? (
@@ -2045,16 +2076,6 @@ export function ReviewerDashboard({
                                   <Lock className="h-3.5 w-3.5" />
                                 </span>
                               ) : null}
-                              <ReportRowActionButton
-                                key={primaryAction.key}
-                                icon={primaryAction.icon}
-                                title={primaryAction.title}
-                                disabled={primaryAction.disabled}
-                                aria-label={primaryAction.ariaLabel}
-                                onClick={() => primaryAction.onClick()}
-                              >
-                                {primaryAction.label}
-                              </ReportRowActionButton>
                               <Button
                                 type="button"
                                 variant="outline"
@@ -2081,83 +2102,6 @@ export function ReviewerDashboard({
                 </tbody>
               </table>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm text-[#475467] dark:text-muted-foreground">
-              <div className="flex items-center gap-3">
-                <span>Rows per page</span>
-                <Select
-                  value={String(pageSize)}
-                  onChange={(event) => {
-                    setPageSize(Number(event.target.value));
-                    setPage(1);
-                  }}
-                  className="h-10 w-28"
-                >
-                  <option value="10">10</option>
-                  <option value="25">25</option>
-                  <option value="50">50</option>
-                </Select>
-              </div>
-              <div className="flex items-center gap-8">
-                <span>
-                  {filteredItems.length === 0
-                    ? 0
-                    : (currentPage - 1) * pageSize + 1}
-                  -{Math.min(currentPage * pageSize, filteredItems.length)} of{" "}
-                  {filteredItems.length}
-                </span>
-                <div className="flex items-center gap-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 rounded-[7px] bg-white text-[#64748b] ring-1 ring-[#dfe4ee] hover:text-[#2563eb] dark:bg-[#0b1523] dark:ring-[#263a55]"
-                    aria-label="First page"
-                    onClick={() => setPage(1)}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronsLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 rounded-[7px] bg-white text-[#64748b] ring-1 ring-[#dfe4ee] hover:text-[#2563eb] dark:bg-[#0b1523] dark:ring-[#263a55]"
-                    aria-label="Previous page"
-                    onClick={() => setPage((value) => Math.max(1, value - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="flex h-9 w-9 items-center justify-center rounded-[7px] border border-[#93c5fd] text-[#2563eb]">
-                    {currentPage}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 rounded-[7px] bg-white text-[#64748b] ring-1 ring-[#dfe4ee] hover:text-[#2563eb] dark:bg-[#0b1523] dark:ring-[#263a55]"
-                    aria-label="Next page"
-                    onClick={() =>
-                      setPage((value) => Math.min(pageCount, value + 1))
-                    }
-                    disabled={currentPage === pageCount}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 rounded-[7px] bg-white text-[#64748b] ring-1 ring-[#dfe4ee] hover:text-[#2563eb] dark:bg-[#0b1523] dark:ring-[#263a55]"
-                    aria-label="Last page"
-                    onClick={() => setPage(pageCount)}
-                    disabled={currentPage === pageCount}
-                  >
-                    <ChevronsRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
           </ReportSurface>
         </main>
       )}
@@ -2171,10 +2115,21 @@ export function ReviewerDashboard({
           />
           <div
             ref={rowActionMenuRef}
-            className="fixed z-50 w-[220px] rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+            className="fixed z-50 max-h-[calc(100dvh-1.5rem)] w-[220px] overflow-y-auto overscroll-contain rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-[#e1e6ef] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
             style={{ top: rowActionMenu.top, left: rowActionMenu.left }}
             role="menu"
           >
+            {canReviewReport(menuRow) ? (
+              <ReviewerRowMenuButton
+                icon={<FileText />}
+                onClick={() => {
+                  setRowActionMenu(null);
+                  openReport(menuRow);
+                }}
+              >
+                Open report
+              </ReviewerRowMenuButton>
+            ) : null}
             <ReviewerRowMenuButton
               icon={<CalendarRange />}
               onClick={() => {
@@ -2193,7 +2148,27 @@ export function ReviewerDashboard({
             >
               View saved reports
             </ReviewerRowMenuButton>
-            {canReviewReport(menuRow) ? (
+            {canUseReviewerActions && !menuRow.report ? (
+              <ReviewerRowMenuButton
+                icon={
+                  remindingUserId === menuRow.user.id ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Mail />
+                  )
+                }
+                disabled={remindingUserId !== null}
+                onClick={() => {
+                  setRowActionMenu(null);
+                  void sendReportReminder(menuRow);
+                }}
+              >
+                {remindingUserId === menuRow.user.id
+                  ? "Sending reminder"
+                  : "Send reminder"}
+              </ReviewerRowMenuButton>
+            ) : null}
+            {canUseReviewerActions && canReviewReport(menuRow) ? (
               <ReviewerRowMenuButton
                 icon={
                   isUnreadForReviewer(menuRow.report, reviewerId) ? (
@@ -2212,6 +2187,47 @@ export function ReviewerDashboard({
                   ? "Mark as read"
                   : "Mark as unread"}
               </ReviewerRowMenuButton>
+            ) : null}
+            {canAdminManageReports && menuRow.report?.status === "SUBMITTED" ? (
+              <>
+                <div className="mx-2 my-1 border-t border-[#e5eaf2] dark:border-[#263a55]" />
+                <div className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#64748b] dark:text-muted-foreground">
+                  Admin actions
+                </div>
+                <ReviewerRowMenuButton
+                  icon={
+                    adminReportAction?.reportId === menuRow.report.id &&
+                    adminReportAction.action === "reopen" ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <RotateCcw />
+                    )
+                  }
+                  disabled={adminReportAction !== null}
+                  onClick={() => {
+                    void reopenSubmittedReport(menuRow);
+                  }}
+                >
+                  Reopen to draft
+                </ReviewerRowMenuButton>
+                <ReviewerRowMenuButton
+                  icon={
+                    adminReportAction?.reportId === menuRow.report.id &&
+                    adminReportAction.action === "delete" ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Trash2 />
+                    )
+                  }
+                  disabled={adminReportAction !== null}
+                  tone="danger"
+                  onClick={() => {
+                    void deleteSubmittedReport(menuRow);
+                  }}
+                >
+                  Delete report
+                </ReviewerRowMenuButton>
+              </>
             ) : null}
           </div>
         </>
@@ -2573,15 +2589,15 @@ function WeeklyReportArchivePage({
   ) => Promise<void>;
 }) {
   return (
-    <main className="reference-page">
+    <main className="reference-page min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
       <button
-        className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+        className="mb-3 inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
         onClick={onBack}
       >
         <ArrowLeft className="h-4 w-4" />
         Back to review dashboard
       </button>
-      <ReportSurface className="mx-auto max-w-[980px]">
+      <ReportSurface className="mx-auto max-w-[980px] min-[1024px]:flex min-[1024px]:min-h-0 min-[1024px]:w-full min-[1024px]:flex-1 min-[1024px]:flex-col">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e5eaf2] pb-4 dark:border-[#263a55]">
           <div>
             <h1 className="text-[24px] font-semibold leading-tight text-[#101828] dark:text-foreground">
@@ -2607,7 +2623,7 @@ function WeeklyReportArchivePage({
             <EmptyReferenceState>{state.message}</EmptyReferenceState>
           </div>
         ) : state.reports.length ? (
-          <div className="mt-4 divide-y divide-[#e5eaf2] overflow-hidden rounded-[10px] border border-[#dbe3ee] dark:divide-[#263a55] dark:border-[#263a55]">
+          <div className="mt-4 divide-y divide-[#e5eaf2] overflow-hidden rounded-[10px] border border-[#dbe3ee] dark:divide-[#263a55] dark:border-[#263a55] min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:overflow-y-auto min-[1024px]:overscroll-contain min-[1024px]:[scrollbar-gutter:stable]">
             {state.reports.map((report) => (
               <div
                 key={report.id}
@@ -2662,9 +2678,9 @@ function WeeklyReportReviewPage({
 
   if (state.status !== "ready") {
     return (
-      <main className="reference-page report-pdf-page weekly-report-pdf">
+      <main className="reference-page report-pdf-page weekly-report-pdf min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
         <button
-          className="report-pdf-back mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+          className="report-pdf-back mb-3 inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
           onClick={onBack}
         >
           <ArrowLeft className="h-4 w-4" />
@@ -2738,8 +2754,8 @@ function WeeklyReportReviewPage({
   );
 
   return (
-    <main className="reference-page report-pdf-page weekly-report-pdf bg-[#f6f9fd] dark:bg-background">
-      <div className="mx-auto max-w-[1280px]">
+    <main className="reference-page report-pdf-page weekly-report-pdf bg-[#f6f9fd] dark:bg-background min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
+      <div className="mx-auto max-w-[1280px] min-[1024px]:min-h-0 min-[1024px]:w-full min-[1024px]:flex-1 min-[1024px]:overflow-y-auto min-[1024px]:overscroll-contain min-[1024px]:pr-1 min-[1024px]:[scrollbar-gutter:stable]">
         <button
           className="report-pdf-back mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
           onClick={onBack}
@@ -2811,7 +2827,7 @@ function WeeklyReportReviewPage({
           <footer className="report-pdf-footer mt-8 flex flex-wrap items-center justify-between gap-4 text-[14px] font-medium text-[#52647a] dark:text-muted-foreground">
             <span className="inline-flex items-center gap-3">
               <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-              Only visible to you and the employee&apos;s reviewer(s)
+              Only visible to reviewers and admins
             </span>
             <span>
               {weeklyActivityCount} activities - Generated on{" "}
@@ -2827,6 +2843,7 @@ function WeeklyReportReviewPage({
 function ReportReviewPage({
   row,
   date,
+  canAddReviewNote,
   onBack,
   onAddComment,
   onUnsavedCommentChange,
@@ -2834,6 +2851,7 @@ function ReportReviewPage({
 }: {
   row: Row;
   date: string;
+  canAddReviewNote: boolean;
   onBack: () => void;
   onAddComment: (body: string) => Promise<boolean>;
   onUnsavedCommentChange: (dirty: boolean) => void;
@@ -2881,7 +2899,7 @@ function ReportReviewPage({
   async function handleCommentSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!report || !commentBody.trim()) {
+    if (!canAddReviewNote || !report || !commentBody.trim()) {
       return;
     }
 
@@ -2987,30 +3005,32 @@ function ReportReviewPage({
         </Button>
       }
       screenExtras={
-        <form onSubmit={handleCommentSubmit}>
-          <label
-            htmlFor="review-comment-body"
-            className="mb-1.5 block text-sm font-semibold text-[#111827] dark:text-foreground"
-          >
-            Add review note
-          </label>
-          <Textarea
-            id="review-comment-body"
-            value={commentBody}
-            onChange={(event) => setCommentBody(event.target.value)}
-            placeholder="Add a note for the employee..."
-            disabled={!report || isAddingComment}
-            className="min-h-24 resize-y"
-          />
-          <div className="mt-3 flex justify-end">
-            <Button
-              type="submit"
-              disabled={!report || !commentBody.trim() || isAddingComment}
+        canAddReviewNote ? (
+          <form onSubmit={handleCommentSubmit}>
+            <label
+              htmlFor="review-comment-body"
+              className="mb-1.5 block text-sm font-semibold text-[#111827] dark:text-foreground"
             >
-              {isAddingComment ? "Adding..." : "Add comment"}
-            </Button>
-          </div>
-        </form>
+              Add review note
+            </label>
+            <Textarea
+              id="review-comment-body"
+              value={commentBody}
+              onChange={(event) => setCommentBody(event.target.value)}
+              placeholder="Add a note for the employee..."
+              disabled={!report || isAddingComment}
+              className="min-h-24 resize-y"
+            />
+            <div className="mt-3 flex justify-end">
+              <Button
+                type="submit"
+                disabled={!report || !commentBody.trim() || isAddingComment}
+              >
+                {isAddingComment ? "Adding..." : "Add comment"}
+              </Button>
+            </div>
+          </form>
+        ) : null
       }
       footer={
         latestRevision ? (

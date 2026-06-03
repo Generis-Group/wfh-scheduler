@@ -9,18 +9,20 @@ A Next.js 14 application for employees to review imported Jira, Google Calendar,
 - Prisma with managed PostgreSQL through `DATABASE_URL`
 - Recharts for reviewer dashboard metrics
 - `googleapis` for Calendar and Tasks
+- Google Gen AI SDK for Gemini-powered features
 
 Docker is intentionally not used for this MVP.
 
 ## Local Setup
 
-1. Install Node.js with `npm` available on PATH. On Windows, `npm.cmd` is the safest command if PowerShell blocks `npm.ps1`.
+1. Install Node.js 20+ with `npm` available on PATH. On Windows, `npm.cmd` is the safest command if PowerShell blocks `npm.ps1`.
 2. Copy `.env.example` to `.env.local` and fill in:
    - `DATABASE_URL`
    - `NEXTAUTH_URL`
    - `NEXTAUTH_SECRET`
    - `TOKEN_ENCRYPTION_KEY`
    - Atlassian and Google OAuth client values
+   - Gemini values: `GEMINI_API_KEY`, optional `GEMINI_MODEL`
    - Resend email values: `RESEND_API_KEY`, optional `EMAIL_FROM`, `APP_BASE_URL`, and `CRON_SECRET`
 3. Install dependencies:
 
@@ -55,7 +57,7 @@ npm run db:deploy
 ## Vercel + Managed Postgres
 
 1. Create a managed Postgres database and set `DATABASE_URL` in Vercel.
-2. Set `NEXTAUTH_URL` and `APP_BASE_URL` to the production URL, plus `NEXTAUTH_SECRET`, `TOKEN_ENCRYPTION_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET`, `RESEND_API_KEY`, and `CRON_SECRET`. `EMAIL_FROM` defaults to `Generis Reports <reports@generisgp.com>` and only needs to be set when overriding that sender.
+2. Set `NEXTAUTH_URL` and `APP_BASE_URL` to the production URL, plus `NEXTAUTH_SECRET`, `TOKEN_ENCRYPTION_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ATLASSIAN_CLIENT_ID`, `ATLASSIAN_CLIENT_SECRET`, `GEMINI_API_KEY`, `RESEND_API_KEY`, and `CRON_SECRET`. `GEMINI_MODEL` defaults to `gemini-2.5-flash`, and `EMAIL_FROM` defaults to `Generis Reports <reports@generisgp.com>`; set them only when overriding those defaults.
 3. Configure OAuth redirect URLs:
    - Local: `http://localhost:3000/api/auth/callback/google` and `http://localhost:3000/api/auth/callback/atlassian`
    - Production: `https://YOUR_DOMAIN/api/auth/callback/google` and `https://YOUR_DOMAIN/api/auth/callback/atlassian`

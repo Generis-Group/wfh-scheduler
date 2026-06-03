@@ -149,6 +149,26 @@ export async function createDepartment(name: string) {
   return department;
 }
 
+export async function deleteDepartment(departmentId: string) {
+  const trimmedId = departmentId.trim();
+
+  if (!trimmedId) {
+    throw new HttpError(422, "Department id is required.");
+  }
+
+  const deleted = await prisma.department.deleteMany({
+    where: { id: trimmedId },
+  });
+
+  if (deleted.count === 0) {
+    throw new HttpError(404, "Department not found.");
+  }
+
+  revalidateTag(departmentsCacheTag);
+
+  return { ok: true };
+}
+
 export async function getReviewableEmployeeWhere(
   scope?: ReviewScope,
 ): Promise<Prisma.UserWhereInput> {
@@ -158,6 +178,10 @@ export async function getReviewableEmployeeWhere(
   };
 
   if (!scope) {
+    return base;
+  }
+
+  if (hasUserRole(scope, "ADMIN")) {
     return base;
   }
 

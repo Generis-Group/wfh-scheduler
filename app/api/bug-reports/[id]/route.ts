@@ -6,6 +6,7 @@ import { withServerTiming } from "@/lib/performance";
 import { serialize } from "@/lib/serializers";
 import {
   canReviewBugReports,
+  deleteBugReport,
   getVisibleBugReport,
   updateBugReportStatus,
 } from "@/lib/services/bug-reports";
@@ -58,6 +59,28 @@ export async function PATCH(request: Request, { params }: Context) {
     revalidatePath("/bugs");
 
     return json({ bugReport: serialize(bugReport) });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+export async function DELETE(_request: Request, { params }: Context) {
+  try {
+    const session = await requireSession();
+
+    if (!canReviewBugReports(session.user)) {
+      throw new HttpError(403, "Only admins can delete bug reports.");
+    }
+
+    await withServerTiming(
+      "api:bug-reports:delete",
+      () => deleteBugReport(params.id),
+      { reportId: params.id },
+    );
+
+    revalidatePath("/bugs");
+
+    return json({ ok: true });
   } catch (error) {
     return handleRouteError(error);
   }

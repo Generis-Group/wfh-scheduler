@@ -96,6 +96,44 @@
     background: rgb(96 165 250 / 0.24);
   }
 
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(100 116 139 / 0.46) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    min-height: 44px;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-color: rgb(100 116 139 / 0.42);
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(37 99 235 / 0.56);
+  }
+
+  .dark * {
+    scrollbar-color: rgb(148 163 184 / 0.42) transparent;
+  }
+
+  .dark *::-webkit-scrollbar-thumb {
+    background-color: rgb(148 163 184 / 0.34);
+  }
+
+  .dark *::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(96 165 250 / 0.52);
+  }
+
   .dark .bg-white,
   .dark [class*="bg-[#f7f9fc]"],
   .dark [class*="bg-[#f8fafc]"],
@@ -204,7 +242,7 @@
   }
 
   .reference-page {
-    @apply w-full px-3 pb-3 pt-3 sm:px-4;
+    @apply w-full min-w-0 px-3 pb-3 pt-3 sm:px-4;
     max-width: 100%;
     overflow-x: clip;
   }
@@ -235,7 +273,9 @@
   }
 
   .reference-content-scroll {
-    overflow-x: hidden;
+    min-height: 0;
+    overflow-x: clip;
+    overscroll-behavior: contain;
     scrollbar-gutter: stable;
   }
 
@@ -314,9 +354,19 @@
     @apply pointer-events-none float-left h-0 text-[#98a2b3];
   }
 
+  .summary-tiptap-panel {
+    @apply flex min-h-0 min-w-0 flex-col;
+  }
+
+  .summary-tiptap-drop-zone,
+  .summary-tiptap-editor {
+    @apply flex min-h-0 min-w-0 flex-1 flex-col;
+  }
+
   .summary-tiptap-editor .ProseMirror {
     tab-size: 2;
-    @apply h-[480px] overflow-y-auto whitespace-pre-wrap rounded-[7px] bg-white px-3.5 py-3.5 text-sm leading-6 text-[#111827] shadow-[inset_0_1px_1px_rgba(15,23,42,0.025)] ring-1 ring-input focus:outline-none focus:ring-2 focus:ring-[#2563eb] dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-input;
+    height: clamp(22rem, 52dvh, 30rem);
+    @apply w-full overflow-y-auto whitespace-pre-wrap rounded-[7px] bg-white px-3.5 py-3.5 text-sm leading-6 text-[#111827] shadow-[inset_0_1px_1px_rgba(15,23,42,0.025)] ring-1 ring-input focus:outline-none focus:ring-2 focus:ring-[#2563eb] dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-input;
   }
 
   .summary-tiptap-editor .ProseMirror h2 {
@@ -579,6 +629,47 @@
     outline-offset: 3px;
     border-radius: 8px;
   }
+
+  @media (min-width: 1200px) {
+    .daily-report-page {
+      display: flex;
+      height: 100%;
+      min-height: 0;
+      flex-direction: column;
+    }
+
+    .daily-report-layout {
+      min-height: 0;
+      flex: 1 1 auto;
+      align-items: stretch;
+    }
+
+    .daily-report-panel {
+      min-height: 0;
+    }
+
+    .daily-work-items-list {
+      min-height: 0;
+      height: auto;
+      flex: 1 1 auto;
+    }
+
+    .daily-summary-panel {
+      display: flex;
+      min-height: 0;
+      flex-direction: column;
+    }
+
+    .daily-summary-panel .summary-tiptap-panel {
+      flex: 1 1 auto;
+    }
+
+    .daily-summary-panel .summary-tiptap-editor .ProseMirror {
+      height: auto;
+      min-height: 0;
+      flex: 1 1 auto;
+    }
+  }
 }
 
 @media print {
@@ -628,6 +719,11 @@
   .report-pdf-document,
   .report-pdf-page > * {
     max-width: none !important;
+  }
+
+  .report-pdf-wrapper {
+    overflow: visible !important;
+    max-height: none !important;
   }
 
   .report-pdf-document {
@@ -818,5 +914,4 @@
     color-adjust: exact;
     print-color-adjust: exact;
   }
-
 }

@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 import { generisEmailMessage, isGenerisEmail } from "@/lib/auth-domain";
+import {
+  maxBugReportBodyCharacters,
+  maxBugReportBodyLines,
+  maxBugReportBodyWords,
+} from "@/lib/bug-report-limits";
 import { isFutureReportDateString } from "@/lib/dates";
 
 export const dateStringSchema = z
@@ -129,8 +134,30 @@ export const bugReportAttachmentSchema = z.object({
   sizeBytes: z.number().int().min(1).max(900_000),
 });
 
+function bugReportBodyStats(value: string) {
+  return {
+    words: value.trim() ? (value.trim().match(/\S+/g)?.length ?? 0) : 0,
+    lines: value.length > 0 ? value.split(/\r\n|\r|\n/).length : 0,
+  };
+}
+
+const bugReportBodyLimitMessage = `Bug reports can be up to ${maxBugReportBodyWords} words, ${maxBugReportBodyLines} lines, and ${maxBugReportBodyCharacters} characters.`;
+const bugReportBodySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(maxBugReportBodyCharacters)
+  .refine(
+    (value) => bugReportBodyStats(value).words <= maxBugReportBodyWords,
+    bugReportBodyLimitMessage,
+  )
+  .refine(
+    (value) => bugReportBodyStats(value).lines <= maxBugReportBodyLines,
+    bugReportBodyLimitMessage,
+  );
+
 export const createBugReportSchema = z.object({
-  body: z.string().trim().min(1).max(5000),
+  body: bugReportBodySchema,
   pagePath: z.string().max(500).nullable().optional(),
   userAgent: z.string().max(1000).nullable().optional(),
   attachments: z.array(bugReportAttachmentSchema).max(4).default([]),

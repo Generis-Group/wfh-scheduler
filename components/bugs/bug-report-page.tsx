@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Search,
   Send,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -27,6 +28,11 @@ import { EmptyReferenceState } from "@/components/reports/reference-shell";
 import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  maxBugReportBodyCharacters,
+  maxBugReportBodyLines,
+  maxBugReportBodyWords,
+} from "@/lib/bug-report-limits";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import { cn, initials } from "@/lib/utils";
 
@@ -88,17 +94,29 @@ export function BugReportPage({
     initialSelectedReportId &&
       initialReports.some((report) => report.id === initialSelectedReportId)
       ? initialSelectedReportId
-      : initialReports[0]?.id ?? null,
+      : (initialReports[0]?.id ?? null),
   );
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+  const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(() =>
+    Boolean(
+      initialSelectedReportId &&
+        initialReports.some(
+          (report) =>
+            report.id === initialSelectedReportId &&
+            bugReportStatus(report) === "OPEN",
+        ),
+    ),
+  );
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiveSearch, setArchiveSearch] = useState("");
   const [selectedArchiveReportId, setSelectedArchiveReportId] = useState<
     string | null
   >(null);
+  const handledInitialReportIdRef = useRef<string | null>(null);
   const openReportCount = useMemo(
     () => reports.filter((report) => bugReportStatus(report) === "OPEN").length,
     [reports],
@@ -131,7 +149,9 @@ export function BugReportPage({
       return solvedReports;
     }
 
-    return solvedReports.filter((report) => bugReportMatchesQuery(report, query));
+    return solvedReports.filter((report) =>
+      bugReportMatchesQuery(report, query),
+    );
   }, [archiveSearch, solvedReports]);
   const selectedArchiveReport =
     archiveReports.find((report) => report.id === selectedArchiveReportId) ??
@@ -141,7 +161,11 @@ export function BugReportPage({
     openReports.find((report) => report.id === selectedReportId) ??
     openReports[0] ??
     null;
-  const selectedReport = archiveOpen ? selectedArchiveReport : mainSelectedReport;
+  const selectedReport = archiveOpen
+    ? selectedArchiveReport
+    : detailOpen
+      ? mainSelectedReport
+      : null;
   const selectedMainReportId = mainSelectedReport?.id ?? null;
   const selectedArchiveDetailId = selectedArchiveReport?.id ?? null;
   const selectedReportDetailId = selectedReport?.id ?? null;
@@ -155,7 +179,7 @@ export function BugReportPage({
     ? "No solved bug reports match this search."
     : "No solved bug reports yet.";
   const openReportListClassName =
-    "max-h-[min(34rem,calc(100vh-18rem))] overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable] min-[1120px]:max-h-none min-[1120px]:min-h-0 min-[1120px]:flex-1";
+    "min-h-0 max-h-[min(34rem,calc(100dvh-18rem))] overflow-y-auto overscroll-contain [scrollbar-gutter:stable] min-[980px]:max-h-none min-[980px]:flex-1";
 
   useEffect(() => {
     if (selectedReportId !== selectedMainReportId) {
@@ -173,6 +197,12 @@ export function BugReportPage({
     }
   }, [archiveOpen, selectedArchiveDetailId, selectedArchiveReportId]);
 
+  useEffect(() => {
+    if (detailOpen && !mainSelectedReport) {
+      setDetailOpen(false);
+    }
+  }, [detailOpen, mainSelectedReport]);
+
   useEffect(
     () => () => {
       document.body.style.overflow = "";
@@ -181,7 +211,7 @@ export function BugReportPage({
   );
 
   useEffect(() => {
-    if (!archiveOpen) {
+    if (!archiveOpen && !detailOpen) {
       document.body.style.overflow = "";
       return;
     }
@@ -191,25 +221,30 @@ export function BugReportPage({
     return () => {
       document.body.style.overflow = "";
     };
-  }, [archiveOpen]);
+  }, [archiveOpen, detailOpen]);
 
   useEffect(() => {
-    if (!archiveOpen) {
+    if (!archiveOpen && !detailOpen) {
       return;
     }
 
-    function closeArchiveOnEscape(event: KeyboardEvent) {
+    function closeDialogOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setArchiveOpen(false);
+        if (archiveOpen) {
+          setArchiveOpen(false);
+          return;
+        }
+
+        setDetailOpen(false);
       }
     }
 
-    window.addEventListener("keydown", closeArchiveOnEscape);
+    window.addEventListener("keydown", closeDialogOnEscape);
 
     return () => {
-      window.removeEventListener("keydown", closeArchiveOnEscape);
+      window.removeEventListener("keydown", closeDialogOnEscape);
     };
-  }, [archiveOpen]);
+  }, [archiveOpen, detailOpen]);
 
   useEffect(() => {
     if (!archiveOpen) {
@@ -226,6 +261,11 @@ export function BugReportPage({
 
   useEffect(() => {
     if (!initialSelectedReportId) {
+      handledInitialReportIdRef.current = null;
+      return;
+    }
+
+    if (handledInitialReportIdRef.current === initialSelectedReportId) {
       return;
     }
 
@@ -233,9 +273,17 @@ export function BugReportPage({
       (report) => report.id === initialSelectedReportId,
     );
 
-    if (selectedInitialReport && bugReportStatus(selectedInitialReport) === "SOLVED") {
+    if (!selectedInitialReport) {
+      return;
+    }
+
+    handledInitialReportIdRef.current = initialSelectedReportId;
+
+    if (bugReportStatus(selectedInitialReport) === "SOLVED") {
       setArchiveOpen(true);
       setSelectedArchiveReportId(initialSelectedReportId);
+    } else {
+      setDetailOpen(true);
     }
   }, [initialSelectedReportId, reports]);
 
@@ -295,6 +343,7 @@ export function BugReportPage({
   function addReport(report: BugReport) {
     setReports((current) => [report, ...current]);
     setSelectedReportId(report.id);
+    setDetailOpen(true);
   }
 
   async function updateSelectedReportStatus(
@@ -332,6 +381,7 @@ export function BugReportPage({
 
         if (status === "SOLVED") {
           setSelectedReportId(null);
+          setDetailOpen(false);
           setSelectedArchiveReportId(data.bugReport.id);
         } else {
           setSelectedReportId(data.bugReport.id);
@@ -342,28 +392,73 @@ export function BugReportPage({
 
       markServerDataStale();
       setMessage(
-        status === "SOLVED" ? "Bug report marked solved." : "Bug report reopened.",
+        status === "SOLVED"
+          ? "Bug report marked solved."
+          : "Bug report reopened.",
       );
     } catch (error) {
       setMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to update bug report.",
+        error instanceof Error ? error.message : "Unable to update bug report.",
       );
     } finally {
-      setUpdatingStatusId((current) => (current === report.id ? null : current));
+      setUpdatingStatusId((current) =>
+        current === report.id ? null : current,
+      );
+    }
+  }
+
+  async function deleteSelectedReport(report: BugReport) {
+    if (!canReviewAll || deletingReportId) {
+      return;
+    }
+
+    if (!window.confirm("Delete this bug report? This cannot be undone.")) {
+      return;
+    }
+
+    setDeletingReportId(report.id);
+    setMessage(null);
+
+    try {
+      const response = await fetch(
+        `/api/bug-reports/${encodeURIComponent(report.id)}`,
+        { method: "DELETE" },
+      );
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to delete bug report.");
+      }
+
+      setReports((current) =>
+        current.filter((item) => item.id !== report.id),
+      );
+
+      if (selectedReportId === report.id) {
+        setSelectedReportId(null);
+      }
+
+      if (selectedArchiveReportId === report.id) {
+        setSelectedArchiveReportId(null);
+      }
+
+      setDetailOpen(false);
+      markServerDataStale();
+      setMessage("Bug report deleted.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Unable to delete bug report.",
+      );
+    } finally {
+      setDeletingReportId((current) =>
+        current === report.id ? null : current,
+      );
     }
   }
 
   return (
-    <main
-      className={cn(
-        "reference-page",
-        canReviewAll &&
-          "min-[1120px]:flex min-[1120px]:h-full min-[1120px]:min-h-0 min-[1120px]:flex-col",
-      )}
-    >
-      <div className="reference-page-header">
+    <main className="reference-page min-[980px]:flex min-[980px]:h-full min-[980px]:min-h-0 min-[980px]:flex-col min-[980px]:overflow-hidden">
+      <div className="reference-page-header min-[980px]:shrink-0">
         <div>
           <h1 className="reference-title">Bug Reports</h1>
           <p className="reference-subtitle">
@@ -374,112 +469,81 @@ export function BugReportPage({
         </div>
       </div>
 
-      <div
-        className={cn(
-          "grid items-start gap-3",
-          canReviewAll
-            ? "min-[1120px]:min-h-0 min-[1120px]:flex-1 min-[1120px]:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.2fr)] min-[1120px]:items-stretch"
-            : "min-[1040px]:grid-cols-[minmax(0,0.95fr)_minmax(320px,0.75fr)]",
-        )}
-      >
-        <div className="space-y-3">
-          <BugReportComposer
-            currentUserName={currentUserName}
-            sourcePagePath={sourcePagePath}
-            onCreated={addReport}
-            onMessage={setMessage}
-          />
-          {!canReviewAll ? (
-            <>
+      <div className="grid min-w-0 items-start gap-3 min-[980px]:min-h-0 min-[980px]:flex-1 min-[980px]:grid-cols-[minmax(0,1fr)_minmax(320px,380px)] min-[980px]:items-stretch">
+        <BugReportComposer
+          currentUserName={currentUserName}
+          sourcePagePath={sourcePagePath}
+          className="min-[980px]:h-full min-[980px]:min-h-0"
+          onCreated={addReport}
+          onMessage={setMessage}
+        />
+
+        <Card className="min-w-0 overflow-hidden min-[980px]:flex min-[980px]:h-full min-[980px]:min-h-0 min-[980px]:flex-col">
+          <CardHeader className="border-b border-[#e5eaf2] p-3 pb-2 dark:border-[#263a55]">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>Open bug reports</CardTitle>
+                <CardDescription className="text-xs">
+                  {openReportCount} open report
+                  {openReportCount === 1 ? "" : "s"}
+                </CardDescription>
+              </div>
               <BugReportArchiveButton
                 count={solvedReportCount}
                 onOpen={() => setArchiveOpen(true)}
               />
-              <BugReportList
-                reports={openReports}
-                selectedReportId={mainSelectedReport?.id ?? null}
-                title="Open bug reports"
-                emptyText={openEmptyText}
-                className={openReportListClassName}
-                onSelect={setSelectedReportId}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2 p-3 min-[980px]:flex min-[980px]:min-h-0 min-[980px]:flex-1 min-[980px]:flex-col min-[980px]:gap-2 min-[980px]:space-y-0">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b]"
+                aria-hidden="true"
               />
-            </>
-          ) : null}
-        </div>
-
-        {canReviewAll ? (
-          <div className="grid gap-3 min-[1120px]:h-full min-[1120px]:min-h-0 min-[1120px]:grid-cols-[minmax(300px,0.82fr)_minmax(0,1.18fr)] min-[1120px]:items-stretch">
-            <Card className="min-[1120px]:flex min-[1120px]:h-full min-[1120px]:min-h-0 min-[1120px]:flex-col">
-              <CardHeader className="p-3 pb-2">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <CardTitle>Inbox</CardTitle>
-                    <CardDescription className="text-xs">
-                      {openReportCount} open report
-                      {openReportCount === 1 ? "" : "s"}
-                    </CardDescription>
-                  </div>
-                  <BugReportArchiveButton
-                    count={solvedReportCount}
-                    onOpen={() => setArchiveOpen(true)}
-                  />
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2 p-3 pt-0 min-[1120px]:flex min-[1120px]:min-h-0 min-[1120px]:flex-1 min-[1120px]:flex-col min-[1120px]:gap-2 min-[1120px]:space-y-0">
-                <div className="relative">
-                  <Search
-                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b]"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    aria-label="Search bug reports"
-                    className="h-9 bg-white pl-9 text-sm ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]"
-                    placeholder="Search open reports"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                  />
-                </div>
-                <BugReportList
-                  reports={openReports}
-                  selectedReportId={mainSelectedReport?.id ?? null}
-                  title="Open bug reports"
-                  emptyText={openEmptyText}
-                  className={openReportListClassName}
-                  onSelect={setSelectedReportId}
-                />
-              </CardContent>
-            </Card>
-            {mainSelectedReport ? (
-              <BugReportDetail
-                report={mainSelectedReport}
-                canManageStatus={canReviewAll}
-                isUpdatingStatus={updatingStatusId === mainSelectedReport.id}
-                isLoadingAttachments={
-                  loadingDetailId === mainSelectedReport.id &&
-                  selectedReportNeedsAttachments
-                }
-                onStatusChange={(status) =>
-                  updateSelectedReportStatus(mainSelectedReport, status)
-                }
-                className="min-[1120px]:h-full min-[1120px]:max-h-none"
+              <Input
+                aria-label="Search bug reports"
+                className="h-9 bg-white pl-9 text-sm ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]"
+                placeholder="Search open reports"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
               />
-            ) : null}
-          </div>
-        ) : (
-          mainSelectedReport ? (
-            <BugReportDetail
-              report={mainSelectedReport}
-              canManageStatus={false}
-              isUpdatingStatus={false}
-              isLoadingAttachments={
-                loadingDetailId === mainSelectedReport.id &&
-                selectedReportNeedsAttachments
-              }
-              onStatusChange={() => undefined}
+            </div>
+            <BugReportList
+              reports={openReports}
+              selectedReportId={detailOpen ? mainSelectedReport?.id ?? null : null}
+              emptyText={openEmptyText}
+              className={openReportListClassName}
+              variant="inbox"
+              onSelect={(reportId) => {
+                setSelectedReportId(reportId);
+                setDetailOpen(true);
+              }}
             />
-          ) : null
-        )}
+          </CardContent>
+        </Card>
       </div>
+
+      {detailOpen && mainSelectedReport ? (
+        <BugReportDetailDialog
+          report={mainSelectedReport}
+          canManageStatus={canReviewAll}
+          isUpdatingStatus={
+            canReviewAll && updatingStatusId === mainSelectedReport.id
+          }
+          isDeleting={deletingReportId === mainSelectedReport.id}
+          isLoadingAttachments={
+            loadingDetailId === mainSelectedReport.id &&
+            selectedReportNeedsAttachments
+          }
+          onClose={() => setDetailOpen(false)}
+          onDelete={() => deleteSelectedReport(mainSelectedReport)}
+          onStatusChange={(status) => {
+            if (canReviewAll) {
+              void updateSelectedReportStatus(mainSelectedReport, status);
+            }
+          }}
+        />
+      ) : null}
 
       {archiveOpen ? (
         <BugReportArchiveDialog
@@ -495,7 +559,11 @@ export function BugReportPage({
           }
           isUpdatingStatus={Boolean(
             selectedArchiveReport &&
-              updatingStatusId === selectedArchiveReport.id,
+            updatingStatusId === selectedArchiveReport.id,
+          )}
+          isDeleting={Boolean(
+            selectedArchiveReport &&
+              deletingReportId === selectedArchiveReport.id,
           )}
           canManageStatus={canReviewAll}
           emptyText={archiveEmptyText}
@@ -505,6 +573,11 @@ export function BugReportPage({
           onStatusChange={(status) => {
             if (selectedArchiveReport) {
               updateSelectedReportStatus(selectedArchiveReport, status);
+            }
+          }}
+          onDelete={() => {
+            if (selectedArchiveReport) {
+              deleteSelectedReport(selectedArchiveReport);
             }
           }}
         />
@@ -548,12 +621,14 @@ function BugReportArchiveDialog({
   selectedReportId,
   isLoadingAttachments,
   isUpdatingStatus,
+  isDeleting,
   canManageStatus,
   emptyText,
   onSearchChange,
   onSelect,
   onClose,
   onStatusChange,
+  onDelete,
 }: {
   reports: BugReport[];
   totalCount: number;
@@ -562,12 +637,14 @@ function BugReportArchiveDialog({
   selectedReportId: string | null;
   isLoadingAttachments: boolean;
   isUpdatingStatus: boolean;
+  isDeleting: boolean;
   canManageStatus: boolean;
   emptyText: string;
   onSearchChange: (value: string) => void;
   onSelect: (reportId: string) => void;
   onClose: () => void;
   onStatusChange: (status: "OPEN" | "SOLVED") => void;
+  onDelete: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-[#0f172a]/45 p-3 pt-5 backdrop-blur-[2px] min-[720px]:pt-8">
@@ -635,10 +712,12 @@ function BugReportArchiveDialog({
                 report={selectedReport}
                 canManageStatus={canManageStatus}
                 isUpdatingStatus={isUpdatingStatus}
+                isDeleting={isDeleting}
                 isLoadingAttachments={isLoadingAttachments}
                 className="h-full min-h-0 max-h-none shadow-none"
                 contentClassName="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]"
                 onStatusChange={onStatusChange}
+                onDelete={onDelete}
               />
             ) : (
               <div className="flex h-full min-h-[260px] items-center justify-center rounded-[8px] bg-[#f8fafc] p-4 text-center text-sm text-[#64748b] ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:text-muted-foreground dark:ring-[#263a55]">
@@ -652,24 +731,86 @@ function BugReportArchiveDialog({
   );
 }
 
+function BugReportDetailDialog({
+  report,
+  canManageStatus,
+  isUpdatingStatus,
+  isDeleting,
+  isLoadingAttachments,
+  onClose,
+  onStatusChange,
+  onDelete,
+}: {
+  report: BugReport;
+  canManageStatus: boolean;
+  isUpdatingStatus: boolean;
+  isDeleting: boolean;
+  isLoadingAttachments: boolean;
+  onClose: () => void;
+  onStatusChange: (status: "OPEN" | "SOLVED") => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-[#0f172a]/45 p-3 pt-5 backdrop-blur-[2px] min-[720px]:pt-8">
+      <button
+        type="button"
+        aria-label="Dismiss bug report"
+        className="absolute inset-0 cursor-default"
+        onClick={onClose}
+      />
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label="Bug report detail"
+        className="relative z-10 flex max-h-[min(760px,calc(100dvh-2rem))] w-[min(920px,calc(100vw-2rem))] min-h-0 flex-col"
+      >
+        <BugReportDetail
+          report={report}
+          canManageStatus={canManageStatus}
+          isUpdatingStatus={isUpdatingStatus}
+          isDeleting={isDeleting}
+          isLoadingAttachments={isLoadingAttachments}
+          className="h-full min-h-0 max-h-none shadow-[0_24px_70px_rgba(15,23,42,0.24)]"
+          contentClassName="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]"
+          onStatusChange={onStatusChange}
+          onDelete={onDelete}
+          onClose={onClose}
+        />
+      </section>
+    </div>
+  );
+}
+
 function BugReportComposer({
   currentUserName,
   sourcePagePath,
+  className,
   onCreated,
   onMessage,
 }: {
   currentUserName: string;
   sourcePagePath?: string | null;
+  className?: string;
   onCreated: (report: BugReport) => void;
   onMessage: (message: string | null) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [body, setBody] = useState("");
-  const [attachments, setAttachments] = useState<BugReportAttachmentDraft[]>([]);
+  const [attachments, setAttachments] = useState<BugReportAttachmentDraft[]>(
+    [],
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
+  const bodyStats = useMemo(() => bugReportTextStats(body), [body]);
+  const exceedsReportLimits =
+    bodyStats.characters > maxBugReportBodyCharacters ||
+    bodyStats.words > maxBugReportBodyWords ||
+    bodyStats.lines > maxBugReportBodyLines;
   const canSubmit =
-    body.trim().length > 0 && !isSubmitting && !isProcessingImages;
+    body.trim().length > 0 &&
+    !exceedsReportLimits &&
+    !isSubmitting &&
+    !isProcessingImages;
 
   async function addFiles(files: File[]) {
     if (files.length === 0) {
@@ -700,9 +841,7 @@ function BugReportComposer({
       );
     } catch (error) {
       onMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to attach that image.",
+        error instanceof Error ? error.message : "Unable to attach that image.",
       );
     } finally {
       setIsProcessingImages(false);
@@ -711,6 +850,11 @@ function BugReportComposer({
 
   async function submitReport(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (exceedsReportLimits) {
+      onMessage(limitMessage());
+      return;
+    }
 
     if (!canSubmit) {
       return;
@@ -743,32 +887,67 @@ function BugReportComposer({
       setAttachments([]);
       onMessage("Bug report sent.");
     } catch {
-      onMessage("Unable to send bug report. Check your connection and try again.");
+      onMessage(
+        "Unable to send bug report. Check your connection and try again.",
+      );
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <Card>
-      <CardHeader className="p-3 pb-2">
+    <Card
+      className={cn(
+        "min-w-0 overflow-hidden min-[980px]:flex min-[980px]:flex-col",
+        className,
+      )}
+    >
+      <CardHeader className="shrink-0 p-3 pb-2">
         <CardTitle>New report</CardTitle>
         <CardDescription className="text-xs">{currentUserName}</CardDescription>
       </CardHeader>
-      <CardContent className="p-3 pt-0">
-        <form className="space-y-3" onSubmit={submitReport}>
+      <CardContent className="p-3 pt-0 min-[980px]:flex min-[980px]:min-h-0 min-[980px]:flex-1">
+        <form
+          className="space-y-3 min-[980px]:flex min-[980px]:min-h-0 min-[980px]:flex-1 min-[980px]:flex-col min-[980px]:gap-3 min-[980px]:space-y-0"
+          onSubmit={submitReport}
+        >
           <Textarea
             aria-label="Bug report text"
-            className="min-h-[132px] bg-white ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]"
+            className="min-h-[220px] resize-none overflow-y-auto bg-white ring-1 ring-[#dbe5f4] [scrollbar-gutter:stable] dark:bg-[#0b1523] dark:ring-[#263a55] min-[980px]:min-h-0 min-[980px]:flex-1"
             placeholder="What happened?"
             value={body}
-            maxLength={5000}
+            maxLength={maxBugReportBodyCharacters}
             disabled={isSubmitting}
             onChange={(event) => setBody(event.target.value)}
           />
+          <div
+            className={cn(
+              "flex shrink-0 flex-wrap items-center justify-between gap-2 text-[11px] font-medium text-[#64748b] dark:text-muted-foreground",
+              exceedsReportLimits && "text-[#dc2626] dark:text-red-300",
+            )}
+          >
+            <span>
+              Up to {maxBugReportBodyWords.toLocaleString()} words,{" "}
+              {maxBugReportBodyLines.toLocaleString()} lines
+            </span>
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>
+                {bodyStats.words.toLocaleString()} /{" "}
+                {maxBugReportBodyWords.toLocaleString()} words
+              </span>
+              <span>
+                {bodyStats.lines.toLocaleString()} /{" "}
+                {maxBugReportBodyLines.toLocaleString()} lines
+              </span>
+              <span>
+                {bodyStats.characters.toLocaleString()} /{" "}
+                {maxBugReportBodyCharacters.toLocaleString()} chars
+              </span>
+            </span>
+          </div>
 
           {attachments.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2 min-[560px]:grid-cols-4">
+            <div className="grid shrink-0 grid-cols-2 gap-2 min-[560px]:grid-cols-4">
               {attachments.map((attachment, index) => (
                 <div
                   key={`${attachment.fileName}-${index}`}
@@ -798,7 +977,7 @@ function BugReportComposer({
             </div>
           ) : null}
 
-          <div className="flex flex-col gap-2 min-[520px]:flex-row min-[520px]:items-center min-[520px]:justify-between">
+          <div className="flex shrink-0 flex-col gap-2 min-[520px]:flex-row min-[520px]:items-center min-[520px]:justify-between">
             <input
               ref={fileInputRef}
               type="file"
@@ -854,6 +1033,7 @@ function BugReportList({
   title,
   emptyText,
   className,
+  variant = "card",
   onSelect,
 }: {
   reports: BugReport[];
@@ -861,10 +1041,20 @@ function BugReportList({
   title?: string;
   emptyText?: string;
   className?: string;
+  variant?: "card" | "inbox";
   onSelect: (reportId: string) => void;
 }) {
+  const isInbox = variant === "inbox";
+
   return (
-    <div className={cn("space-y-1.5", className)}>
+    <div
+      className={cn(
+        isInbox
+          ? "min-w-0 divide-y divide-[#e5eaf2] overflow-x-hidden rounded-[8px] bg-white ring-1 ring-[#dbe5f4] dark:divide-[#263a55] dark:bg-[#0b1523] dark:ring-[#263a55]"
+          : "space-y-1.5",
+        className,
+      )}
+    >
       {title ? (
         <div className="px-1 text-xs font-semibold uppercase tracking-wide text-[#64748b] dark:text-muted-foreground">
           {title}
@@ -873,7 +1063,9 @@ function BugReportList({
       {reports.length === 0 ? (
         <EmptyReferenceState>
           {emptyText ??
-            (title ? "No bug reports yet." : "No bug reports match this search.")}
+            (title
+              ? "No bug reports yet."
+              : "No bug reports match this search.")}
         </EmptyReferenceState>
       ) : (
         reports.map((report) => {
@@ -884,9 +1076,14 @@ function BugReportList({
               key={report.id}
               type="button"
               className={cn(
-                "w-full rounded-[8px] bg-white p-2.5 text-left ring-1 ring-[#dbe5f4] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#0f1b2a] dark:ring-[#263a55] dark:hover:bg-white/[0.04]",
-                selected &&
-                  "bg-[#eff6ff] ring-[#93c5fd] dark:bg-blue-400/10 dark:ring-blue-300/40",
+                isInbox
+                  ? "w-full border-l-2 border-transparent bg-white px-3 py-3 text-left transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563eb] dark:bg-[#0b1523] dark:hover:bg-white/[0.04]"
+                  : "w-full rounded-[8px] bg-white p-2.5 text-left ring-1 ring-[#dbe5f4] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#0f1b2a] dark:ring-[#263a55] dark:hover:bg-white/[0.04]",
+                selected
+                  ? isInbox
+                    ? "border-[#2563eb] bg-[#eff6ff] dark:border-[#60a5fa] dark:bg-blue-400/10"
+                    : "bg-[#eff6ff] ring-[#93c5fd] dark:bg-blue-400/10 dark:ring-blue-300/40"
+                  : null,
               )}
               onClick={() => onSelect(report.id)}
             >
@@ -910,7 +1107,7 @@ function BugReportList({
                       ) : null}
                     </div>
                   ) : null}
-                  <div className="mt-1 line-clamp-2 text-xs leading-5 text-[#475569] dark:text-muted-foreground">
+                  <div className="mt-1 line-clamp-2 break-words text-xs leading-5 text-[#475569] [overflow-wrap:anywhere] dark:text-muted-foreground">
                     {report.body}
                   </div>
                   {report.attachments.length > 0 ? (
@@ -933,25 +1130,31 @@ function BugReportDetail({
   report,
   canManageStatus,
   isUpdatingStatus,
+  isDeleting = false,
   isLoadingAttachments = false,
   className,
   contentClassName,
   onStatusChange,
+  onDelete,
+  onClose,
 }: {
   report: BugReport;
   canManageStatus: boolean;
   isUpdatingStatus: boolean;
+  isDeleting?: boolean;
   isLoadingAttachments?: boolean;
   className?: string;
   contentClassName?: string;
   onStatusChange: (status: "OPEN" | "SOLVED") => void;
+  onDelete?: () => void;
+  onClose?: () => void;
 }) {
   const isSolved = bugReportStatus(report) === "SOLVED";
 
   return (
     <Card
       className={cn(
-        "flex min-h-[360px] max-h-[min(46rem,calc(100vh-8rem))] flex-col overflow-hidden min-[1120px]:min-h-0",
+        "flex min-h-[360px] max-h-[min(46rem,calc(100dvh-8rem))] flex-col overflow-hidden min-[980px]:min-h-0",
         className,
       )}
     >
@@ -959,37 +1162,68 @@ function BugReportDetail({
         <div className="flex items-start gap-3">
           <ReporterAvatar report={report} />
           <div className="min-w-0 flex-1">
-            <CardTitle className="truncate">{reportReporterName(report)}</CardTitle>
+            <CardTitle className="truncate">
+              {reportReporterName(report)}
+            </CardTitle>
             <CardDescription className="text-xs">
               {report.reporter.email ?? "No email"}
             </CardDescription>
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {canManageStatus ? (
-              <Button
+              <>
+                <Button
+                  type="button"
+                  variant={isSolved ? "outline" : "default"}
+                  size="sm"
+                  className={cn(
+                    "h-8 px-2 text-xs",
+                    !isSolved && "bg-[#16a34a] hover:bg-[#15803d]",
+                  )}
+                  disabled={isUpdatingStatus || isDeleting}
+                  onClick={() => onStatusChange(isSolved ? "OPEN" : "SOLVED")}
+                >
+                  {isUpdatingStatus ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : isSolved ? (
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                  ) : (
+                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {isUpdatingStatus
+                    ? "Updating..."
+                    : isSolved
+                      ? "Reopen"
+                      : "Mark solved"}
+                </Button>
+                {onDelete ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="h-8 px-2 text-xs"
+                    disabled={isUpdatingStatus || isDeleting}
+                    onClick={onDelete}
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {isDeleting ? "Deleting..." : "Delete"}
+                  </Button>
+                ) : null}
+              </>
+            ) : null}
+            {onClose ? (
+              <button
                 type="button"
-                variant={isSolved ? "outline" : "default"}
-                size="sm"
-                className={cn(
-                  "h-8 px-2 text-xs",
-                  !isSolved && "bg-[#16a34a] hover:bg-[#15803d]",
-                )}
-                disabled={isUpdatingStatus}
-                onClick={() => onStatusChange(isSolved ? "OPEN" : "SOLVED")}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[#64748b] transition-colors hover:bg-[#eef2f7] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+                aria-label="Close bug report"
+                onClick={onClose}
               >
-                {isUpdatingStatus ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : isSolved ? (
-                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                ) : (
-                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                {isUpdatingStatus
-                  ? "Updating..."
-                  : isSolved
-                    ? "Reopen"
-                    : "Mark solved"}
-              </Button>
+                <X className="h-4 w-4" />
+              </button>
             ) : null}
           </div>
         </div>
@@ -1013,12 +1247,14 @@ function BugReportDetail({
           {isSolved && report.solvedAt ? (
             <span className="rounded-[7px] bg-[#ecfdf0] px-2 py-1 font-medium text-[#15803d] dark:bg-emerald-400/10 dark:text-emerald-200">
               Solved {formatFullDate(report.solvedAt)}
-              {report.solvedBy ? ` by ${reportReporterName({ ...report, reporter: report.solvedBy })}` : ""}
+              {report.solvedBy
+                ? ` by ${reportReporterName({ ...report, reporter: report.solvedBy })}`
+                : ""}
             </span>
           ) : null}
         </div>
 
-        <div className="whitespace-pre-wrap rounded-[8px] bg-[#f8fafc] p-3 text-sm leading-6 text-[#0f172a] ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55]">
+        <div className="break-words whitespace-pre-wrap rounded-[8px] bg-[#f8fafc] p-3 text-sm leading-6 text-[#0f172a] ring-1 ring-[#dbe5f4] [overflow-wrap:anywhere] dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55]">
           {report.body}
         </div>
 
@@ -1107,7 +1343,21 @@ function bugReportMatchesQuery(report: BugReport, query: string) {
   const email = report.reporter.email?.toLowerCase() ?? "";
   const body = report.body.toLowerCase();
 
-  return reporter.includes(query) || email.includes(query) || body.includes(query);
+  return (
+    reporter.includes(query) || email.includes(query) || body.includes(query)
+  );
+}
+
+function bugReportTextStats(value: string) {
+  const characters = value.length;
+  const words = value.trim() ? (value.trim().match(/\S+/g)?.length ?? 0) : 0;
+  const lines = value.length > 0 ? value.split(/\r\n|\r|\n/).length : 0;
+
+  return { characters, words, lines };
+}
+
+function limitMessage() {
+  return `Bug reports can be up to ${maxBugReportBodyWords.toLocaleString()} words, ${maxBugReportBodyLines.toLocaleString()} lines, and ${maxBugReportBodyCharacters.toLocaleString()} characters.`;
 }
 
 function formatShortDate(value: string | Date) {

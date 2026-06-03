@@ -36,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={inter.variable}>
         <Providers>
-          <div className="min-h-screen">{children}</div>
+          <div className="min-h-[100dvh]">{children}</div>
         </Providers>
       </body>
     </html>

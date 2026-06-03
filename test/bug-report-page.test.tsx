@@ -2,6 +2,7 @@
 
 import React from "react";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -57,6 +58,7 @@ const solvedReport = {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("BugReportPage", () => {
@@ -87,12 +89,12 @@ describe("BugReportPage", () => {
       />,
     );
 
-    const openList = screen.getByText("Open bug reports").parentElement!;
+    const openList = screen
+      .getByRole("heading", { name: "Open bug reports" })
+      .closest(".reference-card") as HTMLElement;
 
     expect(within(openList).getByText("Blank page after save.")).toBeTruthy();
-    expect(
-      screen.queryByText("Screenshot upload was failing."),
-    ).toBeNull();
+    expect(screen.queryByText("Screenshot upload was failing.")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Mark solved" }));
 
@@ -111,6 +113,147 @@ describe("BugReportPage", () => {
     expect(
       within(archive).getByText("Screenshot upload was failing."),
     ).toBeTruthy();
-    expect(within(archive).getByRole("button", { name: "Reopen" })).toBeTruthy();
+    expect(
+      within(archive).getByRole("button", { name: "Reopen" }),
+    ).toBeTruthy();
+  });
+
+  it("lets admins delete bug reports from the report popup", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      <BugReportPage
+        initialReports={[openReport]}
+        canReviewAll
+        currentUserName="Admin"
+        initialSelectedReportId={openReport.id}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/bug-reports/bug-open",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("No open bug reports.")).toBeTruthy(),
+    );
+  });
+
+  it("keeps a dismissed direct-linked report closed after screenshots load", async () => {
+    const reportWithPendingAttachment = {
+      ...openReport,
+      attachments: [
+        {
+          id: "bug-attachment-1",
+          fileName: "screenshot.png",
+          contentType: "image/png",
+          sizeBytes: 128,
+          createdAt: "2026-05-29T15:01:00.000Z",
+        },
+      ],
+    };
+    const reportWithLoadedAttachment = {
+      ...reportWithPendingAttachment,
+      attachments: [
+        {
+          ...reportWithPendingAttachment.attachments[0],
+          dataUrl: "data:image/png;base64,c2NyZWVuc2hvdA==",
+        },
+      ],
+    };
+    let resolveFetch!: (response: Response) => void;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BugReportPage
+        initialReports={[reportWithPendingAttachment]}
+        canReviewAll
+        currentUserName="Admin"
+        initialSelectedReportId={openReport.id}
+      />,
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "Bug report detail" }),
+    ).toBeTruthy();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Close bug report" }));
+    expect(
+      screen.queryByRole("dialog", { name: "Bug report detail" }),
+    ).toBeNull();
+
+    await act(async () => {
+      resolveFetch(Response.json({ bugReport: reportWithLoadedAttachment }));
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Bug report detail" }),
+      ).toBeNull(),
+    );
+  });
+
+  it("keeps open reports in an internally scrolling list", () => {
+    const manyReports = Array.from({ length: 24 }, (_, index) => ({
+      ...openReport,
+      id: `bug-open-${index}`,
+      body: `Open bug report ${index + 1}`,
+      createdAt: `2026-05-${String(1 + (index % 28)).padStart(2, "0")}T15:00:00.000Z`,
+    }));
+
+    render(
+      <BugReportPage
+        initialReports={manyReports}
+        canReviewAll
+        currentUserName="Admin"
+      />,
+    );
+
+    const reportList = screen
+      .getByRole("button", { name: /Open bug report 24/ })
+      .parentElement as HTMLElement;
+
+    expect(reportList.className).toContain("overflow-y-auto");
+    expect(reportList.className).toContain("overscroll-contain");
+    expect(reportList.className).toContain("[scrollbar-gutter:stable]");
+  });
+
+  it("prevents oversized bug reports from being submitted", () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <BugReportPage
+        initialReports={[]}
+        canReviewAll={false}
+        currentUserName="Alex Employee"
+      />,
+    );
+
+    const longReport = Array.from({ length: 7501 }, () => "a").join(" ");
+
+    fireEvent.change(screen.getByLabelText("Bug report text"), {
+      target: { value: longReport },
+    });
+
+    expect(screen.getByText("7,501 / 7,500 words")).toBeTruthy();
+
+    const sendButton = screen.getByRole("button", { name: "Send report" });
+
+    expect((sendButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(sendButton);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

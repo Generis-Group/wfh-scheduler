@@ -95,23 +95,28 @@ describe("ReviewerDashboard weekly reports", () => {
       const actions = group.querySelectorAll(
         '[data-testid="employee-report-row-action"]',
       );
-      expect(actions).toHaveLength(1);
-      actions.forEach((action) => {
-        expect(action.querySelector("svg")).toBeTruthy();
-      });
+      expect(actions).toHaveLength(0);
       expect(
         group.querySelector('button[aria-haspopup="menu"] svg'),
       ).toBeTruthy();
     });
 
-    expect(screen.getByRole("button", { name: "Review" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Review" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Send reminder to Alex Employee" }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: "Week" })).toBeNull();
     expect(
       screen.getByRole("button", { name: "More actions for Alex Employee" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Send reminder to Alex Employee" }),
+      screen.getByRole("button", { name: "More actions for Jad Chahin" }),
     ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "More actions for Alex Employee" }),
+    );
+    expect(screen.getByRole("menuitem", { name: "Send reminder" })).toBeTruthy();
   });
 
   it("chooses the selected read action from the selected reports", async () => {
@@ -185,6 +190,149 @@ describe("ReviewerDashboard weekly reports", () => {
     ).toEqual([{ read: true }, { read: true }]);
   });
 
+  it("lets admins reopen submitted reports from the row menu", async () => {
+    const reopenedReport = {
+      ...submittedReport,
+      status: "DRAFT" as const,
+      submittedAt: null,
+    };
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn(async () => {
+      return new Response(JSON.stringify({ report: reopenedReport }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ReviewerDashboard
+        rows={[{ user: employee, report: submittedReport }]}
+        metrics={metrics}
+        date="2026-05-13"
+        reviewerId="admin-1"
+        viewerRoles={["ADMIN"]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "More actions for Alex Employee" }),
+    );
+
+    expect(screen.getByText("Admin actions")).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Mark as read" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reopen to draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/reports/report-1/reopen", {
+        method: "POST",
+      });
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.getByText("Draft")).toBeTruthy();
+    expect(
+      await screen.findByText("Alex Employee's report was reopened to draft."),
+    ).toBeTruthy();
+  });
+
+  it("lets admins delete submitted reports from the row menu", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn(async () => {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ReviewerDashboard
+        rows={[{ user: employee, report: submittedReport }]}
+        metrics={metrics}
+        date="2026-05-13"
+        reviewerId="admin-1"
+        viewerRoles={["ADMIN"]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "More actions for Alex Employee" }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete report" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/reports/report-1", {
+        method: "DELETE",
+      });
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.getAllByText("Missing").length).toBeGreaterThan(1);
+    expect(
+      await screen.findByText("Alex Employee's submitted report was deleted."),
+    ).toBeTruthy();
+  });
+
+  it("shows an error when reopening a report request fails", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn(async () => {
+      throw new Error("Network unavailable");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ReviewerDashboard
+        rows={[{ user: employee, report: submittedReport }]}
+        metrics={metrics}
+        date="2026-05-13"
+        reviewerId="admin-1"
+        viewerRoles={["ADMIN"]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "More actions for Alex Employee" }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reopen to draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/reports/report-1/reopen", {
+        method: "POST",
+      });
+    });
+    expect(await screen.findByText("Unable to reopen report.")).toBeTruthy();
+  });
+
+  it("shows an error when deleting a submitted report request fails", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn(async () => {
+      throw new Error("Network unavailable");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ReviewerDashboard
+        rows={[{ user: employee, report: submittedReport }]}
+        metrics={metrics}
+        date="2026-05-13"
+        reviewerId="admin-1"
+        viewerRoles={["ADMIN"]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "More actions for Alex Employee" }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete report" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/reports/report-1", {
+        method: "DELETE",
+      });
+    });
+    expect(await screen.findByText("Unable to delete report.")).toBeTruthy();
+  });
+
   it("does not show a redundant submitted status pill inside opened daily reports", async () => {
     const fetchMock = vi.fn(
       async () =>
@@ -204,7 +352,10 @@ describe("ReviewerDashboard weekly reports", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "More actions for Alex Employee" }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open report" }));
 
     expect(
       await screen.findByRole("heading", { name: "Daily Report" }),
@@ -261,7 +412,10 @@ describe("ReviewerDashboard weekly reports", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Back to review dashboard" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "More actions for Alex Employee" }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open report" }));
     expect(new URL(window.location.href).searchParams.get("reportId")).toBe(
       "report-1",
     );
@@ -528,8 +682,9 @@ describe("ReviewerDashboard weekly reports", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Send reminder to Alex Employee" }),
+      screen.getByRole("button", { name: "More actions for Alex Employee" }),
     );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Send reminder" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(

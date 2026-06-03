@@ -15,5 +15,12 @@ export function revalidateSettingsRoutes() {
 }
 
 export function revalidateAdminRoutes() {
-  revalidatePaths(["/admin", "/review", "/settings"]);
+  revalidatePaths([
+    "/admin",
+    "/admin/team",
+    "/admin/departments",
+    "/admin/reports",
+    "/review",
+    "/settings",
+  ]);
 }

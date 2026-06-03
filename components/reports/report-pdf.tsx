@@ -88,10 +88,15 @@ export function ReportPdfDocument({
   const activityItems = activities ?? [];
 
   return (
-    <main className={cn("reference-page report-pdf-page", className)}>
+    <main
+      className={cn(
+        "reference-page report-pdf-page min-[1120px]:flex min-[1120px]:h-full min-[1120px]:min-h-0 min-[1120px]:flex-col",
+        className,
+      )}
+    >
       <div
         className={cn(
-          "report-pdf-wrapper mx-auto",
+          "report-pdf-wrapper mx-auto min-[1120px]:min-h-0 min-[1120px]:flex-1 min-[1120px]:overflow-y-auto min-[1120px]:overscroll-contain min-[1120px]:pr-1 min-[1120px]:[scrollbar-gutter:stable]",
           hasReviewNotesPanel ? "max-w-[1320px]" : "max-w-[980px]",
         )}
       >

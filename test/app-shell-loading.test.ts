@@ -187,27 +187,15 @@ describe("authenticated app shell loading boundaries", () => {
     expect(rootLayoutSource).not.toContain("auth()");
   });
 
-  it("uses a suspense fallback while the authenticated app shell loads", () => {
+  it("does not use a full-shell skeleton fallback for authenticated routes", () => {
     const appLayoutSource = fs.readFileSync(
       path.join(root, "app", "(app)", "layout.tsx"),
       "utf8",
     );
-    const fallbackSource = fs.readFileSync(
-      path.join(
-        root,
-        "components",
-        "reports",
-        "app-shell-loading-fallback.tsx",
-      ),
-      "utf8",
-    );
 
-    expect(appLayoutSource).toContain("<Suspense");
-    expect(appLayoutSource).toContain("AppShellLoadingFallback");
-    expect(fallbackSource).not.toContain("ReferenceAppShell");
-    expect(fallbackSource).not.toContain("profileLoading");
-    expect(fallbackSource).toContain("PageLoadingSkeleton");
-    expect(fallbackSource).toContain("lg:grid-cols-[176px_minmax(0,1fr)]");
+    expect(appLayoutSource).not.toContain("<Suspense");
+    expect(appLayoutSource).not.toContain("AppShellLoadingFallback");
+    expect(appLayoutSource).not.toContain("fallback=");
   });
 
   it("keeps uploaded profile images available in the app shell", () => {
@@ -250,6 +238,8 @@ describe("authenticated app shell loading boundaries", () => {
     expect(shellPageKindFromHref("/reports", "employee")).toBe("reports");
     expect(shellPageKindFromHref("/review", "reviewer")).toBe("review");
     expect(shellPageKindFromHref("/admin", "admin")).toBe("admin");
+    expect(shellPageKindFromHref("/admin/team", "admin")).toBe("admin");
+    expect(loadingKindFromHref("/admin/team", "admin")).toBe("admin");
     expect(shellPageKindFromHref("/bugs", "employee")).toBe("bugs");
     expect(shellPageKindFromHref("/settings#account", "employee")).toBe(
       "settings",
@@ -280,7 +270,7 @@ describe("authenticated app shell loading boundaries", () => {
     ).toBe("true");
   });
 
-  it("splits reviewer and admin navigation", () => {
+  it("shows review access for reviewers and admins", () => {
     renderReferenceShell("Current page content", "reviewer");
 
     expect(
@@ -292,8 +282,8 @@ describe("authenticated app shell loading boundaries", () => {
 
     renderReferenceShell("Current page content", "admin");
 
-    expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
-    expect(uniqueLinkHrefs("Admin")).toEqual(["/admin"]);
+    expect(uniqueLinkHrefs("Review")).toEqual(["/review"]);
+    expect(uniqueLinkHrefs("Admin")).toEqual(["/admin/team"]);
   });
 
   it("shows all relevant nav destinations for multi-role users", () => {
@@ -306,8 +296,8 @@ describe("authenticated app shell loading boundaries", () => {
     expect(uniqueLinkHrefs("Daily")).toEqual([`/?date=${todayDateString()}`]);
     expect(uniqueLinkHrefs("Reports")).toEqual(["/reports"]);
     expect(uniqueLinkHrefs("Review")).toEqual(["/review"]);
-    expect(uniqueLinkHrefs("Admin")).toEqual(["/admin"]);
-    expect(uniqueLinkHrefs("Bugs")).toEqual(["/bugs?from=%2F"]);
+    expect(uniqueLinkHrefs("Admin")).toEqual(["/admin/team"]);
+    expect(uniqueLinkHrefs("Issues")).toEqual(["/bugs?from=%2F"]);
     expect(uniqueLinkHrefs("Settings")).toEqual(["/settings"]);
   });
 
@@ -317,7 +307,7 @@ describe("authenticated app shell loading boundaries", () => {
 
     renderReferenceShell();
 
-    expect(uniqueLinkHrefs("Bugs")).toEqual([
+    expect(uniqueLinkHrefs("Issues")).toEqual([
       "/bugs?from=%2Freports%3Fdate%3D2026-05-27",
     ]);
   });
@@ -372,8 +362,8 @@ describe("authenticated app shell loading boundaries", () => {
 
     renderReferenceShell("Current page content", "admin");
 
-    expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
-    expect(uniqueLinkHrefs("Generis")).toEqual(["/admin"]);
+    expect(uniqueLinkHrefs("Review")).toEqual(["/review"]);
+    expect(uniqueLinkHrefs("Generis")).toEqual(["/admin/team"]);
   });
 
   it("persists fresh dashboard dates across shell navigation", async () => {
@@ -405,19 +395,54 @@ describe("authenticated app shell loading boundaries", () => {
 
     await waitFor(() => {
       expect(uniqueLinkHrefs("Review")).toEqual(["/review?date=2026-05-19"]);
-      expect(uniqueLinkHrefs("Generis")).toEqual(["/review?date=2026-05-19"]);
+      expect(uniqueLinkHrefs("Generis")).toEqual([
+        "/review?date=2026-05-19",
+      ]);
     });
   });
 
-  it("keeps desktop scrolling inside the page content pane", () => {
+  it("navigates when only the route query changes", async () => {
+    mockPathname.current = "/admin/team";
+    mockSearchParams.current = "tab=old";
+
+    renderReferenceShell("Current page content", "admin");
+
+    fireEvent.click(screen.getAllByRole("link", { name: "Admin" })[0]);
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/admin/team");
+  });
+
+  it("links admins directly to the team page and shows the admin skeleton immediately", () => {
+    mockPathname.current = "/bugs";
+
+    renderReferenceShell("Bug page content", "admin");
+
+    const adminLink = screen.getAllByRole("link", { name: "Admin" })[0];
+
+    fireEvent.click(adminLink);
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/admin/team");
+    expect(adminLink.className).toContain("text-[#2563eb]");
+    expect(screen.queryByText("Bug page content")).toBeNull();
+    expect(screen.getByLabelText("Loading page")).toBeTruthy();
+    expect(
+      document
+        .querySelector(".reference-content-scroll")
+        ?.getAttribute("aria-busy"),
+    ).toBe("true");
+  });
+
+  it("keeps app scrolling inside the page content pane", () => {
     const shellSource = fs.readFileSync(
       path.join(root, "components", "reports", "reference-shell.tsx"),
       "utf8",
     );
 
     expect(shellSource).toContain("reference-content-scroll");
-    expect(shellSource).toContain("lg:overflow-y-auto");
-    expect(shellSource).toContain("lg:h-screen lg:overflow-hidden");
+    expect(shellSource).toContain("h-[100dvh] min-h-0 overflow-hidden");
+    expect(shellSource).toContain(
+      "reference-content-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain",
+    );
     expect(shellSource).toContain(
       "resetContentScroll(contentScrollRef.current)",
     );
@@ -440,7 +465,7 @@ describe("authenticated app shell loading boundaries", () => {
     );
 
     expect(shellSource).toContain('href: "/settings"');
-    expect(shellSource).toContain('href: "/admin"');
+    expect(shellSource).toContain('href: defaultAdminHref');
     expect(shellSource).toContain('prefetch: "intent"');
     expect(shellSource).toContain('item.prefetch === "eager"');
   });

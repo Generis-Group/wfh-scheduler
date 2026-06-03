@@ -15,8 +15,6 @@ import { flushSync } from "react-dom";
 import {
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Copy,
   Download,
   Edit3,
@@ -75,6 +73,10 @@ import {
   type SummaryActivityReferenceDragPayload,
 } from "@/lib/summary-drag";
 import { startClientTiming } from "@/lib/performance";
+import {
+  emptyReportSubmitMessage,
+  hasSubmitReadyContent,
+} from "@/lib/report-submit-readiness";
 import type { SyncProgressEvent } from "@/lib/services/sync";
 import { cn } from "@/lib/utils";
 
@@ -133,9 +135,10 @@ const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
   { value: "OUT_OF_OFFICE", label: "Out of office" },
 ];
 
-const activityPageSize = 5;
 const autoSaveDelayMs = 600;
 const autoSaveRequestHeader = "X-Generis-Autosave";
+const interactiveActivityControlSelector =
+  "a, button, input, textarea, select, [role='button'], [role='textbox'], [contenteditable='true']";
 type BusyAction = "submit" | "delete";
 type AutoSaveStatus = "saved" | "saving" | "error";
 type SyncProviderKey = keyof typeof syncProviderLabels;
@@ -201,6 +204,25 @@ type SyncResponseBody = {
   staleCount?: number;
   activities?: Activity[];
 };
+
+function isInteractiveActivityControl(target: EventTarget | null) {
+  return target instanceof Element
+    ? Boolean(target.closest(interactiveActivityControlSelector))
+    : false;
+}
+
+function activitySearchText(activity: Activity, title = activity.title) {
+  return [
+    title,
+    activity.description,
+    activity.status,
+    reportActivitySourceLabel(activity.source),
+    formatReportDuration(activity.durationMinutes),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
 
 function toDate(value?: string | Date | null) {
   if (!value) {
@@ -354,6 +376,15 @@ function hasMeaningfulDraftPayload(payload: ReportPayload) {
   );
 }
 
+function hasSubmittableReportPayload(payload: ReportPayload) {
+  return hasSubmitReadyContent({
+    summary: payload.summary,
+    workLocation: payload.workLocation,
+    activities: payload.activityUpdates,
+    manualActivities: payload.manualActivities,
+  });
+}
+
 export function DailyReportApp({
   initialReport,
   date,
@@ -403,7 +434,6 @@ export function DailyReportApp({
   );
   const [pendingDateControl, setPendingDateControl] =
     useState<ReportDateControl | null>(null);
-  const [activityPage, setActivityPage] = useState(1);
   const [activitySearch, setActivitySearch] = useState("");
   const [googleTaskFinderOpen, setGoogleTaskFinderOpen] = useState(false);
   const [googleTaskQuery, setGoogleTaskQuery] = useState("");
@@ -422,6 +452,7 @@ export function DailyReportApp({
   const locationMenuRef = useRef<HTMLDivElement | null>(null);
   const importMenuRef = useRef<HTMLDivElement | null>(null);
   const activityMenuRef = useRef<HTMLDivElement | null>(null);
+  const activityMenuOpenedAtRef = useRef(0);
   const googleTaskSearchAbortRef = useRef<AbortController | null>(null);
   const autoSaveTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef<Promise<Report | null> | null>(null);
@@ -499,7 +530,6 @@ export function DailyReportApp({
     setMessage(null);
     setAutoSaveStatus("saved");
     setImportProgress(null);
-    setActivityPage(1);
     setActivitySearch("");
     setActivityDragPreview(null);
     setGoogleTaskFinderOpen(false);
@@ -769,19 +799,45 @@ export function DailyReportApp({
       id: activity.id,
       title: activity.title || "Untitled activity",
     });
+    setOpenActivityMenu(null);
   }
 
-  function saveActivityTitle(activity: Activity) {
-    const nextTitle = renamingActivity?.title.trim();
+  function saveActivityTitle(activity: Activity, titleOverride?: string) {
+    const nextTitle = (titleOverride ?? renamingActivity?.title ?? "").trim();
 
     if (!nextTitle) {
+      setRenamingActivity(null);
+      return;
+    }
+
+    if (nextTitle === activity.title) {
+      setRenamingActivity(null);
       return;
     }
 
     setActivity(activity.id, { title: nextTitle });
+    const normalizedSearch = activitySearch.trim().toLowerCase();
+    if (
+      normalizedSearch &&
+      !activitySearchText(activity, nextTitle).includes(normalizedSearch)
+    ) {
+      setActivitySearch(nextTitle);
+    }
     setRenamingActivity(null);
     setOpenActivityMenu(null);
     setMessage("Task renamed locally.");
+  }
+
+  function updateRenamingActivityTitle(activityId: string, title: string) {
+    setRenamingActivity((current) =>
+      current && current.id === activityId ? { ...current, title } : current,
+    );
+  }
+
+  function cancelRenamingActivity(activityId: string) {
+    setRenamingActivity((current) =>
+      current?.id === activityId ? null : current,
+    );
   }
 
   function toggleActivityMenu(
@@ -796,7 +852,7 @@ export function DailyReportApp({
 
     const rect = event.currentTarget.getBoundingClientRect();
     const menuWidth = 240;
-    const menuHeight = 208;
+    const menuHeight = 160;
     const gap = 8;
     const top = Math.min(
       window.innerHeight - menuHeight - 12,
@@ -808,6 +864,7 @@ export function DailyReportApp({
     );
 
     setImportMenuOpen(false);
+    activityMenuOpenedAtRef.current = Date.now();
     setOpenActivityMenu({ id: activityId, top, left });
     setRenamingActivity(null);
   }
@@ -817,7 +874,14 @@ export function DailyReportApp({
       return;
     }
 
-    function closeMenu() {
+    function closeMenu(event: Event) {
+      if (
+        event.type === "scroll" &&
+        (renamingActivity || Date.now() - activityMenuOpenedAtRef.current < 250)
+      ) {
+        return;
+      }
+
       setRenamingActivity(null);
       setOpenActivityMenu(null);
     }
@@ -829,7 +893,7 @@ export function DailyReportApp({
       window.removeEventListener("resize", closeMenu);
       window.removeEventListener("scroll", closeMenu, true);
     };
-  }, [openActivityMenu]);
+  }, [openActivityMenu, renamingActivity]);
 
   const captureCurrentDraftSnapshot = useCallback(
     ({ syncState = true }: { syncState?: boolean } = {}) => {
@@ -1073,6 +1137,13 @@ export function DailyReportApp({
       return;
     }
 
+    const snapshot = captureCurrentDraftSnapshot();
+
+    if (!hasSubmittableReportPayload(snapshot.payload)) {
+      setMessage(emptyReportSubmitMessage);
+      return;
+    }
+
     const finishTiming = startClientTiming("daily:submit", {
       status: reportRef.current.status,
     });
@@ -1303,7 +1374,6 @@ export function DailyReportApp({
           syncResult.activities ?? [],
         ),
       );
-      setActivityPage(1);
       markServerDataStale();
 
       setMessage(
@@ -1369,7 +1439,6 @@ export function DailyReportApp({
       const body = (await response.json()) as { report: Report };
       applySavedReport(body.report, true, "");
       markServerDataStale();
-      setActivityPage(1);
       setGoogleTaskQuery("");
       setGoogleTaskResults([]);
       setGoogleTaskSearchStatus("idle");
@@ -1420,6 +1489,11 @@ export function DailyReportApp({
     activity: Activity,
     event: DragEvent<HTMLElement>,
   ) {
+    if (isInteractiveActivityControl(event.target)) {
+      event.preventDefault();
+      return;
+    }
+
     const payload = activityReferencePayload(activity);
 
     event.dataTransfer.effectAllowed = "copy";
@@ -1520,36 +1594,9 @@ export function DailyReportApp({
   const normalizedActivitySearch = activitySearch.trim().toLowerCase();
   const filteredActivities = normalizedActivitySearch
     ? visibleActivities.filter((activity) =>
-        [
-          activity.title,
-          activity.description,
-          activity.status,
-          reportActivitySourceLabel(activity.source),
-          formatReportDuration(activity.durationMinutes),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedActivitySearch),
+        activitySearchText(activity).includes(normalizedActivitySearch),
       )
     : visibleActivities;
-  const activityPageCount = Math.max(
-    1,
-    Math.ceil(filteredActivities.length / activityPageSize),
-  );
-  const currentActivityPage = Math.min(activityPage, activityPageCount);
-  const activityPageStart =
-    filteredActivities.length === 0
-      ? 0
-      : (currentActivityPage - 1) * activityPageSize + 1;
-  const activityPageEnd = Math.min(
-    currentActivityPage * activityPageSize,
-    filteredActivities.length,
-  );
-  const pagedActivities = filteredActivities.slice(
-    (currentActivityPage - 1) * activityPageSize,
-    currentActivityPage * activityPageSize,
-  );
   const selectedWorkLocationLabel = workLocationLabel(workLocation);
   const activityReferences = useMemo(
     () =>
@@ -1565,15 +1612,6 @@ export function DailyReportApp({
       ),
     [visibleActivities],
   );
-
-  useEffect(() => {
-    const pageCount = Math.max(
-      1,
-      Math.ceil(filteredActivities.length / activityPageSize),
-    );
-
-    setActivityPage((current) => Math.min(current, pageCount));
-  }, [filteredActivities.length]);
 
   useEffect(() => {
     const snapshot = latestDraftRef.current;
@@ -1660,13 +1698,11 @@ export function DailyReportApp({
   const menuActivity = openActivityMenu
     ? activities.find((activity) => activity.id === openActivityMenu.id)
     : null;
-  const isRenamingMenuActivity =
-    Boolean(menuActivity) && renamingActivity?.id === menuActivity?.id;
-
   return (
     <>
-      <main className="reference-page">
+      <main className="reference-page daily-report-page min-[1200px]:flex min-[1200px]:h-full min-[1200px]:min-h-0 min-[1200px]:flex-col">
         <ReportPageHeader
+          className="shrink-0"
           title="Daily Update"
           description="Share what you worked on today."
           actions={
@@ -1702,7 +1738,7 @@ export function DailyReportApp({
           }
         />
 
-        <ReportSurface className="mb-3">
+        <ReportSurface className="mb-3 shrink-0">
           <div className="flex flex-wrap items-center gap-2">
             <ReportDateSwitcher
               value={reportDate}
@@ -1798,8 +1834,8 @@ export function DailyReportApp({
           </div>
         </ReportSurface>
 
-        <div className="grid gap-3 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
-          <ReportSurface className="flex min-h-[560px] flex-col">
+        <div className="daily-report-layout grid gap-3 min-[1200px]:min-h-0 min-[1200px]:flex-1 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
+          <ReportSurface className="daily-report-panel flex min-h-[520px] flex-col min-[1200px]:min-h-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -1952,7 +1988,7 @@ export function DailyReportApp({
                     No unfinished tasks found.
                   </div>
                 ) : googleTaskResults.length > 0 ? (
-                  <div className="mt-2 max-h-44 space-y-1 overflow-y-auto pr-1">
+                  <div className="mt-2 max-h-44 space-y-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
                     {googleTaskResults.map((task) => {
                       const taskKey = `${task.taskListId}:${task.taskId}`;
                       const isAdding = addingGoogleTaskKey === taskKey;
@@ -1990,109 +2026,163 @@ export function DailyReportApp({
 
             <ReportSearchField
               value={activitySearch}
-              onValueChange={(value) => {
-                setActivitySearch(value);
-                setActivityPage(1);
-              }}
+              onValueChange={setActivitySearch}
               placeholder="Search work items"
               className="mt-3 dark:bg-[#0f1b2a]"
               aria-label="Search work items"
             />
 
-            <div className="mt-3 h-[390px] space-y-2 overflow-y-auto p-1">
+            <div className="daily-work-items-list mt-3 min-h-[320px] space-y-2 overflow-y-auto overscroll-contain p-1 [scrollbar-gutter:stable] min-[1200px]:min-h-0 min-[1200px]:flex-1">
               {workItemCount === 0 ? (
                 <EmptyReferenceState>
                   No activities yet. Import work from Jira, Calendar, or Tasks.
                 </EmptyReferenceState>
-              ) : pagedActivities.length === 0 ? (
+              ) : filteredActivities.length === 0 ? (
                 <EmptyReferenceState>
                   No work items match your search.
                 </EmptyReferenceState>
               ) : (
-                pagedActivities.map((activity) => {
+                filteredActivities.map((activity) => {
                   const statusLabel = activityStatusLabel(activity);
+                  const isRenamingActivity =
+                    renamingActivity?.id === activity.id;
 
                   return (
                     <article
                       key={activity.id}
-                      draggable
-                      title="Drag into the summary to reference this work item"
                       className={cn(
-                        "grid min-h-[68px] cursor-grab grid-cols-[24px_34px_minmax(0,1fr)_auto_58px_28px] items-center gap-2.5 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] transition-[opacity,transform,box-shadow] active:cursor-grabbing dark:bg-[#0f1b2a] dark:ring-[#263a55]",
+                        "flex min-w-0 flex-col gap-2 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] transition-[opacity,transform,box-shadow] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[720px]:grid min-[720px]:min-h-[68px] min-[720px]:grid-cols-[24px_34px_minmax(0,1fr)_auto_58px_28px] min-[720px]:items-center min-[720px]:gap-2.5",
                         activityDragPreviewId === activity.id &&
                           "scale-[0.995] opacity-55",
                       )}
-                      onDragStart={(event) =>
-                        dragActivityReference(activity, event)
-                      }
-                      onDrag={moveActivityReferenceDrag}
-                      onDragEnd={endActivityReferenceDrag}
                     >
-                      <Checkbox
-                        checked={activity.selected}
-                        onChange={(event) => {
-                          if (event.target.checked) {
-                            setActivity(activity.id, { selected: true });
-                            return;
-                          }
+                      <div className="flex min-w-0 items-start gap-2.5 min-[720px]:contents">
+                        <Checkbox
+                          className="mt-1 min-[720px]:mt-0"
+                          checked={activity.selected}
+                          onChange={(event) => {
+                            if (event.target.checked) {
+                              setActivity(activity.id, { selected: true });
+                              return;
+                            }
 
-                          removeActivity(activity);
-                        }}
-                        aria-label={`Remove ${activity.title}`}
-                      />
-                      <ReportActivitySourceIcon source={activity.source} />
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-[#111827] dark:text-foreground">
-                          {activity.sourceUrl && activity.sourceUrl !== "#" ? (
-                            <a
-                              href={activity.sourceUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              draggable={false}
-                              className="hover:text-[#2563eb]"
-                            >
-                              {activity.title || "Untitled activity"}
-                            </a>
-                          ) : (
-                            activity.title || "Untitled activity"
-                          )}
-                        </div>
-                        <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-[#667085] dark:text-muted-foreground">
-                          <span className="shrink-0">
-                            {reportActivitySourceLabel(activity.source)}
-                          </span>
-                          {activity.description ? (
-                            <>
-                              <span className="text-[#98a2b3]">•</span>
-                              <span className="truncate">
-                                {activity.description}
-                              </span>
-                            </>
-                          ) : null}
-                        </div>
-                      </div>
-                      {statusLabel ? (
-                        <ReferenceBadge
-                          tone={statusTone(activity.status)}
-                          className="justify-self-start px-2.5 py-1 text-xs"
+                            removeActivity(activity);
+                          }}
+                          aria-label={`Remove ${activity.title}`}
+                        />
+                        <div
+                          draggable
+                          title="Drag into the summary to reference this work item"
+                          className="cursor-grab active:cursor-grabbing"
+                          onDragStart={(event) =>
+                            dragActivityReference(activity, event)
+                          }
+                          onDrag={moveActivityReferenceDrag}
+                          onDragEnd={endActivityReferenceDrag}
                         >
-                          {statusLabel}
-                        </ReferenceBadge>
-                      ) : (
-                        <span aria-hidden="true" />
-                      )}
-                      <div className="text-sm font-medium text-[#111827] dark:text-foreground">
-                        {formatReportDuration(activity.durationMinutes)}
+                          <ReportActivitySourceIcon source={activity.source} />
+                        </div>
+                        <div className="min-w-0 flex-1 min-[720px]:flex-none">
+                          <div
+                            className={cn(
+                              "break-words text-sm font-semibold text-[#111827] dark:text-foreground",
+                              !isRenamingActivity && "min-[720px]:truncate",
+                            )}
+                          >
+                            {isRenamingActivity ? (
+                              <Input
+                                value={renamingActivity.title}
+                                onChange={(event) =>
+                                  updateRenamingActivityTitle(
+                                    activity.id,
+                                    event.target.value,
+                                  )
+                                }
+                                onBlur={(event) =>
+                                  saveActivityTitle(
+                                    activity,
+                                    event.currentTarget.value,
+                                  )
+                                }
+                                onFocus={(event) => event.currentTarget.select()}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Escape") {
+                                    event.preventDefault();
+                                    cancelRenamingActivity(activity.id);
+                                    return;
+                                  }
+
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    saveActivityTitle(
+                                      activity,
+                                      event.currentTarget.value,
+                                    );
+                                  }
+                                }}
+                                autoFocus
+                                aria-label="Task title"
+                                className="h-7 rounded-[6px] bg-white px-2 text-sm font-semibold shadow-none ring-1 ring-[#93c5fd] focus-visible:ring-2 dark:bg-[#101d2e] dark:ring-[#3a506d]"
+                              />
+                            ) : activity.sourceUrl &&
+                              activity.sourceUrl !== "#" ? (
+                              <a
+                                href={activity.sourceUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                draggable={false}
+                                className="hover:text-[#2563eb]"
+                              >
+                                {activity.title || "Untitled activity"}
+                              </a>
+                            ) : (
+                              activity.title || "Untitled activity"
+                            )}
+                          </div>
+                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#667085] dark:text-muted-foreground min-[720px]:flex-nowrap">
+                            <span className="shrink-0">
+                              {reportActivitySourceLabel(activity.source)}
+                            </span>
+                            {activity.description ? (
+                              <>
+                                <span className="text-[#98a2b3]">-</span>
+                                <span className="min-w-0 break-words min-[720px]:truncate">
+                                  {activity.description}
+                                </span>
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
                       </div>
-                      <button
-                        className="reference-menu-button"
-                        aria-label={`More actions for ${activity.title}`}
-                        onClick={(event) =>
-                          toggleActivityMenu(activity.id, event)
-                        }
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </button>
+                      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 pl-[3.875rem] min-[720px]:contents min-[720px]:pl-0">
+                        {statusLabel ? (
+                          <ReferenceBadge
+                            tone={statusTone(activity.status)}
+                            className="justify-self-start px-2.5 py-1 text-xs"
+                          >
+                            {statusLabel}
+                          </ReferenceBadge>
+                        ) : (
+                          <span
+                            className="hidden min-[720px]:block"
+                            aria-hidden="true"
+                          />
+                        )}
+                        <div className="text-sm font-medium text-[#111827] dark:text-foreground">
+                          {formatReportDuration(activity.durationMinutes)}
+                        </div>
+                        <button
+                          type="button"
+                          draggable={false}
+                          className="reference-menu-button"
+                          aria-label={`More actions for ${activity.title}`}
+                          onClick={(event) =>
+                            toggleActivityMenu(activity.id, event)
+                          }
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+                      </div>
                     </article>
                   );
                 })
@@ -2105,56 +2195,18 @@ export function DailyReportApp({
                   {workItemCount} work item{workItemCount === 1 ? "" : "s"}
                   {workItemCount > 0
                     ? normalizedActivitySearch
-                      ? `, showing ${activityPageStart}-${activityPageEnd} of ${filteredActivities.length} matches`
-                      : `, showing ${activityPageStart}-${activityPageEnd}`
+                      ? `, ${filteredActivities.length} matching`
+                      : ""
                     : ""}
                 </span>
-              </div>
-              <div className="mt-3 flex min-h-8 justify-end">
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-8 rounded-[7px] bg-white p-0 dark:bg-[#0f1b2a]"
-                    aria-label="Previous work items page"
-                    disabled={
-                      currentActivityPage === 1 ||
-                      filteredActivities.length === 0
-                    }
-                    onClick={() =>
-                      setActivityPage((page) => Math.max(1, page - 1))
-                    }
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="min-w-20 text-center text-xs font-medium text-[#667085] dark:text-muted-foreground">
-                    Page {currentActivityPage} of {activityPageCount}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-8 rounded-[7px] bg-white p-0 dark:bg-[#0f1b2a]"
-                    aria-label="Next work items page"
-                    disabled={
-                      currentActivityPage === activityPageCount ||
-                      filteredActivities.length === 0
-                    }
-                    onClick={() =>
-                      setActivityPage((page) =>
-                        Math.min(activityPageCount, page + 1),
-                      )
-                    }
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
               </div>
             </div>
           </ReportSurface>
 
-          <ReportSurface as="aside" className="min-h-[560px]">
+          <ReportSurface
+            as="aside"
+            className="daily-report-panel daily-summary-panel flex min-h-[520px] flex-col min-[1200px]:min-h-0"
+          >
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
                 Summary
@@ -2186,6 +2238,7 @@ export function DailyReportApp({
             role="menu"
           >
             <button
+              type="button"
               className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
               onClick={() => openActivitySource(menuActivity)}
             >
@@ -2193,59 +2246,15 @@ export function DailyReportApp({
               Open source
             </button>
             <button
+              type="button"
               className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
               onClick={() => startRenamingActivity(menuActivity)}
             >
               <Edit3 className="h-4 w-4" />
               Rename
             </button>
-            {isRenamingMenuActivity ? (
-              <form
-                className="m-1 rounded-[7px] bg-[#f8fafc] p-2 ring-1 ring-[#e1e6ef] dark:bg-[#0b1523] dark:ring-[#263a55]"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  saveActivityTitle(menuActivity);
-                }}
-              >
-                <Input
-                  value={renamingActivity?.title ?? ""}
-                  onChange={(event) =>
-                    setRenamingActivity((current) =>
-                      current && current.id === menuActivity.id
-                        ? { ...current, title: event.target.value }
-                        : current,
-                    )
-                  }
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      setRenamingActivity(null);
-                    }
-                  }}
-                  autoFocus
-                  aria-label="Task title"
-                  placeholder="Task title"
-                  className="h-8 rounded-[6px] bg-white text-sm shadow-none ring-1 ring-[#dfe4ee] focus-visible:ring-2 dark:bg-[#101d2e] dark:ring-[#3a506d]"
-                />
-                <div className="mt-2 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    className="rounded-[6px] px-2.5 py-1.5 text-xs font-semibold text-[#667085] hover:bg-white dark:text-muted-foreground dark:hover:bg-white/5"
-                    onClick={() => setRenamingActivity(null)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="rounded-[6px] bg-[#2563eb] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={!renamingActivity?.title.trim()}
-                  >
-                    Save
-                  </button>
-                </div>
-              </form>
-            ) : null}
             <button
+              type="button"
               className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
               onClick={() => copyActivityTitle(menuActivity)}
             >
@@ -2253,6 +2262,7 @@ export function DailyReportApp({
               Copy title
             </button>
             <button
+              type="button"
               className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#dc2626] hover:bg-[#fef2f2] dark:hover:bg-red-400/10"
               onClick={() => removeActivity(menuActivity)}
             >

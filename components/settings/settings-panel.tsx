@@ -365,8 +365,8 @@ export function SettingsPanel({
 
   return (
     <>
-      <main className="reference-page">
-        <div className="mb-5">
+      <main className="reference-page min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
+        <div className="mb-5 shrink-0">
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
             <span className="text-[#2563eb]">Settings</span>
             <span className="text-[#98a2b3]">/</span>
@@ -381,7 +381,7 @@ export function SettingsPanel({
         </div>
 
         <nav
-          className="mb-6 flex gap-6 overflow-x-auto border-b border-[#d9e1ec] dark:border-[#263a55]"
+          className="mb-6 flex shrink-0 flex-wrap gap-x-6 gap-y-2 border-b border-[#d9e1ec] dark:border-[#263a55]"
           aria-label="Settings categories"
         >
           {settingsSections.map((section) => {
@@ -408,13 +408,16 @@ export function SettingsPanel({
           })}
         </nav>
 
-        <section hidden={activeSection !== "account"} className="min-w-0">
+        <section
+          hidden={activeSection !== "account"}
+          className="min-w-0 min-[1024px]:min-h-0"
+        >
           <AccountSettings user={user} embedded />
         </section>
 
         <section
           hidden={activeSection !== "integrations"}
-          className="min-w-0 space-y-4"
+          className="min-w-0 space-y-4 min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:overflow-y-auto min-[1024px]:overscroll-contain min-[1024px]:pr-1 min-[1024px]:[scrollbar-gutter:stable]"
         >
           <div className="grid min-w-0 gap-4 min-[980px]:grid-cols-2">
             <ProviderCard
@@ -583,7 +586,7 @@ export function SettingsPanel({
         {canManageCompanySettings ? (
           <section
             hidden={activeSection !== "company"}
-            className="min-w-0 space-y-4"
+            className="min-w-0 space-y-4 min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:overflow-y-auto min-[1024px]:overscroll-contain min-[1024px]:pr-1 min-[1024px]:[scrollbar-gutter:stable]"
           >
             <SectionHeading
               icon={Users}

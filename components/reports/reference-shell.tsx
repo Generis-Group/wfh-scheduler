@@ -4,7 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+import { flushSync } from "react-dom";
 import type { ElementType, MouseEvent, ReactNode } from "react";
 import {
   BarChart3,
@@ -15,8 +23,10 @@ import {
   History,
   KeyRound,
   LogOut,
+  Menu,
   Settings,
   Users,
+  X,
 } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -58,13 +68,16 @@ type RememberedDates = {
 
 type PendingNavigation = {
   activeKey: NavKey | null;
+  href: string;
   pageKind: PageLoadingKind | null;
+  startedAt: number;
 };
 
 const reportDateStorageKey = "generis.lastReportDate";
 const reportDateSavedOnStorageKey = "generis.lastReportDateSavedOn";
 const reviewDateStorageKey = "generis.lastReviewDate";
 const reviewDateSavedOnStorageKey = "generis.lastReviewDateSavedOn";
+const defaultAdminHref = "/admin/team";
 
 const employeeNav: NavItem[] = [
   {
@@ -83,7 +96,7 @@ const employeeNav: NavItem[] = [
   },
   {
     href: "/bugs",
-    label: "Bugs",
+    label: "Issues",
     icon: Bug,
     key: "bugs",
     prefetch: "intent",
@@ -114,7 +127,7 @@ const reviewerNav: NavItem[] = [
   },
   {
     href: "/bugs",
-    label: "Bugs",
+    label: "Issues",
     icon: Bug,
     key: "bugs",
     prefetch: "intent",
@@ -123,7 +136,7 @@ const reviewerNav: NavItem[] = [
 
 const adminNav: NavItem[] = [
   {
-    href: "/admin",
+    href: defaultAdminHref,
     label: "Admin",
     icon: Users,
     key: "admin",
@@ -138,7 +151,7 @@ const adminNav: NavItem[] = [
   },
   {
     href: "/bugs",
-    label: "Bugs",
+    label: "Issues",
     icon: Bug,
     key: "bugs",
     prefetch: "intent",
@@ -175,18 +188,23 @@ export function ReferenceAppShell({
   );
   const active = activeNavKey(pathname);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [lastReportDate, setLastReportDate] = useState<string | null>(null);
   const [lastReviewDate, setLastReviewDate] = useState<string | null>(null);
   const [pendingNavigation, setPendingNavigation] =
     useState<PendingNavigation | null>(null);
+  const [isRouteTransitionPending, startRouteTransition] = useTransition();
   const [serverDataVersion, setServerDataVersion] = useState(0);
   const [freshServerDataVersion, setFreshServerDataVersion] = useState(0);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const mobileNavButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileNavRef = useRef<HTMLDivElement | null>(null);
   const prefetchedHrefsRef = useRef<Set<string>>(new Set());
   const routeTimingRef = useRef<ReturnType<typeof startClientTiming> | null>(
     null,
   );
+  const committedChildrenRef = useRef(children);
   const searchParamString = searchParams?.toString() ?? "";
   const currentHref = `${pathname}${searchParamString ? `?${searchParamString}` : ""}`;
   const routeDateParam = searchParams?.get("date") ?? null;
@@ -202,16 +220,28 @@ export function ReferenceAppShell({
   const mobileLogoHref = logoHref;
   const logoActiveKey = getLogoActiveKey(userRoles, variant);
   const canUseDaily = hasShellRole(userRoles, variant, "EMPLOYEE");
-  const canUseReview = hasShellRole(userRoles, variant, "REVIEWER");
+  const canUseReview =
+    hasShellRole(userRoles, variant, "REVIEWER") ||
+    hasShellRole(userRoles, variant, "ADMIN");
   const hasStalePrefetchedData = serverDataVersion !== freshServerDataVersion;
   const navigationPending = pendingNavigation !== null;
   const visibleActive = pendingNavigation?.activeKey ?? active;
   const pendingPageKind = pendingNavigation?.pageKind ?? null;
+  const activeNavItem =
+    displayedNav.find((item) => item.key === visibleActive) ??
+    displayedNav[0] ??
+    null;
 
   useDismissableLayer({
     open: profileOpen,
     refs: [profileMenuRef],
     onDismiss: () => setProfileOpen(false),
+  });
+
+  useDismissableLayer({
+    open: mobileNavOpen,
+    refs: [mobileNavButtonRef, mobileNavRef],
+    onDismiss: () => setMobileNavOpen(false),
   });
 
   const prefetchRoute = useCallback(
@@ -291,11 +321,45 @@ export function ReferenceAppShell({
   }, [canUseReview, pathname, routeDateParam]);
 
   useEffect(() => {
+    if (children === committedChildrenRef.current) {
+      return;
+    }
+
+    committedChildrenRef.current = children;
+
+    if (!pendingNavigation) {
+      return;
+    }
+
     setPendingNavigation(null);
     resetContentScroll(contentScrollRef.current);
     routeTimingRef.current?.({ status: "committed" });
     routeTimingRef.current = null;
-  }, [active, pathname, searchParamString]);
+  }, [children, pendingNavigation]);
+
+  useEffect(() => {
+    if (
+      !pendingNavigation ||
+      isRouteTransitionPending ||
+      currentHref !== pendingNavigation.href
+    ) {
+      return;
+    }
+
+    const minimumSkeletonMs = 180;
+    const elapsedMs = Date.now() - pendingNavigation.startedAt;
+    const timeoutId = window.setTimeout(
+      () => {
+        setPendingNavigation(null);
+        resetContentScroll(contentScrollRef.current);
+        routeTimingRef.current?.({ status: "committed" });
+        routeTimingRef.current = null;
+      },
+      Math.max(0, minimumSkeletonMs - elapsedMs),
+    );
+
+    return () => window.clearTimeout(timeoutId);
+  }, [currentHref, isRouteTransitionPending, pendingNavigation]);
 
   useEffect(() => {
     function syncServerDataVersions() {
@@ -364,6 +428,7 @@ export function ReferenceAppShell({
       onClick: (event: MouseEvent<HTMLAnchorElement>) => {
         const hashOnlyCurrentPage =
           href.includes("#") && href.split("#")[0] === currentHref;
+        const hrefWithoutHash = href.split("#")[0] || "/";
 
         if (
           event.defaultPrevented ||
@@ -372,39 +437,53 @@ export function ReferenceAppShell({
           event.ctrlKey ||
           event.shiftKey ||
           event.altKey ||
-          href === currentHref
+          hrefWithoutHash === currentHref
         ) {
+          setProfileOpen(false);
+          setMobileNavOpen(false);
           return;
         }
 
         if (hashOnlyCurrentPage) {
           setProfileOpen(false);
+          setMobileNavOpen(false);
           return;
         }
 
+        const pageKind = shellPageKindFromHref(href, variant);
+        const pendingActiveKey = activeKey ?? activeNavKey(prefetchHref);
+
+        event.preventDefault();
         resetContentScroll(contentScrollRef.current);
         routeTimingRef.current = startClientTiming("shell:route-navigation", {
           from: currentHref,
           to: href,
         });
-        setPendingNavigation({
-          activeKey: activeKey ?? null,
-          pageKind: shellPageKindFromHref(href, variant),
-        });
-        setProfileOpen(false);
 
-        event.preventDefault();
+        flushSync(() => {
+          setPendingNavigation({
+            activeKey: pendingActiveKey,
+            href,
+            pageKind,
+            startedAt: Date.now(),
+          });
+          setProfileOpen(false);
+          setMobileNavOpen(false);
+        });
+
         if (hasStalePrefetchedData) {
           refreshStaleServerData(router);
         }
-        router.push(href);
+        startRouteTransition(() => {
+          router.push(href);
+        });
       },
     };
   }
 
   return (
-    <div className="reference-app-shell min-h-screen bg-[#f4f7fb] text-[#0f172a] dark:bg-background dark:text-foreground lg:grid lg:h-screen lg:overflow-hidden lg:grid-cols-[176px_minmax(0,1fr)]">
-      <aside className="reference-sidebar sticky top-0 hidden h-screen min-w-0 flex-col bg-white/88 px-3 py-4 shadow-[1px_0_0_rgba(15,23,42,0.04)] backdrop-blur-xl dark:bg-[#0b1422]/96 dark:shadow-[1px_0_0_rgba(255,255,255,0.04)] lg:flex">
+    <div className="reference-app-shell h-[100dvh] min-h-0 overflow-hidden bg-[#f4f7fb] text-[#0f172a] dark:bg-background dark:text-foreground lg:grid lg:grid-cols-[176px_minmax(0,1fr)]">
+      <aside className="reference-sidebar hidden h-full min-w-0 flex-col bg-white/88 px-3 py-4 shadow-[1px_0_0_rgba(15,23,42,0.04)] backdrop-blur-xl dark:bg-[#0b1422]/96 dark:shadow-[1px_0_0_rgba(255,255,255,0.04)] lg:flex">
         <Link
           href={logoHref}
           {...routeLinkProps(logoHref, logoActiveKey)}
@@ -445,10 +524,10 @@ export function ReferenceAppShell({
           })}
         </nav>
       </aside>
-      <div className="flex min-w-0 flex-col lg:h-screen lg:min-h-0">
+      <div className="flex h-full min-h-0 min-w-0 flex-col">
         <header className="sticky top-0 z-20 shrink-0 bg-white/92 shadow-[0_1px_0_rgba(15,23,42,0.05)] backdrop-blur-xl dark:bg-[#0b1422]/94 dark:shadow-[0_1px_0_rgba(255,255,255,0.05)]">
           <div className="flex h-12 w-full items-center justify-between gap-3 px-[clamp(14px,1.7vw,26px)] lg:justify-end">
-            <div className="flex h-full min-w-0 items-center gap-[clamp(16px,2.2vw,34px)] lg:hidden">
+            <div className="flex h-full min-w-0 items-center gap-2 lg:hidden">
               <Link
                 href={mobileLogoHref}
                 {...routeLinkProps(mobileLogoHref, logoActiveKey)}
@@ -463,30 +542,27 @@ export function ReferenceAppShell({
                   />
                 </span>
               </Link>
-
-              <nav className="hidden h-full items-center gap-1 md:flex">
-                {displayedNav.map((item) => {
-                  const Icon = item.icon;
-                  const href = getNavHref(item, rememberedDates, currentHref);
-
-                  return (
-                    <Link
-                      key={item.key}
-                      href={href}
-                      {...routeLinkProps(href, item.key, item.prefetch)}
-                      className={cn(
-                        "flex h-full items-center gap-2 border-b-[3px] px-4 text-sm font-semibold transition-colors",
-                        visibleActive === item.key
-                          ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#bfdbfe]"
-                          : "border-transparent text-[#52647a] hover:text-[#0f172a] dark:text-[#93a4b8] dark:hover:text-[#e2e8f0]",
-                      )}
-                    >
-                      <Icon className="h-[18px] w-[18px]" />
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </nav>
+              <button
+                ref={mobileNavButtonRef}
+                type="button"
+                className="flex h-9 min-w-0 items-center gap-2 rounded-[9px] bg-[#eef4fb] px-2.5 text-sm font-semibold text-[#0f172a] ring-1 ring-[#dbe3ee] transition-colors hover:bg-[#e4eef8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-white/[0.06] dark:text-[#e2e8f0] dark:ring-white/[0.08] dark:hover:bg-white/[0.1]"
+                aria-label="Open navigation menu"
+                aria-expanded={mobileNavOpen}
+                aria-haspopup="menu"
+                onClick={() => {
+                  setProfileOpen(false);
+                  setMobileNavOpen((open) => !open);
+                }}
+              >
+                {mobileNavOpen ? (
+                  <X className="h-4 w-4 shrink-0" />
+                ) : (
+                  <Menu className="h-4 w-4 shrink-0" />
+                )}
+                <span className="max-w-[7.5rem] truncate">
+                  {activeNavItem?.label ?? "Menu"}
+                </span>
+              </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -579,34 +655,49 @@ export function ReferenceAppShell({
               </div>
             </div>
           </div>
-          <nav className="flex h-11 items-center gap-2 overflow-x-auto px-[clamp(14px,1.7vw,26px)] shadow-[0_-1px_0_rgba(15,23,42,0.04)] dark:shadow-[0_-1px_0_rgba(255,255,255,0.04)] md:hidden">
-            {displayedNav.map((item) => {
-              const Icon = item.icon;
-              const href = getNavHref(item, rememberedDates, currentHref);
+          {mobileNavOpen ? (
+            <div
+              ref={mobileNavRef}
+              className="lg:hidden border-t border-[#dbe3ee] px-[clamp(14px,1.7vw,26px)] py-2 dark:border-[#263a55]"
+            >
+              <nav
+                className="grid max-h-[min(24rem,calc(100dvh-5rem))] gap-1 overflow-y-auto overscroll-contain rounded-[10px] bg-white/95 p-1.5 shadow-[0_16px_38px_rgba(15,23,42,0.14)] ring-1 ring-[#dbe3ee] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-white/[0.08]"
+                aria-label="Mobile navigation"
+                role="menu"
+              >
+                {displayedNav.map((item) => {
+                  const Icon = item.icon;
+                  const href = getNavHref(item, rememberedDates, currentHref);
+                  const activeItem = visibleActive === item.key;
 
-              return (
-                <Link
-                  key={item.key}
-                  href={href}
-                  {...routeLinkProps(href, item.key, item.prefetch)}
-                  className={cn(
-                    "flex h-full shrink-0 items-center gap-2 border-b-[3px] px-2 text-sm font-semibold transition-colors",
-                    visibleActive === item.key
-                      ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#93c5fd]"
-                      : "border-transparent text-[#475569] hover:text-[#0f172a] dark:text-[#94a3b8] dark:hover:text-[#e2e8f0]",
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+                  return (
+                    <Link
+                      key={item.key}
+                      href={href}
+                      {...routeLinkProps(href, item.key, item.prefetch)}
+                      role="menuitem"
+                      className={cn(
+                        "flex min-w-0 items-center gap-3 rounded-[8px] px-3 py-2.5 text-sm font-semibold transition-colors",
+                        activeItem
+                          ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
+                          : "text-[#475569] hover:bg-[#eef4fb] hover:text-[#0f172a] dark:text-[#94a3b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]",
+                      )}
+                    >
+                      <Icon className="h-[18px] w-[18px] shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {item.label}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+          ) : null}
         </header>
         <div
           ref={contentScrollRef}
           aria-busy={navigationPending}
-          className="reference-content-scroll min-w-0 flex-1 lg:min-h-0 lg:overflow-y-auto"
+          className="reference-content-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
         >
           {pendingPageKind ? (
             <PageLoadingSkeleton kind={pendingPageKind} />
@@ -674,6 +765,10 @@ function navForRoles(
   }
 
   if (roles.has("ADMIN")) {
+    if (!roles.has("REVIEWER")) {
+      nav.push(reviewerNav.find((item) => item.key === "review")!);
+    }
+
     nav.push(...adminNav.filter((item) => item.key === "admin"));
   }
 
@@ -697,7 +792,7 @@ function getLogoHref(
   }
 
   if (hasShellRole(userRoles, variant, "ADMIN")) {
-    return "/admin";
+    return defaultAdminHref;
   }
 
   return "/settings";

@@ -6,7 +6,7 @@ import { weeklyReportListQuerySchema } from "@/lib/validation";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireRole(["REVIEWER"]);
+    const session = await requireRole(["REVIEWER", "ADMIN"]);
     const url = new URL(request.url);
     const query = weeklyReportListQuerySchema.parse({
       userId: url.searchParams.get("userId"),

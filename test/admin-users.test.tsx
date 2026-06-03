@@ -13,6 +13,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminUsers } from "@/components/admin/admin-users";
 
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/admin/team",
+  useRouter: () => ({
+    push: vi.fn(),
+  }),
+}));
+
 type AdminUsersProps = React.ComponentProps<typeof AdminUsers>;
 
 const initialDepartments: AdminUsersProps["initialDepartments"] = [
@@ -79,7 +86,9 @@ describe("AdminUsers", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Admin" })).toBeTruthy();
-    expect(screen.getByText("Team members")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Team members" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Departments" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Reports" })).toBeTruthy();
     expect(screen.getByLabelText("Team member assignments").className).toContain(
       "overflow-y-auto",
     );
@@ -93,11 +102,53 @@ describe("AdminUsers", () => {
       screen.getByLabelText("Reviewer scope for Riley Reviewer"),
     ).toBeTruthy();
     expect(screen.getByLabelText("Roles for new team member")).toBeTruthy();
-    expect(screen.getByLabelText("Existing departments")).toBeTruthy();
+    expect(screen.queryByLabelText("Existing departments")).toBeNull();
     expect(screen.getAllByText("Reviewer").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Admin").length).toBeGreaterThan(0);
     expect(screen.queryByText("Company settings")).toBeNull();
     expect(screen.queryByText("Required email domain")).toBeNull();
+  });
+
+  it("removes a department from the admin department list and assignments", async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <AdminUsers
+        initialUsers={initialUsers}
+        initialDepartments={initialDepartments}
+        currentUserId="employee-1"
+        section="departments"
+      />,
+    );
+
+    const departmentList = screen.getByLabelText("Existing departments");
+    fireEvent.click(
+      within(departmentList).getByRole("button", {
+        name: "Remove Engineering department",
+      }),
+    );
+
+    expect(screen.getByText("Remove Engineering?")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/departments/dept-engineering",
+      { method: "DELETE" },
+    );
+    await waitFor(() =>
+      expect(within(departmentList).queryByText("Engineering")).toBeNull(),
+    );
+
+    expect(screen.getByText("Department removed.")).toBeTruthy();
   });
 
   it("drafts assignment changes instantly and saves them with the page", async () => {
@@ -206,7 +257,7 @@ describe("AdminUsers", () => {
     ).toBeTruthy();
   });
 
-  it("keeps assignment drafts while paging through team members", () => {
+  it("keeps assignment drafts while the team member list scrolls", () => {
     const manyUsers = [
       ...initialUsers,
       ...Array.from({ length: 9 }, (_, index) => ({
@@ -239,15 +290,14 @@ describe("AdminUsers", () => {
     fireEvent.click(screen.getByRole("option", { name: "Reviewer" }));
     fireEvent.click(screen.getByLabelText("Reviewer scope for Alex Employee"));
     fireEvent.click(screen.getByRole("option", { name: "All departments" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Next team member page" }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Previous team member page" }),
-    );
 
+    expect(screen.queryByLabelText("Next team member page")).toBeNull();
+    expect(screen.queryByLabelText("Previous team member page")).toBeNull();
+    expect(screen.getByLabelText("Team member assignments").className).toContain(
+      "overflow-y-auto",
+    );
     expect(screen.getByText("Employee, Reviewer, Admin")).toBeTruthy();
-    expect(screen.getByText("All departments")).toBeTruthy();
+    expect(screen.getAllByText("All departments").length).toBeGreaterThan(0);
   });
 
   it("does not allow the current admin to remove their own admin role", () => {

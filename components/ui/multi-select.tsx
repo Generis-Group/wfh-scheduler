@@ -37,6 +37,7 @@ export function MultiSelect({
 }: MultiSelectProps) {
   const generatedId = React.useId();
   const wrapperRef = React.useRef<HTMLDivElement>(null);
+  const listboxRef = React.useRef<HTMLDivElement>(null);
   const [open, setOpen] = React.useState(false);
   const selectedOptions = options.filter((option) =>
     value.includes(option.value),
@@ -50,6 +51,24 @@ export function MultiSelect({
     refs: [wrapperRef],
     onDismiss: () => setOpen(false),
   });
+
+  React.useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      if (typeof listboxRef.current?.scrollIntoView === "function") {
+        listboxRef.current.scrollIntoView({
+          block: "nearest",
+          inline: "nearest",
+          behavior: "smooth",
+        });
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [open]);
 
   function orderedValues(nextValues: string[]) {
     const nextValueSet = new Set(nextValues);
@@ -124,11 +143,12 @@ export function MultiSelect({
 
       {open ? (
         <div
+          ref={listboxRef}
           id={listboxId}
           role="listbox"
           aria-labelledby={triggerId}
           aria-multiselectable="true"
-          className="absolute left-0 top-[calc(100%+0.375rem)] z-[90] max-h-72 w-full min-w-[12rem] overflow-y-auto rounded-[8px] bg-white p-1.5 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-black/[0.06] dark:bg-[#0f1b2a] dark:ring-white/[0.08]"
+          className="absolute left-0 top-[calc(100%+0.375rem)] z-[90] max-h-72 w-full min-w-[12rem] scroll-mb-3 scroll-mt-3 overflow-y-auto rounded-[8px] bg-white p-1.5 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-black/[0.06] dark:bg-[#0f1b2a] dark:ring-white/[0.08]"
         >
           {options.map((option) => {
             const selected = value.includes(option.value);

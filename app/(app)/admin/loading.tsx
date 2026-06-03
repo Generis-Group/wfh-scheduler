@@ -1,5 +1,5 @@
-import { PageLoadingSkeleton } from "@/components/reports/page-loading-skeleton";
+import { AdminSectionLoadingFallback } from "@/components/admin/admin-section-frame";
 
 export default function Loading() {
-  return <PageLoadingSkeleton kind="admin" />;
+  return <AdminSectionLoadingFallback />;
 }

@@ -136,7 +136,7 @@ export function AccountSettings({
         user.hasPassword && "min-[1080px]:grid-cols-[minmax(0,1fr)_420px]",
       )}
     >
-      <Card className="min-h-[420px] overflow-hidden md:min-h-[390px]">
+      <Card className="overflow-hidden">
         <CardHeader className="px-5 py-5">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
@@ -238,7 +238,7 @@ export function AccountSettings({
       </Card>
 
       {user.hasPassword ? (
-        <Card className="min-h-[380px] overflow-hidden">
+        <Card className="overflow-hidden">
           <CardHeader className="px-5 py-5">
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
@@ -321,8 +321,8 @@ export function AccountSettings({
   }
 
   return (
-    <main className="reference-page">
-      <div className="reference-page-header">
+    <main className="reference-page min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
+      <div className="reference-page-header shrink-0">
         <div>
           <h1 className="reference-title">Account Settings</h1>
           <p className="reference-subtitle">
@@ -331,7 +331,9 @@ export function AccountSettings({
         </div>
       </div>
 
-      {content}
+      <div className="min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:overflow-y-auto min-[1024px]:overscroll-contain min-[1024px]:pr-1 min-[1024px]:[scrollbar-gutter:stable]">
+        {content}
+      </div>
     </main>
   );
 }
