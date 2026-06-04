@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { Building2, FileText, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -75,7 +75,6 @@ export function AdminSectionFrame({
   const pathname = usePathname();
   const [pendingSection, setPendingSection] =
     useState<PendingAdminSection | null>(null);
-  const [isRouteTransitionPending, startRouteTransition] = useTransition();
   const committedChildrenRef = useRef(children);
   const currentSectionId =
     (pendingSection ? activeSectionFromPathname(pendingSection.href) : null) ??
@@ -99,7 +98,6 @@ export function AdminSectionFrame({
   useEffect(() => {
     if (
       !pendingSection ||
-      isRouteTransitionPending ||
       pathname !== pendingSection.href
     ) {
       return;
@@ -113,7 +111,7 @@ export function AdminSectionFrame({
     );
 
     return () => window.clearTimeout(timeoutId);
-  }, [isRouteTransitionPending, pathname, pendingSection]);
+  }, [pathname, pendingSection]);
 
   function navigateSection(
     href: string,
@@ -135,9 +133,7 @@ export function AdminSectionFrame({
     flushSync(() => {
       setPendingSection({ href, startedAt: Date.now() });
     });
-    startRouteTransition(() => {
-      router.push(href);
-    });
+    router.push(href);
   }
 
   return (

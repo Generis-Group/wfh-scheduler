@@ -257,7 +257,7 @@ describe("authenticated app shell loading boundaries", () => {
     fireEvent.click(reportsLink);
 
     expect(mockRouterPush).toHaveBeenCalledWith("/reports");
-    expect(reportsLink.className).toContain("text-[#2563eb]");
+    expect(reportsLink.className).toContain("bg-[#eff6ff]");
     expect(screen.queryByText("Current page content")).toBeNull();
     expect(screen.getByLabelText("Loading page")).toBeTruthy();
     expect(
@@ -422,7 +422,7 @@ describe("authenticated app shell loading boundaries", () => {
     fireEvent.click(adminLink);
 
     expect(mockRouterPush).toHaveBeenCalledWith("/admin/team");
-    expect(adminLink.className).toContain("text-[#2563eb]");
+    expect(adminLink.className).toContain("bg-[#eff6ff]");
     expect(screen.queryByText("Bug page content")).toBeNull();
     expect(screen.getByLabelText("Loading page")).toBeTruthy();
     expect(
@@ -439,13 +439,29 @@ describe("authenticated app shell loading boundaries", () => {
     );
 
     expect(shellSource).toContain("reference-content-scroll");
-    expect(shellSource).toContain("h-[100dvh] min-h-0 overflow-hidden");
+    expect(shellSource).toMatch(/h-\[100dvh\].*min-h-0.*overflow-hidden/);
     expect(shellSource).toContain(
       "reference-content-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain",
     );
     expect(shellSource).toContain(
       "resetContentScroll(contentScrollRef.current)",
     );
+  });
+
+  it("uses a desktop sidebar and mobile drawer without runtime width measuring", () => {
+    const shellSource = fs.readFileSync(
+      path.join(root, "components", "reports", "reference-shell.tsx"),
+      "utf8",
+    );
+
+    expect(shellSource).toContain("w-60 shrink-0 flex-col");
+    expect(shellSource).toContain('aria-label="Mobile navigation"');
+    expect(shellSource).toContain("xl:flex");
+    expect(shellSource).toContain("xl:hidden");
+    expect(shellSource).not.toContain("ResizeObserver");
+    expect(shellSource).not.toContain("scrollWidth");
+    expect(shellSource).not.toContain("clientWidth");
+    expect(shellSource).not.toContain("useCompactNav");
   });
 
   it("does not server-load slow provider metadata on the settings page", () => {

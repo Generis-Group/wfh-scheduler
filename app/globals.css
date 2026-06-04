@@ -4,27 +4,29 @@
 
 @layer base {
   :root {
-    --background: 214 35% 97%;
-    --foreground: 217 33% 16%;
+    --background: 216 33% 97%;
+    --foreground: 221 39% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 217 33% 16%;
+    --card-foreground: 221 39% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 217 33% 16%;
-    --primary: 214 86% 55%;
+    --popover-foreground: 221 39% 12%;
+    --primary: 221 83% 53%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 214 35% 93%;
-    --secondary-foreground: 217 33% 20%;
-    --muted: 214 30% 94%;
-    --muted-foreground: 215 16% 43%;
-    --accent: 211 86% 94%;
-    --accent-foreground: 214 86% 38%;
+    --secondary: 216 28% 95%;
+    --secondary-foreground: 221 39% 16%;
+    --muted: 216 29% 95%;
+    --muted-foreground: 217 15% 43%;
+    --accent: 216 34% 96%;
+    --accent-foreground: 221 83% 43%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 215 28% 90%;
-    --input: 215 26% 82%;
-    --field: 216 33% 98%;
-    --ring: 214 86% 55%;
+    --border: 216 24% 88%;
+    --input: 216 24% 85%;
+    --field: 0 0% 100%;
+    --ring: 221 83% 53%;
     --radius: 0.5rem;
+    --surface-shadow: 0 10px 28px rgb(15 23 42 / 0.055);
+    --surface-shadow-strong: 0 18px 44px rgb(15 23 42 / 0.12);
   }
 
   .dark {
@@ -48,6 +50,8 @@
     --input: 216 28% 33%;
     --field: 217 32% 15%;
     --ring: 217 91% 60%;
+    --surface-shadow: 0 16px 38px rgb(0 0 0 / 0.24);
+    --surface-shadow-strong: 0 24px 58px rgb(0 0 0 / 0.38);
   }
 
   * {
@@ -61,6 +65,7 @@
       "rlig" 1,
       "calt" 1;
     overflow-x: hidden;
+    text-rendering: optimizeLegibility;
   }
 
   img,
@@ -242,34 +247,34 @@
   }
 
   .reference-page {
-    @apply w-full min-w-0 px-3 pb-3 pt-3 sm:px-4;
+    @apply w-full min-w-0 px-4 pb-4 pt-4 sm:px-5;
     max-width: 100%;
     overflow-x: clip;
   }
 
   .reference-page-header {
-    @apply mb-3 flex flex-wrap items-end justify-between gap-3;
+    @apply mb-4 flex flex-wrap items-end justify-between gap-3;
   }
 
   .reference-title {
-    @apply text-[24px] font-semibold leading-tight tracking-normal text-[#0f172a] dark:text-foreground;
+    @apply text-[26px] font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground;
   }
 
   .reference-subtitle {
-    @apply mt-0.5 max-w-3xl text-sm leading-5 text-[#64748b] dark:text-muted-foreground;
+    @apply mt-1 max-w-3xl text-sm leading-5 text-[#667085] dark:text-muted-foreground;
   }
 
   .reference-toolbar {
-    @apply rounded-[8px] bg-white/[0.92] p-2.5 shadow-[0_8px_24px_rgba(15,23,42,0.05)] backdrop-blur dark:bg-[#0f1b2a]/[0.94] dark:shadow-[0_14px_34px_rgba(0,0,0,0.22)];
+    @apply rounded-[9px] border border-[#dfe5ef] bg-white p-2.5 shadow-[var(--surface-shadow)] backdrop-blur dark:border-[#263a55] dark:bg-[#0f1b2a]/[0.96];
   }
 
   .reference-card {
-    @apply rounded-[8px] bg-white/[0.96] shadow-[0_8px_28px_rgba(15,23,42,0.055)] ring-1 ring-black/[0.045] dark:bg-[#0f1b2a]/95 dark:ring-white/[0.06] dark:shadow-[0_16px_38px_rgba(0,0,0,0.24)];
+    @apply rounded-[9px] border border-[#dfe5ef] bg-white shadow-[var(--surface-shadow)] dark:border-[#263a55] dark:bg-[#0f1b2a]/95;
     max-width: 100%;
   }
 
   .reference-card-muted {
-    @apply rounded-[7px] bg-[#f7f9fc] dark:bg-white/[0.035];
+    @apply rounded-[8px] bg-[#f6f8fb] dark:bg-white/[0.035];
   }
 
   .reference-content-scroll {
@@ -334,7 +339,7 @@
   }
 
   .reference-table-row {
-    @apply rounded-[7px] bg-transparent transition-colors hover:bg-[#f8fafc]/80 dark:hover:bg-white/[0.04];
+    @apply rounded-[7px] bg-transparent transition-colors hover:bg-[#f6f8fb] dark:hover:bg-white/[0.04];
   }
 
   .reference-divider {
@@ -346,7 +351,7 @@
   }
 
   .reference-menu-button {
-    @apply inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-[#64748b] transition-colors hover:bg-[#eef2f7] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground;
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-[#667085] transition-colors hover:bg-[#f3f6fb] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground;
   }
 
   .summary-tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
@@ -366,7 +371,7 @@
   .summary-tiptap-editor .ProseMirror {
     tab-size: 2;
     height: clamp(22rem, 52dvh, 30rem);
-    @apply w-full overflow-y-auto whitespace-pre-wrap rounded-[7px] bg-white px-3.5 py-3.5 text-sm leading-6 text-[#111827] shadow-[inset_0_1px_1px_rgba(15,23,42,0.025)] ring-1 ring-input focus:outline-none focus:ring-2 focus:ring-[#2563eb] dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-input;
+    @apply w-full overflow-y-auto whitespace-pre-wrap rounded-[8px] bg-white px-3.5 py-3.5 text-sm leading-6 text-[#111827] shadow-none ring-1 ring-input focus:outline-none focus:ring-2 focus:ring-[#2563eb] dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-input;
   }
 
   .summary-tiptap-editor .ProseMirror h2 {

@@ -22,9 +22,14 @@ export default async function ChangePasswordPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center bg-[#f4f7fb] px-4 py-10 dark:bg-background">
+    <main className="relative flex min-h-screen items-center justify-center bg-[#f6f8fb] px-4 py-10 dark:bg-background">
       <div className="absolute left-6 top-6">
-        <Image src={generisLogo} alt="Generis" className="h-auto w-[162px]" priority />
+        <Image
+          src={generisLogo}
+          alt="Generis"
+          className="h-auto w-[162px]"
+          priority
+        />
       </div>
       <div className="absolute right-6 top-6">
         <ThemeToggle />

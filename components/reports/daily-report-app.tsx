@@ -22,6 +22,7 @@ import {
   Loader2,
   MoreHorizontal,
   Plus,
+  Save,
   Send,
   Trash2,
   X,
@@ -46,7 +47,6 @@ import {
   ReportActivitySourceIcon,
   ReportPageHeader,
   ReportSearchField,
-  ReportStatusBadge,
   ReportSurface,
 } from "@/components/reports/report-ui";
 import { LazySummaryEditor } from "@/components/reports/lazy-summary-editor";
@@ -135,12 +135,9 @@ const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
   { value: "OUT_OF_OFFICE", label: "Out of office" },
 ];
 
-const autoSaveDelayMs = 600;
-const autoSaveRequestHeader = "X-Generis-Autosave";
 const interactiveActivityControlSelector =
   "a, button, input, textarea, select, [role='button'], [role='textbox'], [contenteditable='true']";
-type BusyAction = "submit" | "delete";
-type AutoSaveStatus = "saved" | "saving" | "error";
+type BusyAction = "save" | "submit" | "delete";
 type SyncProviderKey = keyof typeof syncProviderLabels;
 const syncProviderSources: Record<SyncProviderKey, ActivitySource> = {
   jira: "JIRA",
@@ -265,6 +262,15 @@ function mergeSyncedActivities(
   return sortActivitiesForDisplay([
     ...current.filter((activity) => activity.source !== source),
     ...synced,
+  ]);
+}
+
+function mergeActivitiesById(current: Activity[], next: Activity[]) {
+  const nextIds = new Set(next.map((activity) => activity.id));
+
+  return sortActivitiesForDisplay([
+    ...current.filter((activity) => !nextIds.has(activity.id)),
+    ...next,
   ]);
 }
 
@@ -424,7 +430,6 @@ export function DailyReportApp({
   } | null>(null);
   const [importMenuOpen, setImportMenuOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>("saved");
   const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
   const [locationMenuOpen, setLocationMenuOpen] = useState(false);
   const [importingProvider, setImportingProvider] =
@@ -454,14 +459,8 @@ export function DailyReportApp({
   const activityMenuRef = useRef<HTMLDivElement | null>(null);
   const activityMenuOpenedAtRef = useRef(0);
   const googleTaskSearchAbortRef = useRef<AbortController | null>(null);
-  const autoSaveTimerRef = useRef<number | null>(null);
-  const saveInFlightRef = useRef<Promise<Report | null> | null>(null);
-  const saveGenerationRef = useRef(0);
   const reportRef = useRef(initialReport);
   const latestDraftRef = useRef<AutoDraftSnapshot | null>(null);
-  const flushAutoDraftSaveRef = useRef<() => Promise<Report | null>>(
-    async () => null,
-  );
   const lastSavedSignatureRef = useRef(
     draftPayloadSignature(reportDate, initialPayload),
   );
@@ -497,13 +496,6 @@ export function DailyReportApp({
       [],
     );
 
-    if (autoSaveTimerRef.current) {
-      window.clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = null;
-    }
-
-    saveGenerationRef.current += 1;
-    saveInFlightRef.current = null;
     reportRef.current = initialReport;
     lastSavedSignatureRef.current = draftPayloadSignature(
       reportDate,
@@ -528,7 +520,6 @@ export function DailyReportApp({
     setImportMenuOpen(false);
     setLocationMenuOpen(false);
     setMessage(null);
-    setAutoSaveStatus("saved");
     setImportProgress(null);
     setActivitySearch("");
     setActivityDragPreview(null);
@@ -698,16 +689,7 @@ export function DailyReportApp({
     handleSummaryChange(nextSnapshot);
   }
 
-  const clearAutoDraftTimer = useCallback(() => {
-    if (!autoSaveTimerRef.current) {
-      return;
-    }
-
-    window.clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = null;
-  }, []);
-
-  const shouldAutoSaveSnapshot = useCallback((snapshot: AutoDraftSnapshot) => {
+  const canSaveDraftSnapshot = useCallback((snapshot: AutoDraftSnapshot) => {
     if (snapshot.signature === lastSavedSignatureRef.current) {
       return false;
     }
@@ -740,25 +722,11 @@ export function DailyReportApp({
     [activities, deletedActivityIds, reportDate, workLocation],
   );
 
-  const scheduleAutoDraftSave = useCallback(() => {
-    clearAutoDraftTimer();
-    setAutoSaveStatus("saving");
-    autoSaveTimerRef.current = window.setTimeout(() => {
-      void flushAutoDraftSaveRef.current();
-    }, autoSaveDelayMs);
-  }, [clearAutoDraftTimer]);
-
   const handleSummaryChange = useCallback(
     (snapshot: SummarySnapshot) => {
       const nextSnapshot = draftSnapshotFor(snapshot.summary);
 
       latestDraftRef.current = nextSnapshot;
-
-      if (shouldAutoSaveSnapshot(nextSnapshot)) {
-        scheduleAutoDraftSave();
-      } else {
-        clearAutoDraftTimer();
-      }
 
       startTransition(() => {
         setSummary((current) =>
@@ -766,12 +734,7 @@ export function DailyReportApp({
         );
       });
     },
-    [
-      clearAutoDraftTimer,
-      draftSnapshotFor,
-      scheduleAutoDraftSave,
-      shouldAutoSaveSnapshot,
-    ],
+    [draftSnapshotFor],
   );
 
   function removeActivity(activity: Activity) {
@@ -987,7 +950,6 @@ export function DailyReportApp({
           method: reportId ? "PUT" : "POST",
           headers: {
             "Content-Type": "application/json",
-            [autoSaveRequestHeader]: "1",
           },
           body: JSON.stringify(
             reportId
@@ -1000,137 +962,76 @@ export function DailyReportApp({
     [],
   );
 
-  function startAutoDraftSave(
+  async function saveDraftSnapshot(
     snapshot: AutoDraftSnapshot,
-    forceCreate = false,
+    {
+      forceCreate = false,
+      timingName = "daily:save-draft",
+    }: { forceCreate?: boolean; timingName?: string } = {},
   ) {
-    if (!forceCreate && !shouldAutoSaveSnapshot(snapshot)) {
-      return Promise.resolve(reportRef.current.id ? reportRef.current : null);
+    if (!forceCreate && !canSaveDraftSnapshot(snapshot)) {
+      return reportRef.current.id ? reportRef.current : null;
     }
 
-    const generation = saveGenerationRef.current;
     const savedSignature = snapshot.signature;
     const requestDetails = draftSaveRequest(snapshot);
-    const finishTiming = startClientTiming("daily:autosave", {
+    const finishTiming = startClientTiming(timingName, {
       hasReport: Boolean(snapshot.reportId),
     });
-    setAutoSaveStatus("saving");
-    const request = (async (): Promise<Report | null> => {
-      try {
-        const response = await fetch(requestDetails.url, requestDetails.init);
 
-        if (!response.ok) {
-          throw new Error(
-            await responseErrorMessage(response, "Unable to save report."),
-          );
-        }
+    try {
+      const response = await fetch(requestDetails.url, requestDetails.init);
 
-        const data = await response.json();
-        const nextReport = data.report as Report;
-
-        if (generation !== saveGenerationRef.current) {
-          return nextReport;
-        }
-
-        applySavedReport(nextReport, false, savedSignature);
-        markServerDataStale();
-        setAutoSaveStatus("saved");
-        finishTiming({ status: "success" });
-
-        return nextReport;
-      } catch {
-        if (generation === saveGenerationRef.current) {
-          setAutoSaveStatus("error");
-        }
-
-        finishTiming({ status: "error" });
-        return null;
+      if (!response.ok) {
+        throw new Error(
+          await responseErrorMessage(response, "Unable to save report."),
+        );
       }
-    })();
 
-    saveInFlightRef.current = request;
-    request.finally(() => {
-      if (saveInFlightRef.current === request) {
-        saveInFlightRef.current = null;
-      }
+      const data = await response.json();
+      const nextReport = data.report as Report;
+      const replaceLocalState = latestDraftRef.current?.signature === savedSignature;
+
+      applySavedReport(nextReport, replaceLocalState, savedSignature);
+      markServerDataStale();
+      finishTiming({ status: "success" });
+
+      return nextReport;
+    } catch {
+      finishTiming({ status: "error" });
+      return null;
+    }
+  }
+
+  async function saveDraft() {
+    if (busyAction || importingProvider || addingGoogleTaskKey) {
+      return;
+    }
+
+    const snapshot = captureCurrentDraftSnapshot();
+
+    if (!canSaveDraftSnapshot(snapshot)) {
+      return;
+    }
+
+    flushSync(() => {
+      setBusyAction("save");
+      setMessage(null);
     });
 
-    return request;
-  }
+    try {
+      const saved = await saveDraftSnapshot(snapshot);
 
-  async function flushAutoDraftSave(options: { forceCreate?: boolean } = {}) {
-    clearAutoDraftTimer();
-    captureCurrentDraftSnapshot();
-
-    let forceCreate = options.forceCreate ?? false;
-    let savedReport: Report | null = reportRef.current.id
-      ? reportRef.current
-      : null;
-
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      if (saveInFlightRef.current) {
-        savedReport = await saveInFlightRef.current;
-      }
-
-      const snapshot = latestDraftRef.current;
-      if (!snapshot) {
-        return savedReport;
-      }
-
-      if (!forceCreate && !shouldAutoSaveSnapshot(snapshot)) {
-        return savedReport;
-      }
-
-      savedReport = await startAutoDraftSave(snapshot, forceCreate);
-      forceCreate = false;
-
-      if (!savedReport) {
-        return null;
-      }
-
-      const nextSnapshot = latestDraftRef.current;
-      if (!nextSnapshot || !shouldAutoSaveSnapshot(nextSnapshot)) {
-        return savedReport;
-      }
-    }
-
-    clearAutoDraftTimer();
-    setAutoSaveStatus("saving");
-    autoSaveTimerRef.current = window.setTimeout(() => {
-      void flushAutoDraftSaveRef.current();
-    }, autoSaveDelayMs);
-    return savedReport;
-  }
-
-  useEffect(() => {
-    function savePendingDraftBeforeUnload() {
-      const snapshot = captureCurrentDraftSnapshot({ syncState: false });
-
-      if (!shouldAutoSaveSnapshot(snapshot)) {
+      if (!saved?.id) {
+        setMessage("Save failed. Try again before leaving this update.");
         return;
       }
-
-      const request = draftSaveRequest(snapshot);
-      clearAutoDraftTimer();
-      void fetch(request.url, {
-        ...request.init,
-        keepalive: true,
-      }).catch(() => {
-        // The page is unloading; the normal autosave error UI cannot be shown.
-      });
+    } catch {
+      setMessage("Unable to save draft. Check your connection and try again.");
+    } finally {
+      setBusyAction(null);
     }
-
-    window.addEventListener("pagehide", savePendingDraftBeforeUnload);
-
-    return () => {
-      window.removeEventListener("pagehide", savePendingDraftBeforeUnload);
-    };
-  }, [
-    captureCurrentDraftSnapshot,
-    clearAutoDraftTimer,
-    draftSaveRequest,
-    shouldAutoSaveSnapshot,
-  ]);
+  }
 
   async function submitReport() {
     if (busyAction || importingProvider) {
@@ -1154,8 +1055,9 @@ export function DailyReportApp({
     });
 
     try {
-      const saved = await flushAutoDraftSave({
+      const saved = await saveDraftSnapshot(snapshot, {
         forceCreate: !reportRef.current.id,
+        timingName: "daily:submit-save",
       });
 
       if (!saved?.id) {
@@ -1195,7 +1097,6 @@ export function DailyReportApp({
         ),
       );
       markServerDataStale();
-      setAutoSaveStatus("saved");
       setMessage(
         wasPublished ? "Resubmitted for review." : "Submitted for review.",
       );
@@ -1228,9 +1129,6 @@ export function DailyReportApp({
       setBusyAction("delete");
       setMessage(null);
     });
-    clearAutoDraftTimer();
-    saveGenerationRef.current += 1;
-    saveInFlightRef.current = null;
 
     try {
       const response = await fetch(`/api/reports/${report.id}`, {
@@ -1275,7 +1173,6 @@ export function DailyReportApp({
       setDeletedActivityIds([]);
       setSummaryEditorSnapshot({ summary: "" });
       markServerDataStale();
-      setAutoSaveStatus("saved");
       setMessage("Draft deleted.");
       finishTiming({ status: "success" });
     } catch {
@@ -1403,6 +1300,10 @@ export function DailyReportApp({
       return;
     }
 
+    const snapshotBeforeTask = captureCurrentDraftSnapshot();
+    const activitiesBeforeTask = activities;
+    const wasDraftCleanBeforeTask =
+      snapshotBeforeTask.signature === lastSavedSignatureRef.current;
     const taskKey = `${task.taskListId}:${task.taskId}`;
     flushSync(() => {
       setAddingGoogleTaskKey(taskKey);
@@ -1410,15 +1311,6 @@ export function DailyReportApp({
     });
 
     try {
-      const snapshot = latestDraftRef.current;
-      const needsSave = snapshot ? shouldAutoSaveSnapshot(snapshot) : false;
-      const saved = await flushAutoDraftSave();
-
-      if (needsSave && !saved) {
-        setMessage("Save failed. Try again before adding the task.");
-        return;
-      }
-
       const response = await fetch("/api/reports/google-task", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1437,7 +1329,49 @@ export function DailyReportApp({
       }
 
       const body = (await response.json()) as { report: Report };
-      applySavedReport(body.report, true, "");
+      const returnedGoogleTasks = body.report.activities.filter(
+        (activity) => activity.source === "GOOGLE_TASKS",
+      );
+      const savedActivities = mergeSyncedActivities(
+        activitiesBeforeTask,
+        "GOOGLE_TASKS",
+        returnedGoogleTasks,
+      );
+      const nextReport: Report = {
+        ...reportRef.current,
+        id: body.report.id,
+        reportDate: body.report.reportDate,
+        status: body.report.status,
+        submittedAt: body.report.submittedAt,
+        updatedAt: body.report.updatedAt,
+        revisions: body.report.revisions ?? reportRef.current.revisions,
+      };
+      reportRef.current = nextReport;
+      setReport(nextReport);
+      setActivities((current) =>
+        mergeActivitiesById(current, returnedGoogleTasks),
+      );
+      if (
+        wasDraftCleanBeforeTask &&
+        latestDraftRef.current?.signature === snapshotBeforeTask.signature
+      ) {
+        const savedPayload = buildReportPayload(
+          snapshotBeforeTask.payload.summary,
+          snapshotBeforeTask.payload.workLocation,
+          savedActivities,
+          snapshotBeforeTask.payload.deletedActivityIds,
+        );
+        const savedSignature = draftPayloadSignature(reportDate, savedPayload);
+
+        lastSavedSignatureRef.current = savedSignature;
+        latestDraftRef.current = {
+          reportId: nextReport.id,
+          reportDate,
+          payload: savedPayload,
+          signature: savedSignature,
+          hasMeaningfulContent: hasMeaningfulDraftPayload(savedPayload),
+        };
+      }
       markServerDataStale();
       setGoogleTaskQuery("");
       setGoogleTaskResults([]);
@@ -1547,6 +1481,7 @@ export function DailyReportApp({
 
   const canSyncJira = integrationStatus.atlassian;
   const canSyncGoogle = integrationStatus.google;
+  const isSavingDraft = busyAction === "save";
   const isSubmitting = busyAction === "submit";
   const isDeleting = busyAction === "delete";
   const isImporting = importingProvider !== null;
@@ -1558,7 +1493,6 @@ export function DailyReportApp({
   const submitProgressText = isPublishedReport
     ? "Resubmitting..."
     : "Submitting...";
-  const statusIndicatorLabel = isPublishedReport ? "Published" : "Draft";
   const dateNavigationPending = pendingDateControl !== null;
   const isBusy =
     busyAction !== null ||
@@ -1590,7 +1524,7 @@ export function DailyReportApp({
   };
   reportRef.current = report;
   latestDraftRef.current = currentDraftSnapshot;
-  flushAutoDraftSaveRef.current = flushAutoDraftSave;
+  const canSaveDraft = canSaveDraftSnapshot(currentDraftSnapshot);
   const normalizedActivitySearch = activitySearch.trim().toLowerCase();
   const filteredActivities = normalizedActivitySearch
     ? visibleActivities.filter((activity) =>
@@ -1613,31 +1547,6 @@ export function DailyReportApp({
     [visibleActivities],
   );
 
-  useEffect(() => {
-    const snapshot = latestDraftRef.current;
-
-    if (!snapshot || !shouldAutoSaveSnapshot(snapshot)) {
-      clearAutoDraftTimer();
-      return;
-    }
-
-    clearAutoDraftTimer();
-    setAutoSaveStatus("saving");
-    autoSaveTimerRef.current = window.setTimeout(() => {
-      void flushAutoDraftSaveRef.current();
-    }, autoSaveDelayMs);
-
-    return () => {
-      clearAutoDraftTimer();
-    };
-  }, [
-    clearAutoDraftTimer,
-    currentDraftSignature,
-    report.id,
-    report.status,
-    shouldAutoSaveSnapshot,
-  ]);
-
   async function goToReportDate(
     nextDate: string,
     control: ReportDateControl = "picker",
@@ -1649,12 +1558,18 @@ export function DailyReportApp({
     const targetDate = clampReportDateToToday(nextDate);
 
     if (targetDate === reportDate) {
-      refreshStaleServerData(router);
-      router.push(`/?date=${targetDate}`);
       return;
     }
 
     if (busyAction || importingProvider) {
+      return;
+    }
+
+    const snapshot = captureCurrentDraftSnapshot();
+    if (
+      canSaveDraftSnapshot(snapshot) &&
+      !window.confirm("Discard unsaved changes and change dates?")
+    ) {
       return;
     }
 
@@ -1665,17 +1580,6 @@ export function DailyReportApp({
     flushSync(() => {
       setPendingDateControl(control);
     });
-
-    const snapshot = latestDraftRef.current;
-    const needsSave = snapshot ? shouldAutoSaveSnapshot(snapshot) : false;
-    const saved = await flushAutoDraftSave();
-
-    if (needsSave && !saved) {
-      setPendingDateControl(null);
-      setMessage("Save failed. Stay on this date and try again.");
-      finishTiming({ status: "save-failed" });
-      return;
-    }
 
     refreshStaleServerData(router);
     router.push(`/?date=${targetDate}`);
@@ -1702,15 +1606,29 @@ export function DailyReportApp({
     <>
       <main className="reference-page daily-report-page min-[1200px]:flex min-[1200px]:h-full min-[1200px]:min-h-0 min-[1200px]:flex-col">
         <ReportPageHeader
-          className="shrink-0"
+          className="shrink-0 max-[639px]:mb-3 max-[639px]:gap-3"
+          actionsClassName="max-[639px]:w-full max-[639px]:flex-col max-[639px]:items-stretch"
           title="Daily Update"
           description="Share what you worked on today."
           actions={
             <>
+              <Button
+                variant="outline"
+                className="h-10 rounded-[8px] bg-white px-4 text-sm font-semibold text-[#344054] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] disabled:bg-[#f2f4f7] disabled:text-[#98a2b3] disabled:ring-[#d0d5dd] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:disabled:bg-[#162235] dark:disabled:text-[#71809a] max-[639px]:w-full"
+                disabled={isBusy || !canSaveDraft}
+                onClick={saveDraft}
+              >
+                {isSavingDraft ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                {isSavingDraft ? "Saving..." : "Save draft"}
+              </Button>
               {report.id && report.status === "DRAFT" ? (
                 <Button
                   variant="outline"
-                  className="h-10 rounded-[8px] bg-white px-4 text-sm font-medium text-[#b42318] shadow-none ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
+                  className="h-10 rounded-[8px] bg-white px-4 text-sm font-medium text-[#b42318] shadow-none ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10 max-[639px]:w-full"
                   disabled={isBusy}
                   onClick={deleteDraft}
                 >
@@ -1723,7 +1641,7 @@ export function DailyReportApp({
                 </Button>
               ) : null}
               <Button
-                className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,0.2)] hover:bg-[#1d4ed8]"
+                className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,0.2)] hover:bg-[#1d4ed8] max-[639px]:w-full"
                 disabled={isBusy}
                 onClick={submitReport}
               >
@@ -1738,8 +1656,8 @@ export function DailyReportApp({
           }
         />
 
-        <ReportSurface className="mb-3 shrink-0">
-          <div className="flex flex-wrap items-center gap-2">
+        <ReportSurface className="mb-3 shrink-0 max-[639px]:p-2.5">
+          <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
             <ReportDateSwitcher
               value={reportDate}
               maxDate={maxReportDate}
@@ -1752,7 +1670,7 @@ export function DailyReportApp({
 
             <div
               ref={locationMenuRef}
-              className="relative w-full min-[520px]:w-[220px]"
+              className="relative w-full sm:w-[220px]"
             >
               <button
                 type="button"
@@ -1809,26 +1727,6 @@ export function DailyReportApp({
                     );
                   })}
                 </div>
-              ) : null}
-            </div>
-
-            <div
-              className="inline-flex min-h-10 w-fit max-w-full items-center gap-2 rounded-[7px] bg-white px-3 text-xs shadow-none ring-1 ring-[#dfe4ee] min-[900px]:ml-auto dark:bg-[#101d2e] dark:ring-[#263a55]"
-              aria-live="polite"
-            >
-              <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
-                Status
-              </span>
-              <ReportStatusBadge status={statusIndicatorLabel} showIcon />
-              {autoSaveStatus === "saving" ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#667085] dark:text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Saving...
-                </span>
-              ) : autoSaveStatus === "error" ? (
-                <span className="text-xs font-semibold text-red-700 dark:text-red-300">
-                  Save failed
-                </span>
               ) : null}
             </div>
           </div>

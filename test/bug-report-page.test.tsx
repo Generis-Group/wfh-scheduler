@@ -242,13 +242,13 @@ describe("BugReportPage", () => {
       />,
     );
 
-    const longReport = Array.from({ length: 7501 }, () => "a").join(" ");
+    const longReport = Array.from({ length: 751 }, () => "a").join(" ");
 
     fireEvent.change(screen.getByLabelText("Bug report text"), {
       target: { value: longReport },
     });
 
-    expect(screen.getByText("7,501 / 7,500 words")).toBeTruthy();
+    expect(screen.getByText("751 / 750 words")).toBeTruthy();
 
     const sendButton = screen.getByRole("button", { name: "Send report" });
 

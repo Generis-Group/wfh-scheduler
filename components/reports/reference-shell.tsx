@@ -10,7 +10,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useTransition,
 } from "react";
 import { flushSync } from "react-dom";
 import type { ElementType, MouseEvent, ReactNode } from "react";
@@ -164,7 +163,6 @@ export function ReferenceAppShell({
   displayName,
   userEmail,
   profileImage,
-  userRole,
   userRoles,
   mustChangePassword,
   profileLoading = false,
@@ -193,7 +191,6 @@ export function ReferenceAppShell({
   const [lastReviewDate, setLastReviewDate] = useState<string | null>(null);
   const [pendingNavigation, setPendingNavigation] =
     useState<PendingNavigation | null>(null);
-  const [isRouteTransitionPending, startRouteTransition] = useTransition();
   const [serverDataVersion, setServerDataVersion] = useState(0);
   const [freshServerDataVersion, setFreshServerDataVersion] = useState(0);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -227,10 +224,6 @@ export function ReferenceAppShell({
   const navigationPending = pendingNavigation !== null;
   const visibleActive = pendingNavigation?.activeKey ?? active;
   const pendingPageKind = pendingNavigation?.pageKind ?? null;
-  const activeNavItem =
-    displayedNav.find((item) => item.key === visibleActive) ??
-    displayedNav[0] ??
-    null;
 
   useDismissableLayer({
     open: profileOpen,
@@ -340,7 +333,6 @@ export function ReferenceAppShell({
   useEffect(() => {
     if (
       !pendingNavigation ||
-      isRouteTransitionPending ||
       currentHref !== pendingNavigation.href
     ) {
       return;
@@ -359,7 +351,7 @@ export function ReferenceAppShell({
     );
 
     return () => window.clearTimeout(timeoutId);
-  }, [currentHref, isRouteTransitionPending, pendingNavigation]);
+  }, [currentHref, pendingNavigation]);
 
   useEffect(() => {
     function syncServerDataVersions() {
@@ -376,6 +368,31 @@ export function ReferenceAppShell({
       window.removeEventListener(serverDataFreshEvent, syncServerDataVersions);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const desktopMediaQuery = window.matchMedia("(min-width: 1280px)");
+
+    function closeDrawerOnDesktop(event: MediaQueryListEvent) {
+      if (event.matches) {
+        setMobileNavOpen(false);
+      }
+    }
+
+    if (desktopMediaQuery.matches) {
+      setMobileNavOpen(false);
+    }
+
+    desktopMediaQuery.addEventListener("change", closeDrawerOnDesktop);
+
+    return () => {
+      desktopMediaQuery.removeEventListener("change", closeDrawerOnDesktop);
+    };
+  }, []);
+
 
   useEffect(() => {
     if (hasStalePrefetchedData) {
@@ -474,34 +491,111 @@ export function ReferenceAppShell({
         if (hasStalePrefetchedData) {
           refreshStaleServerData(router);
         }
-        startRouteTransition(() => {
-          router.push(href);
-        });
+        router.push(href);
       },
     };
   }
 
-  return (
-    <div className="reference-app-shell h-[100dvh] min-h-0 overflow-hidden bg-[#f4f7fb] text-[#0f172a] dark:bg-background dark:text-foreground lg:grid lg:grid-cols-[176px_minmax(0,1fr)]">
-      <aside className="reference-sidebar hidden h-full min-w-0 flex-col bg-white/88 px-3 py-4 shadow-[1px_0_0_rgba(15,23,42,0.04)] backdrop-blur-xl dark:bg-[#0b1422]/96 dark:shadow-[1px_0_0_rgba(255,255,255,0.04)] lg:flex">
-        <Link
-          href={logoHref}
-          {...routeLinkProps(logoHref, logoActiveKey)}
-          className="reference-sidebar-logo-link flex items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
+  const mobileNavOverlay = mobileNavOpen ? (
+    <div
+      className="fixed inset-0 z-40 bg-[#0f172a]/30 backdrop-blur-[2px] xl:hidden"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          setMobileNavOpen(false);
+        }
+      }}
+    >
+      <aside
+        ref={mobileNavRef}
+        className="flex h-full w-[min(13.5rem,calc(100vw-5.5rem))] flex-col border-r border-[#dfe5ef] bg-white shadow-[20px_0_60px_rgba(15,23,42,0.18)] dark:border-[#263a55] dark:bg-[#0f1b2a] dark:shadow-[20px_0_60px_rgba(0,0,0,0.38)]"
+        aria-label="Mobile navigation"
+      >
+        <div className="flex h-14 shrink-0 items-center gap-2 border-b border-[#e5eaf2] px-3.5 dark:border-[#263a55]">
+          <Link
+            href={mobileLogoHref}
+            {...routeLinkProps(mobileLogoHref, logoActiveKey)}
+            className="flex min-w-0 flex-1 items-center rounded-[8px] py-1 transition-colors hover:opacity-80"
+            aria-label="Generis home"
+          >
+            <span className="relative flex h-8 w-[142px] min-w-0 shrink items-center overflow-hidden">
+              <Image
+                src={generisLogo}
+                alt="Generis"
+                className="h-auto w-full object-contain"
+                priority
+              />
+            </span>
+          </Link>
+          <button
+            type="button"
+            className="ml-auto flex h-9 w-9 items-center justify-center rounded-[8px] text-[#64748b] ring-1 ring-transparent transition-colors hover:bg-[#eef4fb] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-[#94a3b8] dark:hover:bg-white/[0.08] dark:hover:text-[#e2e8f0]"
+            aria-label="Close navigation menu"
+            onClick={() => {
+              setMobileNavOpen(false);
+            }}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <nav
+          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain px-2.5 py-2.5 [scrollbar-gutter:stable]"
+          role="menu"
         >
-          <span className="reference-sidebar-logo-frame relative flex h-7 w-[132px] items-center overflow-hidden">
-            <Image
-              src={generisLogo}
-              alt="Generis"
-              className="reference-sidebar-logo-image h-auto w-full object-contain"
-              priority
-            />
-          </span>
-        </Link>
-        <nav className="reference-sidebar-nav mt-6 space-y-0.5">
           {displayedNav.map((item) => {
             const Icon = item.icon;
             const href = getNavHref(item, rememberedDates, currentHref);
+            const activeItem = visibleActive === item.key;
+
+            return (
+              <Link
+                key={item.key}
+                href={href}
+                {...routeLinkProps(href, item.key, item.prefetch)}
+                role="menuitem"
+                className={cn(
+                  "flex min-w-0 items-center gap-2.5 rounded-[8px] px-3 py-2.5 text-sm font-semibold transition-colors",
+                  activeItem
+                    ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
+                    : "text-[#475569] hover:bg-[#eef4fb] hover:text-[#0f172a] dark:text-[#94a3b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]",
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </aside>
+    </div>
+  ) : null;
+
+  return (
+    <div className="reference-app-shell flex h-[100dvh] min-h-0 overflow-hidden bg-[#f6f8fb] text-[#111827] dark:bg-background dark:text-foreground">
+      <aside className="hidden h-full w-60 shrink-0 flex-col border-r border-[#dfe5ef] bg-white/96 dark:border-[#263a55] dark:bg-[#0b1422]/96 xl:flex">
+        <div className="flex h-16 shrink-0 items-center border-b border-[#e5eaf2] px-5 dark:border-[#263a55]">
+          <Link
+            href={logoHref}
+            {...routeLinkProps(logoHref, logoActiveKey)}
+            className="flex items-center rounded-[8px] px-1.5 py-1 transition-colors hover:bg-[#f3f6fb] dark:hover:bg-white/[0.06]"
+          >
+            <span className="relative flex h-8 w-[150px] items-center overflow-hidden">
+              <Image
+                src={generisLogo}
+                alt="Generis"
+                className="h-auto w-full object-contain"
+                priority
+              />
+            </span>
+          </Link>
+        </div>
+        <nav
+          className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-4"
+          aria-label="Primary navigation"
+        >
+          {displayedNav.map((item) => {
+            const Icon = item.icon;
+            const href = getNavHref(item, rememberedDates, currentHref);
+            const activeItem = visibleActive === item.key;
 
             return (
               <Link
@@ -509,44 +603,38 @@ export function ReferenceAppShell({
                 href={href}
                 {...routeLinkProps(href, item.key, item.prefetch)}
                 className={cn(
-                  "reference-sidebar-nav-link flex items-center gap-3 rounded-[9px] px-3 py-2.5 text-[15px] font-semibold transition-colors",
-                  visibleActive === item.key
+                  "flex min-w-0 items-center gap-3 rounded-[8px] px-3 py-2.5 text-sm font-semibold transition-colors",
+                  activeItem
                     ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
-                    : "text-[#52647a] hover:bg-[#eef4fb] hover:text-[#0f172a] dark:text-[#93a4b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]",
+                    : "text-[#475569] hover:bg-[#f3f6fb] hover:text-[#111827] dark:text-[#93a4b8] dark:hover:bg-white/[0.06] dark:hover:text-foreground",
                 )}
+                aria-current={activeItem ? "page" : undefined}
               >
-                <Icon className="h-[18px] w-[18px]" />
-                <span className="reference-sidebar-nav-label">
-                  {item.label}
-                </span>
+                <Icon
+                  className={cn(
+                    "h-[18px] w-[18px] shrink-0",
+                    activeItem
+                      ? "text-[#2563eb] dark:text-[#93c5fd]"
+                      : "text-[#667085] dark:text-[#93a4b8]",
+                  )}
+                />
+                <span className="whitespace-nowrap">{item.label}</span>
               </Link>
             );
           })}
         </nav>
       </aside>
-      <div className="flex h-full min-h-0 min-w-0 flex-col">
-        <header className="sticky top-0 z-20 shrink-0 bg-white/92 shadow-[0_1px_0_rgba(15,23,42,0.05)] backdrop-blur-xl dark:bg-[#0b1422]/94 dark:shadow-[0_1px_0_rgba(255,255,255,0.05)]">
-          <div className="flex h-12 w-full items-center justify-between gap-3 px-[clamp(14px,1.7vw,26px)] lg:justify-end">
-            <div className="flex h-full min-w-0 items-center gap-2 lg:hidden">
-              <Link
-                href={mobileLogoHref}
-                {...routeLinkProps(mobileLogoHref, logoActiveKey)}
-                className="flex shrink-0 items-center rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
-              >
-                <span className="relative flex h-7 w-[132px] items-center overflow-hidden">
-                  <Image
-                    src={generisLogo}
-                    alt="Generis"
-                    className="h-auto w-full object-contain"
-                    priority
-                  />
-                </span>
-              </Link>
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-20 shrink-0 border-b border-[#dfe5ef] bg-white/94 backdrop-blur-xl dark:border-[#263a55] dark:bg-[#0b1422]/94">
+          <div className="flex h-14 w-full items-center justify-between gap-4 px-[clamp(16px,2vw,32px)] xl:h-16">
+            <div className="flex min-w-0 flex-1 items-center">
               <button
                 ref={mobileNavButtonRef}
                 type="button"
-                className="flex h-9 min-w-0 items-center gap-2 rounded-[9px] bg-[#eef4fb] px-2.5 text-sm font-semibold text-[#0f172a] ring-1 ring-[#dbe3ee] transition-colors hover:bg-[#e4eef8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-white/[0.06] dark:text-[#e2e8f0] dark:ring-white/[0.08] dark:hover:bg-white/[0.1]"
-                aria-label="Open navigation menu"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-white text-sm font-semibold text-[#111827] ring-1 ring-[#dfe5ef] transition-colors hover:bg-[#f6f8fb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-white/[0.06] dark:text-[#e2e8f0] dark:ring-white/[0.08] dark:hover:bg-white/[0.1] xl:hidden"
+                aria-label={
+                  mobileNavOpen ? "Close navigation menu" : "Open navigation menu"
+                }
                 aria-expanded={mobileNavOpen}
                 aria-haspopup="menu"
                 onClick={() => {
@@ -559,13 +647,10 @@ export function ReferenceAppShell({
                 ) : (
                   <Menu className="h-4 w-4 shrink-0" />
                 )}
-                <span className="max-w-[7.5rem] truncate">
-                  {activeNavItem?.label ?? "Menu"}
-                </span>
               </button>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <ThemeToggle />
               <div ref={profileMenuRef} className="relative flex items-center">
                 {profileLoading ? (
@@ -574,13 +659,13 @@ export function ReferenceAppShell({
                     aria-label="Loading profile"
                     aria-busy="true"
                   >
-                    <Skeleton className="h-8 w-8 rounded-full" />
-                    <Skeleton className="hidden h-4 w-28 rounded-[4px] sm:block" />
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <Skeleton className="hidden h-5 w-32 rounded-[4px] sm:block" />
                     <Skeleton className="h-4 w-4 rounded-[4px]" />
                   </div>
                 ) : (
                   <button
-                    className="flex min-w-0 items-center gap-2 rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#eef4fb] dark:hover:bg-white/[0.06]"
+                    className="flex min-w-0 items-center gap-2 rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#f3f6fb] dark:hover:bg-white/[0.06] sm:gap-2.5 sm:px-2 sm:py-1.5"
                     onClick={() => {
                       setProfileOpen((open) => !open);
                     }}
@@ -588,7 +673,7 @@ export function ReferenceAppShell({
                     aria-haspopup="menu"
                   >
                     <div
-                      className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1d4ed8] bg-cover bg-center text-xs font-semibold text-white shadow-[0_8px_18px_rgba(29,78,216,0.22)] dark:bg-[#1d4ed8]"
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-[#111827] bg-cover bg-center text-sm font-semibold text-white shadow-[0_8px_18px_rgba(15,23,42,0.16)] dark:bg-[#1d4ed8]"
                       style={
                         profileImage
                           ? { backgroundImage: `url("${profileImage}")` }
@@ -597,8 +682,10 @@ export function ReferenceAppShell({
                     >
                       {profileImage ? null : initials(displayName)}
                     </div>
-                    <div className="hidden max-w-[200px] truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0] sm:block">
-                      {displayName}
+                    <div className="hidden min-w-0 sm:block">
+                      <div className="max-w-[220px] truncate text-[15px] font-semibold leading-5 text-[#111827] dark:text-[#e2e8f0]">
+                        {displayName}
+                      </div>
                     </div>
                     <ChevronDown
                       className={cn(
@@ -610,23 +697,22 @@ export function ReferenceAppShell({
                 )}
                 {!profileLoading && profileOpen ? (
                   <div
-                    className="absolute right-0 top-12 z-30 w-72 overflow-hidden rounded-[12px] border border-[#dbe3ee] bg-[#ffffff] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.16)] dark:border-[#24354c] dark:bg-[#0f1b2a] dark:shadow-[0_18px_45px_rgba(0,0,0,0.42)]"
+                    className="absolute right-0 top-12 z-30 w-72 overflow-hidden rounded-[10px] border border-[#dfe5ef] bg-[#ffffff] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.14)] dark:border-[#24354c] dark:bg-[#0f1b2a] dark:shadow-[0_18px_45px_rgba(0,0,0,0.42)]"
                     role="menu"
                   >
-                    <div className="rounded-[8px] bg-[#f8fafc] px-3 py-2 dark:bg-[#0b1523]">
+                    <div className="rounded-[8px] bg-[#f6f8fb] px-3 py-2 dark:bg-[#0b1523]">
                       <div className="truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0]">
                         {displayName}
                       </div>
                       <div className="text-xs text-[#64748b] dark:text-[#94a3b8]">
                         {userEmail ??
-                          (userRole ||
-                            (variant === "admin" ? "Reviewer" : "Employee"))}
+                          (displayName ? "Signed in" : "Account")}
                       </div>
                     </div>
                     <Link
                       href="/settings#account"
                       {...routeLinkProps("/settings#account", "settings")}
-                      className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                      className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#344054] transition-colors hover:bg-[#f6f8fb] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
                     >
                       <CircleUser className="h-4 w-4" />
                       Account settings
@@ -635,14 +721,14 @@ export function ReferenceAppShell({
                       <Link
                         href="/change-password"
                         {...routeLinkProps("/change-password")}
-                        className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                        className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#344054] transition-colors hover:bg-[#f6f8fb] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
                       >
                         <KeyRound className="h-4 w-4" />
                         Change password
                       </Link>
                     ) : null}
                     <button
-                      className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm text-[#334155] transition-colors hover:bg-[#f1f5f9] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                      className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#344054] transition-colors hover:bg-[#f6f8fb] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
                       onClick={() => {
                         signOut({ callbackUrl: "/login" });
                       }}
@@ -655,45 +741,8 @@ export function ReferenceAppShell({
               </div>
             </div>
           </div>
-          {mobileNavOpen ? (
-            <div
-              ref={mobileNavRef}
-              className="lg:hidden border-t border-[#dbe3ee] px-[clamp(14px,1.7vw,26px)] py-2 dark:border-[#263a55]"
-            >
-              <nav
-                className="grid max-h-[min(24rem,calc(100dvh-5rem))] gap-1 overflow-y-auto overscroll-contain rounded-[10px] bg-white/95 p-1.5 shadow-[0_16px_38px_rgba(15,23,42,0.14)] ring-1 ring-[#dbe3ee] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-white/[0.08]"
-                aria-label="Mobile navigation"
-                role="menu"
-              >
-                {displayedNav.map((item) => {
-                  const Icon = item.icon;
-                  const href = getNavHref(item, rememberedDates, currentHref);
-                  const activeItem = visibleActive === item.key;
-
-                  return (
-                    <Link
-                      key={item.key}
-                      href={href}
-                      {...routeLinkProps(href, item.key, item.prefetch)}
-                      role="menuitem"
-                      className={cn(
-                        "flex min-w-0 items-center gap-3 rounded-[8px] px-3 py-2.5 text-sm font-semibold transition-colors",
-                        activeItem
-                          ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
-                          : "text-[#475569] hover:bg-[#eef4fb] hover:text-[#0f172a] dark:text-[#94a3b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]",
-                      )}
-                    >
-                      <Icon className="h-[18px] w-[18px] shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">
-                        {item.label}
-                      </span>
-                    </Link>
-                  );
-                })}
-              </nav>
-            </div>
-          ) : null}
         </header>
+        {mobileNavOverlay}
         <div
           ref={contentScrollRef}
           aria-busy={navigationPending}

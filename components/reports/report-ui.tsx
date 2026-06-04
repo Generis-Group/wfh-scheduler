@@ -104,16 +104,28 @@ function activitySourceIcon(source?: string | null) {
   return <MessageSquare aria-hidden="true" />;
 }
 
-function statusTone(status: string) {
+function statusTextTone(status: string) {
   if (status === "Submitted" || status === "Published") {
-    return "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300";
+    return "text-emerald-700 dark:text-emerald-300";
   }
 
   if (status === "Missing") {
-    return "bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-300";
+    return "text-red-700 dark:text-red-300";
   }
 
-  return "bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300";
+  return "text-[#475569] dark:text-[#b5c2d3]";
+}
+
+function statusDotTone(status: string) {
+  if (status === "Submitted" || status === "Published") {
+    return "bg-emerald-500 dark:bg-emerald-300";
+  }
+
+  if (status === "Missing") {
+    return "bg-red-500 dark:bg-red-300";
+  }
+
+  return "bg-[#94a3b8] dark:bg-[#b5c2d3]";
 }
 
 function statusIcon(status: string) {
@@ -225,7 +237,7 @@ export function ReportSearchField({
   return (
     <label
       className={cn(
-        "relative flex h-9 min-w-0 items-center rounded-[7px] bg-white text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]",
+        "relative flex h-9 min-w-0 items-center rounded-[8px] border border-[#dfe5ef] bg-white text-sm shadow-none transition-[border-color,box-shadow] focus-within:border-[#93b4f7] focus-within:ring-2 focus-within:ring-[#2563eb]/20 dark:border-[#263a55] dark:bg-[#0b1523]",
         className,
       )}
     >
@@ -251,12 +263,19 @@ export function ReportStatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-        statusTone(status),
+        "inline-flex items-center gap-1.5 text-xs font-semibold",
+        statusTextTone(status),
         className,
       )}
     >
-      {showIcon ? statusIcon(status) : null}
+      {showIcon ? (
+        statusIcon(status)
+      ) : (
+        <span
+          className={cn("h-1.5 w-1.5 rounded-full", statusDotTone(status))}
+          aria-hidden="true"
+        />
+      )}
       {status}
     </span>
   );
@@ -271,7 +290,7 @@ export function ReportSurface({
   return (
     <Component
       className={cn(
-        "rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e5eaf2] dark:bg-[#101d2e] dark:ring-[#263a55]",
+        "reference-card",
         padded && "p-3",
         className,
       )}

@@ -6,7 +6,13 @@ import { LogIn } from "lucide-react";
 import { signIn } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,10 +20,10 @@ import { generisEmailMessage, isGenerisEmail } from "@/lib/auth-domain";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 
 const oauthButtonClassName =
-  "flex h-10 w-full items-center justify-center gap-3 rounded-[4px] border border-[#dadce0] bg-[#ffffff] px-3 text-[14px] font-medium text-[#3c4043] shadow-none transition-colors hover:bg-[#f8fafd] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a73e8] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#263a55] dark:bg-[#0b1523] dark:text-[#e2e8f0] dark:hover:bg-white/[0.06]";
+  "flex h-10 w-full items-center justify-center gap-3 rounded-[8px] border border-[#dfe5ef] bg-white px-3 text-sm font-semibold text-[#344054] shadow-[0_1px_2px_rgba(15,23,42,0.035)] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#263a55] dark:bg-white/[0.04] dark:text-[#e2e8f0] dark:hover:bg-white/[0.08]";
 
 export function LoginForm({
-  oauthConfig
+  oauthConfig,
 }: {
   oauthConfig: OAuthProviderConfig;
 }) {
@@ -41,7 +47,7 @@ export function LoginForm({
       email,
       password,
       redirect: false,
-      callbackUrl: "/"
+      callbackUrl: "/",
     });
 
     setIsSubmitting(false);
@@ -56,12 +62,17 @@ export function LoginForm({
 
   return (
     <>
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Welcome back</CardTitle>
-          <CardDescription>Sign in with your @generisgp.com account to review activity and submit reports.</CardDescription>
+      <Card className="w-full max-w-md shadow-[var(--surface-shadow-strong)]">
+        <CardHeader className="space-y-2 px-5 pt-5 text-center">
+          <CardTitle className="text-[26px] font-semibold tracking-normal text-[#111827] dark:text-foreground">
+            Welcome back
+          </CardTitle>
+          <CardDescription>
+            Sign in with your @generisgp.com account to review activity and
+            submit reports.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-5 pb-5">
           <form className="space-y-4" onSubmit={submit}>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -72,7 +83,6 @@ export function LoginForm({
                 placeholder="name@generisgp.com"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                className="ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#3a506d]"
                 required
               />
             </div>
@@ -84,7 +94,6 @@ export function LoginForm({
                 autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#3a506d]"
                 required
               />
             </div>
@@ -109,7 +118,9 @@ export function LoginForm({
               unavailableLabel="Atlassian OAuth is not configured"
             />
           </div>
-          <p className="text-xs text-muted-foreground">Only @generisgp.com accounts can sign in.</p>
+          <p className="rounded-[8px] bg-[#f6f8fb] px-3 py-2 text-xs font-medium text-[#667085] dark:bg-white/[0.035] dark:text-muted-foreground">
+            Only @generisgp.com accounts can sign in.
+          </p>
           {!oauthConfig.google || !oauthConfig.atlassian ? (
             <p className="text-xs text-muted-foreground">
               OAuth sign-in buttons are enabled after client IDs and secrets are added to `.env.local`.
@@ -127,7 +138,7 @@ function OAuthSignInButton({
   icon,
   label,
   provider,
-  unavailableLabel
+  unavailableLabel,
 }: {
   disabled: boolean;
   icon: ReactNode;

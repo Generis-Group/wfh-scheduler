@@ -22,9 +22,7 @@ function LoadingCard({
   className?: string;
 }) {
   return (
-    <section
-      className={`rounded-[8px] bg-white p-3.5 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43] ${className}`}
-    >
+    <section className={`reference-card p-3.5 ${className}`}>
       {children}
     </section>
   );

@@ -1,3 +1,3 @@
-export const maxBugReportBodyCharacters = 50_000;
-export const maxBugReportBodyWords = 7_500;
-export const maxBugReportBodyLines = 1_000;
+export const maxBugReportBodyCharacters = 5_000;
+export const maxBugReportBodyWords = 750;
+export const maxBugReportBodyLines = 100;

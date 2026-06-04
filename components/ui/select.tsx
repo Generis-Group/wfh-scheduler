@@ -165,7 +165,7 @@ export const Select = React.forwardRef<
       <span
         ref={wrapperRef}
         className={cn(
-          "relative flex h-10 w-full min-w-0 items-center rounded-[8px] bg-[hsl(var(--field))] text-sm font-medium text-foreground shadow-[inset_0_1px_1px_rgba(15,23,42,0.025),0_1px_2px_rgba(15,23,42,0.035)] ring-1 ring-input transition-[background-color,box-shadow] focus-within:ring-2 focus-within:ring-[#2563eb] dark:bg-[hsl(var(--field))] dark:ring-input",
+          "relative flex h-10 w-full min-w-0 items-center rounded-[8px] border border-[#dfe5ef] bg-[hsl(var(--field))] text-sm font-medium text-foreground shadow-none ring-0 transition-[background-color,border-color,box-shadow] focus-within:border-[#93b4f7] focus-within:ring-2 focus-within:ring-[#2563eb]/20 dark:border-[#263a55] dark:bg-[hsl(var(--field))]",
           open && "z-[80]",
           disabled && "cursor-not-allowed opacity-50",
           className,
@@ -225,7 +225,7 @@ export const Select = React.forwardRef<
             id={listboxId}
             role="listbox"
             aria-labelledby={triggerId}
-            className="absolute left-0 top-[calc(100%+0.375rem)] z-[90] max-h-64 w-full min-w-[12rem] scroll-mb-3 scroll-mt-3 overflow-y-auto rounded-[8px] bg-white p-1.5 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-black/[0.06] dark:bg-[#0f1b2a] dark:ring-white/[0.08]"
+            className="absolute left-0 top-[calc(100%+0.375rem)] z-[90] max-h-64 w-full min-w-[12rem] scroll-mb-3 scroll-mt-3 overflow-y-auto rounded-[8px] border border-[#dfe5ef] bg-white p-1.5 text-sm shadow-[var(--surface-shadow-strong)] dark:border-[#263a55] dark:bg-[#0f1b2a]"
           >
             {options.map((option) => {
               const selected = option.value === selectedValue;
@@ -241,7 +241,7 @@ export const Select = React.forwardRef<
                     "flex w-full items-center justify-between gap-2 rounded-[7px] px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-45",
                     selected
                       ? "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-blue-100"
-                      : "text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/[0.055]",
+                      : "text-[#344054] hover:bg-[#f6f8fb] dark:text-foreground dark:hover:bg-white/[0.055]",
                   )}
                   onClick={() => chooseOption(option.value)}
                 >

@@ -13,7 +13,7 @@ export function AuthLoadingSkeleton({
   oauthActions?: boolean;
 }) {
   return (
-    <main className="relative flex min-h-[100dvh] items-center justify-center overflow-x-hidden bg-[#f4f7fb] px-3 py-4 dark:bg-background sm:min-h-screen sm:px-4 sm:py-10">
+    <main className="relative flex min-h-[100dvh] items-center justify-center overflow-x-hidden bg-[#f6f8fb] px-3 py-4 dark:bg-background sm:min-h-screen sm:px-4 sm:py-10">
       <div className="flex w-full max-w-md flex-col gap-4 sm:contents">
         <div className="flex min-w-0 items-center justify-between gap-3 sm:contents">
           <div className="min-w-0 sm:absolute sm:left-6 sm:top-6">

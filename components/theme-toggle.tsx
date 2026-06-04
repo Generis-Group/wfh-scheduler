@@ -14,7 +14,7 @@ export function ThemeToggle() {
       type="button"
       variant="ghost"
       size="icon"
-      className="h-9 w-9 rounded-[10px] text-[#64748b] hover:bg-[#eef4fb] dark:text-[#cbd5e1] dark:hover:bg-white/[0.08]"
+      className="h-9 w-9 rounded-[8px] text-[#667085] hover:bg-[#f3f6fb] dark:text-[#cbd5e1] dark:hover:bg-white/[0.08]"
       onClick={toggleTheme}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}

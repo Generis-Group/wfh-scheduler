@@ -238,12 +238,6 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-async function advanceAutoSave() {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(600);
-  });
-}
-
 async function flushReact() {
   await act(async () => {
     await Promise.resolve();
@@ -261,9 +255,8 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("DailyReportApp auto-draft", () => {
-  it("auto-creates a draft after editing summary", async () => {
-    vi.useFakeTimers();
+describe("DailyReportApp drafts", () => {
+  it("creates a draft only when Save draft is clicked", async () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, _init?: RequestInit) => {
         if (String(input) === "/api/reports") {
@@ -280,26 +273,37 @@ describe("DailyReportApp auto-draft", () => {
 
     renderDailyReportApp();
 
-    expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
+    const saveButton = screen.getByRole("button", {
+      name: "Save draft",
+    }) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(true);
 
     fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
       target: { value: "Finished the rollout note" },
     });
-    await advanceAutoSave();
+    expect(fetchMock).not.toHaveBeenCalled();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/reports",
-      expect.objectContaining({
-        method: "POST",
-        body: expect.stringContaining("Finished the rollout note"),
-      }),
-    );
-    expect(screen.queryByText("Saved")).toBeNull();
-    expect(screen.getByText("Draft")).toBeTruthy();
+    await waitFor(() => {
+      expect(saveButton.disabled).toBe(false);
+    });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining("Finished the rollout note"),
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(saveButton.disabled).toBe(true);
+    });
+    expect(screen.queryByText("Draft saved.")).toBeNull();
   });
 
-  it("imports tasks and autosaves the imported work item", async () => {
-    vi.useFakeTimers();
+  it("imports tasks without autosaving the draft", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
 
@@ -310,13 +314,6 @@ describe("DailyReportApp auto-draft", () => {
           staleCount: 0,
           activities: [importedTask],
         });
-      }
-
-      if (url === "/api/reports") {
-        return Response.json(
-          { report: { ...savedDraft, activities: [importedTask] } },
-          { status: 201 },
-        );
       }
 
       return Response.json({ error: "Unexpected request." }, { status: 500 });
@@ -332,15 +329,13 @@ describe("DailyReportApp auto-draft", () => {
 
     await flushReact();
     expect(screen.getByText("Imported task")).toBeTruthy();
-    await advanceAutoSave();
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/reports",
-      expect.objectContaining({
-        method: "POST",
-        body: expect.stringContaining("task-1"),
-      }),
-    );
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input) === "/api/reports"),
+    ).toBe(false);
+    expect(
+      (screen.getByRole("button", { name: "Save draft" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
     expect(
       fetchMock.mock.calls.some(([input]) =>
         String(input).includes("/api/activity"),
@@ -496,10 +491,102 @@ describe("DailyReportApp auto-draft", () => {
       }),
     );
     expect(screen.getAllByText("Draft rollout plan")).toHaveLength(1);
+    expect(screen.getByText("Google Task added to this report.")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Save draft" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
-  it("coalesces rapid edits into one debounced save", async () => {
+  it("keeps unsaved imported Google Tasks when adding an unfinished task", async () => {
     vi.useFakeTimers();
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+
+        if (url.includes("/api/sync/google-tasks")) {
+          return Response.json({
+            importedCount: 1,
+            skippedCount: 0,
+            staleCount: 0,
+            activities: [importedTask],
+          });
+        }
+
+        if (url.includes("/api/google-tasks/search")) {
+          return Response.json({
+            tasks: [
+              {
+                taskId: "task-manual",
+                taskListId: "list-1",
+                taskListTitle: "Primary tasks",
+                title: "Draft rollout plan",
+                notes: null,
+                status: "needsAction",
+                due: null,
+                updated: "2026-05-20T12:00:00.000Z",
+                sourceUrl: "#",
+              },
+            ],
+          });
+        }
+
+        if (url === "/api/reports/google-task") {
+          expect(init).toEqual(
+            expect.objectContaining({
+              method: "POST",
+              body: expect.stringContaining("task-manual"),
+            }),
+          );
+
+          return Response.json({
+            report: { ...savedDraft, activities: [manualGoogleTask] },
+          });
+        }
+
+        return Response.json({ error: "Unexpected request." }, { status: 500 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp(savedDraft);
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import Google Tasks" }),
+    );
+
+    await flushReact();
+    expect(screen.getByText("Imported task")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Find unfinished Google Tasks" }),
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Find unfinished Google Tasks" }),
+      { target: { value: "rollout" } },
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    await flushReact();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Draft rollout plan/i }),
+    );
+
+    await flushReact();
+    expect(screen.getByText("Imported task")).toBeTruthy();
+    expect(screen.getAllByText("Draft rollout plan")).toHaveLength(1);
+    expect(
+      (screen.getByRole("button", { name: "Save draft" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  it("saves the latest edited summary when Save draft is clicked", async () => {
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         Response.json(
@@ -513,20 +600,20 @@ describe("DailyReportApp auto-draft", () => {
 
     const summaryBox = screen.getByRole("textbox", { name: "Summary" });
     fireEvent.change(summaryBox, { target: { value: "First edit" } });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(300);
-    });
     fireEvent.change(summaryBox, { target: { value: "Second edit" } });
-    await advanceAutoSave();
+    expect(fetchMock).not.toHaveBeenCalled();
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
     expect(fetchMock.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({ body: expect.stringContaining("Second edit") }),
     );
   });
 
-  it("flushes formatted summary markdown before page refresh", async () => {
-    vi.useFakeTimers();
+  it("saves formatted summary markdown only through manual save", async () => {
     const formattedSummary = "## **_Header_**\n- **_Bullet_**\n1. _Numbered_";
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
@@ -544,33 +631,31 @@ describe("DailyReportApp auto-draft", () => {
       target: { value: formattedSummary },
     });
     window.dispatchEvent(new Event("pagehide"));
+    expect(fetchMock).not.toHaveBeenCalled();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/reports",
-      expect.objectContaining({
-        method: "POST",
-        keepalive: true,
-      }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports",
+        expect.objectContaining({
+          method: "POST",
+        }),
+      );
+    });
 
     const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
     const body = JSON.parse(String(requestInit.body));
     expect(body.summary).toBe(formattedSummary);
   });
 
-  it("queues a follow-up save when edits happen during an in-flight save", async () => {
-    vi.useFakeTimers();
+  it("keeps newer edits local when they happen during an in-flight save", async () => {
     const firstSave = deferred<Response>();
-    const secondSave = deferred<Response>();
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
 
       if (url === "/api/reports") {
         return firstSave.promise;
-      }
-
-      if (url === "/api/reports/report-1") {
-        return secondSave.promise;
       }
 
       return Promise.resolve(
@@ -583,7 +668,14 @@ describe("DailyReportApp auto-draft", () => {
 
     const summaryBox = screen.getByRole("textbox", { name: "Summary" });
     fireEvent.change(summaryBox, { target: { value: "First edit" } });
-    await advanceAutoSave();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
     fireEvent.change(summaryBox, { target: { value: "Second edit" } });
 
     firstSave.resolve(
@@ -594,23 +686,19 @@ describe("DailyReportApp auto-draft", () => {
     );
     await flushReact();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/reports/report-1",
-      expect.objectContaining({ method: "PUT" }),
-    );
-    secondSave.resolve(
-      Response.json({ report: { ...savedDraft, summary: "Second edit" } }),
-    );
-    await flushReact();
-
     expect(
       (screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement)
         .value,
     ).toBe("Second edit");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      (screen.getByRole("button", { name: "Save draft" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
   });
 
-  it("blocks date navigation when the autosave flush fails", async () => {
-    vi.useFakeTimers();
+  it("keeps unsaved draft edits on the current date when discard is canceled", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
     const fetchMock = vi.fn(async () =>
       Response.json({ error: "Nope" }, { status: 500 }),
     );
@@ -626,8 +714,69 @@ describe("DailyReportApp auto-draft", () => {
     });
 
     await flushReact();
-    expect(screen.getByText("Save failed")).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(window.confirm).toHaveBeenCalledWith(
+      "Discard unsaved changes and change dates?",
+    );
     expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(
+      (screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement)
+        .value,
+    ).toBe("Needs saving");
+  });
+
+  it("does not route when the selected date is picked again with unsaved edits", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const fetchMock = vi.fn(async () =>
+      Response.json({ error: "Nope" }, { status: 500 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
+      target: { value: "Needs saving" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open report date picker" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select May 20, 2026" }),
+    );
+
+    await flushReact();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterRefresh).not.toHaveBeenCalled();
+    expect(
+      (screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement)
+        .value,
+    ).toBe("Needs saving");
+  });
+
+  it("navigates dates without saving after unsaved edits are discarded", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn(async () =>
+      Response.json({ error: "Nope" }, { status: 500 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
+      target: { value: "Needs saving" },
+    });
+    fireEvent.change(screen.getByLabelText("Select report date"), {
+      target: { value: "2026-05-21" },
+    });
+
+    await flushReact();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(window.confirm).toHaveBeenCalledWith(
+      "Discard unsaved changes and change dates?",
+    );
+    expect(mockRouterPush).toHaveBeenCalledWith("/?date=2026-05-21");
   });
 
   it("shows immediate feedback while date navigation is pending", async () => {
@@ -799,7 +948,6 @@ describe("DailyReportApp auto-draft", () => {
   });
 
   it("renames work items locally from the item menu", async () => {
-    vi.useFakeTimers();
     const renamedTask = {
       ...manualGoogleTask,
       title: "Renamed rollout plan",
@@ -844,7 +992,14 @@ describe("DailyReportApp auto-draft", () => {
     expect(screen.getByText("Renamed rollout plan")).toBeTruthy();
     expect(searchField.value).toBe("Renamed rollout plan");
 
-    await advanceAutoSave();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports/report-1",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
 
     const requestBody = JSON.parse(
       String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
@@ -860,7 +1015,6 @@ describe("DailyReportApp auto-draft", () => {
   });
 
   it("removes work items and matching summary references from the report", async () => {
-    vi.useFakeTimers();
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         Response.json({
@@ -893,7 +1047,14 @@ describe("DailyReportApp auto-draft", () => {
         .value,
     ).toBe("");
 
-    await advanceAutoSave();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports/report-1",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
 
     const requestBody = JSON.parse(
       String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
@@ -910,7 +1071,6 @@ describe("DailyReportApp auto-draft", () => {
   });
 
   it("keeps summary reference removals made before the lazy editor mounts", async () => {
-    vi.useFakeTimers();
     mockLazySummaryEditorMounted.current = false;
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
@@ -955,7 +1115,14 @@ describe("DailyReportApp auto-draft", () => {
         .value,
     ).toBe("");
 
-    await advanceAutoSave();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports/report-1",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
 
     const requestBody = JSON.parse(
       String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
@@ -1017,7 +1184,7 @@ describe("DailyReportApp auto-draft", () => {
         expect.objectContaining({ method: "POST" }),
       );
     });
-    expect(await screen.findByText("Published")).toBeTruthy();
+    expect(await screen.findByText("Submitted for review.")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Resubmit update" }),
     ).toBeTruthy();
@@ -1069,8 +1236,7 @@ describe("DailyReportApp auto-draft", () => {
     });
   });
 
-  it("autosaves submitted report edits through the update route", async () => {
-    vi.useFakeTimers();
+  it("manually saves submitted report edits through the update route", async () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, _init?: RequestInit) => {
         if (String(input) === "/api/reports/report-1") {
@@ -1092,15 +1258,19 @@ describe("DailyReportApp auto-draft", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
       target: { value: "Submitted edit" },
     });
-    await advanceAutoSave();
+    expect(fetchMock).not.toHaveBeenCalled();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/reports/report-1",
-      expect.objectContaining({ method: "PUT" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports/report-1",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
     expect(fetchMock.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({
-        headers: expect.objectContaining({ "X-Generis-Autosave": "1" }),
+        headers: expect.not.objectContaining({ "X-Generis-Autosave": "1" }),
       }),
     );
   });
@@ -1143,11 +1313,10 @@ describe("DailyReportApp auto-draft", () => {
       ),
     ).toBe(false);
     expect(await screen.findByText("Resubmitted for review.")).toBeTruthy();
-    expect(screen.getByText("Published")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resubmit update" })).toBeTruthy();
   });
 
   it("deletes a draft without immediately recreating it", async () => {
-    vi.useFakeTimers();
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const deleteRequest = deferred<Response>();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -1190,11 +1359,19 @@ describe("DailyReportApp auto-draft", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
       target: { value: "Fresh draft" },
     });
-    await advanceAutoSave();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => String(input) === "/api/reports",
+      ),
+    ).toHaveLength(0);
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/reports",
-      expect.objectContaining({ method: "POST" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
   });
 });
