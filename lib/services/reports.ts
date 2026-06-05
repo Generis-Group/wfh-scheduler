@@ -4,6 +4,12 @@ import type { Prisma } from "@prisma/client";
 import { activityMetadataWithLocalTitleState } from "@/lib/activity-title-overrides";
 import { addReportDateDays, parseReportDate } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
+import {
+  defaultPaginationPageSize,
+  maxPaginationPageSize,
+  normalizedPage,
+  normalizedPageSize,
+} from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import {
   emptyReportSubmitMessage,
@@ -103,8 +109,35 @@ type WeeklyReportSnapshot = {
   activityCount: number;
   reports: ReturnType<typeof serializeWeeklyDashboardReport>[];
 };
+type ReportHistoryOptions = {
+  limit?: number;
+  page?: number | null;
+  search?: string | null;
+  status?: "DRAFT" | "SUBMITTED" | "ALL" | null;
+  fromDate?: string | null;
+  toDate?: string | null;
+  targetReportId?: string | null;
+};
+type AdminReportStatusFilter = "DRAFT" | "SUBMITTED";
+type AdminReportListOptions = {
+  limit?: number;
+  page?: number | null;
+  search?: string | null;
+  status?: AdminReportStatusFilter | "ALL" | null;
+};
 
 const weeklyReportSnapshotVersion = 1;
+const defaultReportHistoryPageSize = defaultPaginationPageSize;
+const defaultAdminReportsPageSize = defaultPaginationPageSize;
+const maxPaginatedPageSize = maxPaginationPageSize;
+const workLocations = [
+  "OFFICE",
+  "WFH",
+  "HYBRID",
+  "PTO",
+  "OUT_OF_OFFICE",
+  "UNKNOWN",
+] as const;
 
 const userIdentitySelect = {
   id: true,
@@ -956,6 +989,190 @@ function weeklyReportSummary(report: {
   };
 }
 
+function pageSize(value: number | undefined, fallback: number) {
+  return normalizedPageSize(value, fallback);
+}
+
+function reportDateSearchValue(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const looksLikeDisplayDate =
+      /\d/.test(value) &&
+      (/[/-]/.test(value) ||
+        /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)/i.test(
+          value,
+        ));
+
+    if (!looksLikeDisplayDate) {
+      return null;
+    }
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return validReportDateKey(parsedDateKey(parsed));
+  }
+
+  return validReportDateKey(value);
+}
+
+function parsedDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function validReportDateKey(value: string) {
+  const parsed = parseReportDate(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() + 1 !== month ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function statusSearchValue(value: string) {
+  const normalized = value.trim().toUpperCase();
+
+  if ("DRAFT".startsWith(normalized)) {
+    return "DRAFT";
+  }
+
+  if ("SUBMITTED".startsWith(normalized)) {
+    return "SUBMITTED";
+  }
+
+  return null;
+}
+
+function adminReportWhere({
+  search,
+  status,
+}: Pick<AdminReportListOptions, "search" | "status">) {
+  const where: Prisma.DailyReportWhereInput = {};
+
+  if (status === "DRAFT" || status === "SUBMITTED") {
+    where.status = status;
+  }
+
+  const query = search?.trim();
+
+  if (!query) {
+    return where;
+  }
+
+  const normalized = query.toUpperCase().replace(/[\s-]+/g, "_");
+  const matchingLocations = workLocations.filter((location) =>
+    location.includes(normalized),
+  );
+  const reportDate = reportDateSearchValue(query);
+  const reportStatus = statusSearchValue(query);
+  const textFilter = { contains: query, mode: "insensitive" as const };
+  const or: Prisma.DailyReportWhereInput[] = [
+    { summary: textFilter },
+    { user: { is: { name: textFilter } } },
+    { user: { is: { email: textFilter } } },
+    {
+      user: {
+        is: {
+          departments: {
+            some: {
+              department: {
+                name: textFilter,
+              },
+            },
+          },
+        },
+      },
+    },
+  ];
+
+  if (matchingLocations.length > 0) {
+    or.push({ workLocation: { in: [...matchingLocations] } });
+  }
+
+  if (reportDate) {
+    or.push({ reportDate });
+  }
+
+  if (reportStatus) {
+    or.push({ status: reportStatus });
+  }
+
+  where.OR = or;
+
+  return where;
+}
+
+function reportHistoryWhere(
+  userId: string,
+  {
+    search,
+    status,
+    fromDate,
+    toDate,
+  }: Pick<
+    ReportHistoryOptions,
+    "search" | "status" | "fromDate" | "toDate"
+  >,
+) {
+  const where: Prisma.DailyReportWhereInput = { userId };
+
+  if (status === "DRAFT" || status === "SUBMITTED") {
+    where.status = status;
+  }
+
+  const dateFilter: Prisma.DateTimeFilter = {};
+
+  if (fromDate) {
+    dateFilter.gte = parseReportDate(fromDate);
+  }
+
+  if (toDate) {
+    dateFilter.lte = parseReportDate(toDate);
+  }
+
+  if (dateFilter.gte || dateFilter.lte) {
+    where.reportDate = dateFilter;
+  }
+
+  const query = search?.trim();
+
+  if (!query) {
+    return where;
+  }
+
+  const textFilter = { contains: query, mode: "insensitive" as const };
+
+  where.OR = [
+    { summary: textFilter },
+    {
+      activities: {
+        some: {
+          title: textFilter,
+        },
+      },
+    },
+  ];
+
+  return where;
+}
+
 export async function getWeeklyReportForEmployee(
   employeeId: string,
   dateString: string,
@@ -1115,55 +1332,102 @@ export async function getSavedWeeklyReport(
 
 export async function listReportHistory(
   userId: string,
-  limit = 30,
+  optionsOrLimit: ReportHistoryOptions | number = {},
   targetReportId?: string | null,
 ) {
-  const reports = await prisma.dailyReport.findMany({
-    where: { userId },
-    orderBy: { reportDate: "desc" },
-    take: limit,
-    include: reportHistoryInclude,
-  });
+  const options =
+    typeof optionsOrLimit === "number"
+      ? { limit: optionsOrLimit, targetReportId }
+      : optionsOrLimit;
+  const limit = pageSize(options.limit, defaultReportHistoryPageSize);
+  const currentPage = normalizedPage(options.page);
+  const where = reportHistoryWhere(userId, options);
+  const [totalCount, reports] = await Promise.all([
+    prisma.dailyReport.count({ where }),
+    prisma.dailyReport.findMany({
+      where,
+      orderBy: [{ reportDate: "desc" }, { id: "desc" }],
+      skip: (currentPage - 1) * limit,
+      take: limit,
+      include: reportHistoryInclude,
+    }),
+  ]);
 
   if (
-    !targetReportId ||
-    reports.some((report) => report.id === targetReportId)
+    currentPage !== 1 ||
+    !options.targetReportId ||
+    reports.some((report) => report.id === options.targetReportId)
   ) {
-    return reports;
+    return {
+      reports,
+      targetReport: reports.find(
+        (report) => report.id === options.targetReportId,
+      ) ?? null,
+      page: currentPage,
+      pageSize: limit,
+      totalCount,
+    };
   }
 
   const targetReport = await prisma.dailyReport.findFirst({
-    where: { id: targetReportId, userId },
+    where: { id: options.targetReportId, userId },
     include: reportHistoryInclude,
   });
 
-  return targetReport ? [targetReport, ...reports] : reports;
+  return {
+    reports,
+    targetReport,
+    page: currentPage,
+    pageSize: limit,
+    totalCount,
+  };
 }
 
-export async function listReportsForAdminManagement(limit = 200) {
-  return prisma.dailyReport.findMany({
-    orderBy: [{ reportDate: "desc" }, { updatedAt: "desc" }],
-    take: limit,
-    select: {
-      id: true,
-      reportDate: true,
-      status: true,
-      workLocation: true,
-      summary: true,
-      submittedAt: true,
-      updatedAt: true,
-      user: {
-        select: reportUserSelect,
-      },
-      _count: {
-        select: {
-          activities: true,
-          comments: true,
-          revisions: true,
+export async function listReportsForAdminManagement(
+  options: AdminReportListOptions = {},
+) {
+  const limit = pageSize(options.limit, defaultAdminReportsPageSize);
+  const currentPage = normalizedPage(options.page);
+  const where = adminReportWhere(options);
+  const [totalCount, records] = await prisma.$transaction([
+    prisma.dailyReport.count({ where }),
+    prisma.dailyReport.findMany({
+      where,
+      orderBy: [
+        { reportDate: "desc" },
+        { updatedAt: "desc" },
+        { id: "desc" },
+      ],
+      skip: (currentPage - 1) * limit,
+      take: limit,
+      select: {
+        id: true,
+        reportDate: true,
+        status: true,
+        workLocation: true,
+        summary: true,
+        submittedAt: true,
+        updatedAt: true,
+        user: {
+          select: reportUserSelect,
+        },
+        _count: {
+          select: {
+            activities: true,
+            comments: true,
+            revisions: true,
+          },
         },
       },
-    },
-  });
+    }),
+  ]);
+
+  return {
+    reports: records,
+    page: currentPage,
+    pageSize: limit,
+    totalCount,
+  };
 }
 
 async function getDashboardMetricsForWhere(

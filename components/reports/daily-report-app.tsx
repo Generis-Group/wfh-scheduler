@@ -1606,10 +1606,9 @@ export function DailyReportApp({
     <>
       <main className="reference-page daily-report-page min-[1200px]:flex min-[1200px]:h-full min-[1200px]:min-h-0 min-[1200px]:flex-col">
         <ReportPageHeader
-          className="shrink-0 max-[639px]:mb-3 max-[639px]:gap-3"
+          className="shrink-0 max-[639px]:gap-3"
           actionsClassName="max-[639px]:w-full max-[639px]:flex-col max-[639px]:items-stretch"
-          title="Daily Update"
-          description="Share what you worked on today."
+          title="Share what you worked on today"
           actions={
             <>
               <Button

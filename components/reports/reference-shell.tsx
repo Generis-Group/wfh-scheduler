@@ -81,21 +81,21 @@ const defaultAdminHref = "/admin/team";
 const employeeNav: NavItem[] = [
   {
     href: "/",
-    label: "Daily",
+    label: "Daily update",
     icon: ClipboardList,
     key: "report",
     prefetch: "eager",
   },
   {
     href: "/reports",
-    label: "Reports",
+    label: "My reports",
     icon: History,
     key: "reports",
     prefetch: "eager",
   },
   {
     href: "/bugs",
-    label: "Issues",
+    label: "Bug reports",
     icon: Bug,
     key: "bugs",
     prefetch: "intent",
@@ -112,23 +112,23 @@ const employeeNav: NavItem[] = [
 const reviewerNav: NavItem[] = [
   {
     href: "/review",
-    label: "Review",
+    label: "Team review",
     icon: BarChart3,
     key: "review",
     prefetch: "eager",
+  },
+  {
+    href: "/bugs",
+    label: "Bug reports",
+    icon: Bug,
+    key: "bugs",
+    prefetch: "intent",
   },
   {
     href: "/settings",
     label: "Settings",
     icon: Settings,
     key: "settings",
-    prefetch: "intent",
-  },
-  {
-    href: "/bugs",
-    label: "Issues",
-    icon: Bug,
-    key: "bugs",
     prefetch: "intent",
   },
 ];
@@ -142,17 +142,17 @@ const adminNav: NavItem[] = [
     prefetch: "intent",
   },
   {
+    href: "/bugs",
+    label: "Bug reports",
+    icon: Bug,
+    key: "bugs",
+    prefetch: "intent",
+  },
+  {
     href: "/settings",
     label: "Settings",
     icon: Settings,
     key: "settings",
-    prefetch: "intent",
-  },
-  {
-    href: "/bugs",
-    label: "Issues",
-    icon: Bug,
-    key: "bugs",
     prefetch: "intent",
   },
 ];
@@ -510,14 +510,14 @@ export function ReferenceAppShell({
         className="flex h-full w-[min(13.5rem,calc(100vw-5.5rem))] flex-col border-r border-[#dfe5ef] bg-white shadow-[20px_0_60px_rgba(15,23,42,0.18)] dark:border-[#263a55] dark:bg-[#0f1b2a] dark:shadow-[20px_0_60px_rgba(0,0,0,0.38)]"
         aria-label="Mobile navigation"
       >
-        <div className="flex h-14 shrink-0 items-center gap-2 border-b border-[#e5eaf2] px-3.5 dark:border-[#263a55]">
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[#e5eaf2] px-3.5 dark:border-[#263a55]">
           <Link
             href={mobileLogoHref}
             {...routeLinkProps(mobileLogoHref, logoActiveKey)}
             className="flex min-w-0 flex-1 items-center rounded-[8px] py-1 transition-colors hover:opacity-80"
             aria-label="Generis home"
           >
-            <span className="relative flex h-8 w-[142px] min-w-0 shrink items-center overflow-hidden">
+            <span className="relative flex h-7 w-[132px] min-w-0 shrink items-center overflow-hidden">
               <Image
                 src={generisLogo}
                 alt="Generis"
@@ -528,7 +528,7 @@ export function ReferenceAppShell({
           </Link>
           <button
             type="button"
-            className="ml-auto flex h-9 w-9 items-center justify-center rounded-[8px] text-[#64748b] ring-1 ring-transparent transition-colors hover:bg-[#eef4fb] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-[#94a3b8] dark:hover:bg-white/[0.08] dark:hover:text-[#e2e8f0]"
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-[8px] text-[#64748b] ring-1 ring-transparent transition-colors hover:bg-[#eef4fb] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-[#94a3b8] dark:hover:bg-white/[0.08] dark:hover:text-[#e2e8f0]"
             aria-label="Close navigation menu"
             onClick={() => {
               setMobileNavOpen(false);
@@ -538,7 +538,7 @@ export function ReferenceAppShell({
           </button>
         </div>
         <nav
-          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain px-2.5 py-2.5 [scrollbar-gutter:stable]"
+          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain px-2.5 py-2 [scrollbar-gutter:stable]"
           role="menu"
         >
           {displayedNav.map((item) => {
@@ -553,13 +553,13 @@ export function ReferenceAppShell({
                 {...routeLinkProps(href, item.key, item.prefetch)}
                 role="menuitem"
                 className={cn(
-                  "flex min-w-0 items-center gap-2.5 rounded-[8px] px-3 py-2.5 text-sm font-semibold transition-colors",
+                  "flex min-h-10 min-w-0 items-center gap-2.5 rounded-[8px] px-3 py-2 text-[15px] font-semibold leading-5 transition-colors",
                   activeItem
                     ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
                     : "text-[#475569] hover:bg-[#eef4fb] hover:text-[#0f172a] dark:text-[#94a3b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]",
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                <Icon className="h-[18px] w-[18px] shrink-0" />
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
               </Link>
             );
@@ -572,13 +572,13 @@ export function ReferenceAppShell({
   return (
     <div className="reference-app-shell flex h-[100dvh] min-h-0 overflow-hidden bg-[#f6f8fb] text-[#111827] dark:bg-background dark:text-foreground">
       <aside className="hidden h-full w-60 shrink-0 flex-col border-r border-[#dfe5ef] bg-white/96 dark:border-[#263a55] dark:bg-[#0b1422]/96 xl:flex">
-        <div className="flex h-16 shrink-0 items-center border-b border-[#e5eaf2] px-5 dark:border-[#263a55]">
+        <div className="flex h-12 shrink-0 items-center border-b border-[#e5eaf2] px-5 dark:border-[#263a55]">
           <Link
             href={logoHref}
             {...routeLinkProps(logoHref, logoActiveKey)}
             className="flex items-center rounded-[8px] px-1.5 py-1 transition-colors hover:bg-[#f3f6fb] dark:hover:bg-white/[0.06]"
           >
-            <span className="relative flex h-8 w-[150px] items-center overflow-hidden">
+            <span className="relative flex h-7 w-[136px] items-center overflow-hidden">
               <Image
                 src={generisLogo}
                 alt="Generis"
@@ -589,7 +589,7 @@ export function ReferenceAppShell({
           </Link>
         </div>
         <nav
-          className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-4"
+          className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-3"
           aria-label="Primary navigation"
         >
           {displayedNav.map((item) => {
@@ -603,7 +603,7 @@ export function ReferenceAppShell({
                 href={href}
                 {...routeLinkProps(href, item.key, item.prefetch)}
                 className={cn(
-                  "flex min-w-0 items-center gap-3 rounded-[8px] px-3 py-2.5 text-sm font-semibold transition-colors",
+                  "flex min-h-10 min-w-0 items-center gap-3 rounded-[8px] px-3 py-2 text-[15px] font-semibold leading-5 transition-colors",
                   activeItem
                     ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
                     : "text-[#475569] hover:bg-[#f3f6fb] hover:text-[#111827] dark:text-[#93a4b8] dark:hover:bg-white/[0.06] dark:hover:text-foreground",
@@ -612,7 +612,7 @@ export function ReferenceAppShell({
               >
                 <Icon
                   className={cn(
-                    "h-[18px] w-[18px] shrink-0",
+                    "h-5 w-5 shrink-0",
                     activeItem
                       ? "text-[#2563eb] dark:text-[#93c5fd]"
                       : "text-[#667085] dark:text-[#93a4b8]",
@@ -626,12 +626,12 @@ export function ReferenceAppShell({
       </aside>
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 shrink-0 border-b border-[#dfe5ef] bg-white/94 backdrop-blur-xl dark:border-[#263a55] dark:bg-[#0b1422]/94">
-          <div className="flex h-14 w-full items-center justify-between gap-4 px-[clamp(16px,2vw,32px)] xl:h-16">
+          <div className="flex h-12 w-full items-center justify-between gap-3 px-[clamp(14px,1.8vw,28px)]">
             <div className="flex min-w-0 flex-1 items-center">
               <button
                 ref={mobileNavButtonRef}
                 type="button"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-white text-sm font-semibold text-[#111827] ring-1 ring-[#dfe5ef] transition-colors hover:bg-[#f6f8fb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-white/[0.06] dark:text-[#e2e8f0] dark:ring-white/[0.08] dark:hover:bg-white/[0.1] xl:hidden"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-white text-sm font-semibold text-[#111827] ring-1 ring-[#dfe5ef] transition-colors hover:bg-[#f6f8fb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-white/[0.06] dark:text-[#e2e8f0] dark:ring-white/[0.08] dark:hover:bg-white/[0.1] xl:hidden"
                 aria-label={
                   mobileNavOpen ? "Close navigation menu" : "Open navigation menu"
                 }
@@ -650,22 +650,22 @@ export function ReferenceAppShell({
               </button>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5">
               <ThemeToggle />
               <div ref={profileMenuRef} className="relative flex items-center">
                 {profileLoading ? (
                   <div
-                    className="flex min-w-0 items-center gap-2 rounded-[10px] px-1.5 py-1"
+                    className="flex min-w-0 items-center gap-2 rounded-[8px] px-1 py-0.5"
                     aria-label="Loading profile"
                     aria-busy="true"
                   >
-                    <Skeleton className="h-10 w-10 rounded-full" />
-                    <Skeleton className="hidden h-5 w-32 rounded-[4px] sm:block" />
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <Skeleton className="hidden h-4 w-28 rounded-[4px] sm:block" />
                     <Skeleton className="h-4 w-4 rounded-[4px]" />
                   </div>
                 ) : (
                   <button
-                    className="flex min-w-0 items-center gap-2 rounded-[10px] px-1.5 py-1 transition-colors hover:bg-[#f3f6fb] dark:hover:bg-white/[0.06] sm:gap-2.5 sm:px-2 sm:py-1.5"
+                    className="flex min-w-0 items-center gap-2 rounded-[8px] px-1 py-0.5 transition-colors hover:bg-[#f3f6fb] dark:hover:bg-white/[0.06] sm:px-1.5"
                     onClick={() => {
                       setProfileOpen((open) => !open);
                     }}
@@ -673,7 +673,7 @@ export function ReferenceAppShell({
                     aria-haspopup="menu"
                   >
                     <div
-                      className="flex h-10 w-10 items-center justify-center rounded-full bg-[#111827] bg-cover bg-center text-sm font-semibold text-white shadow-[0_8px_18px_rgba(15,23,42,0.16)] dark:bg-[#1d4ed8]"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111827] bg-cover bg-center text-xs font-semibold text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)] dark:bg-[#1d4ed8]"
                       style={
                         profileImage
                           ? { backgroundImage: `url("${profileImage}")` }
@@ -683,13 +683,13 @@ export function ReferenceAppShell({
                       {profileImage ? null : initials(displayName)}
                     </div>
                     <div className="hidden min-w-0 sm:block">
-                      <div className="max-w-[220px] truncate text-[15px] font-semibold leading-5 text-[#111827] dark:text-[#e2e8f0]">
+                      <div className="max-w-[180px] truncate text-sm font-semibold leading-4 text-[#111827] dark:text-[#e2e8f0]">
                         {displayName}
                       </div>
                     </div>
                     <ChevronDown
                       className={cn(
-                        "h-4 w-4 text-[#64748b] transition-transform dark:text-[#94a3b8]",
+                        "h-3.5 w-3.5 text-[#64748b] transition-transform dark:text-[#94a3b8]",
                         profileOpen && "rotate-180",
                       )}
                     />
@@ -697,7 +697,7 @@ export function ReferenceAppShell({
                 )}
                 {!profileLoading && profileOpen ? (
                   <div
-                    className="absolute right-0 top-12 z-30 w-72 overflow-hidden rounded-[10px] border border-[#dfe5ef] bg-[#ffffff] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.14)] dark:border-[#24354c] dark:bg-[#0f1b2a] dark:shadow-[0_18px_45px_rgba(0,0,0,0.42)]"
+                    className="absolute right-0 top-10 z-30 w-72 overflow-hidden rounded-[10px] border border-[#dfe5ef] bg-[#ffffff] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.14)] dark:border-[#24354c] dark:bg-[#0f1b2a] dark:shadow-[0_18px_45px_rgba(0,0,0,0.42)]"
                     role="menu"
                   >
                     <div className="rounded-[8px] bg-[#f6f8fb] px-3 py-2 dark:bg-[#0b1523]">

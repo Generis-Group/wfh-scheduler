@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { ReportHistory } from "@/components/reports/report-history";
 import { auth } from "@/lib/auth";
+import { defaultPaginationPageSize } from "@/lib/pagination";
 import { withServerTiming } from "@/lib/performance";
 import { hasUserRole } from "@/lib/roles";
 import { serialize } from "@/lib/serializers";
@@ -41,14 +42,20 @@ export default async function ReportsPage({
 
   const reports = await withServerTiming(
     "page:reports:data",
-    () => listReportHistory(session.user.id, 30, targetReportId),
+    () =>
+      listReportHistory(session.user.id, {
+        limit: defaultPaginationPageSize,
+        targetReportId,
+      }),
     { targetReportId },
   );
 
   return (
     <ReportHistory
-      reports={serialize(reports)}
+      reports={serialize(reports.reports)}
+      initialTotalCount={reports.totalCount}
       initialOpenedReportId={targetReportId}
+      initialOpenedReport={serialize(reports.targetReport ?? null)}
     />
   );
 }

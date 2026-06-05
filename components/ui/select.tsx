@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -7,6 +8,15 @@ type SelectOption = {
   value: string;
   label: string;
   disabled: boolean;
+};
+type MenuPosition = {
+  left: number;
+  top: number;
+  width: number;
+  maxHeight: number;
+};
+type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
+  menuPlacement?: "bottom" | "top";
 };
 
 function optionText(value: React.ReactNode): string {
@@ -23,7 +33,11 @@ function optionText(value: React.ReactNode): string {
 
 function selectOptions(children: React.ReactNode): SelectOption[] {
   return React.Children.toArray(children).flatMap((child) => {
-    if (!React.isValidElement<React.OptionHTMLAttributes<HTMLOptionElement>>(child)) {
+    if (
+      !React.isValidElement<React.OptionHTMLAttributes<HTMLOptionElement>>(
+        child,
+      )
+    ) {
       return [];
     }
 
@@ -46,10 +60,7 @@ function selectValue(value: unknown) {
   return value === undefined || value === null ? "" : String(value);
 }
 
-export const Select = React.forwardRef<
-  HTMLSelectElement,
-  React.SelectHTMLAttributes<HTMLSelectElement>
->(
+export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
   (
     {
       className,
@@ -61,6 +72,7 @@ export const Select = React.forwardRef<
       id,
       name,
       required,
+      menuPlacement = "bottom",
       "aria-label": ariaLabel,
       ...props
     },
@@ -72,6 +84,9 @@ export const Select = React.forwardRef<
     const listboxRef = React.useRef<HTMLDivElement>(null);
     const options = React.useMemo(() => selectOptions(children), [children]);
     const [open, setOpen] = React.useState(false);
+    const [menuPosition, setMenuPosition] = React.useState<MenuPosition | null>(
+      null,
+    );
     const [internalValue, setInternalValue] = React.useState(() =>
       selectValue(defaultValue ?? options[0]?.value ?? ""),
     );
@@ -82,17 +97,73 @@ export const Select = React.forwardRef<
     const triggerId = id ?? `select-${generatedId}`;
     const listboxId = `${triggerId}-listbox`;
 
-    React.useImperativeHandle(ref, () => selectRef.current as HTMLSelectElement);
+    React.useImperativeHandle(
+      ref,
+      () => selectRef.current as HTMLSelectElement,
+    );
+
+    const updateMenuPosition = React.useCallback(() => {
+      if (typeof window === "undefined" || !wrapperRef.current) {
+        return;
+      }
+
+      const rect = wrapperRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      const margin = 8;
+      const gap = 6;
+      const menuWidth = Math.max(rect.width, 192);
+      const left = Math.min(
+        Math.max(margin, rect.left),
+        Math.max(margin, viewportWidth - margin - menuWidth),
+      );
+      const spaceBelow = viewportHeight - rect.bottom - margin - gap;
+      const spaceAbove = rect.top - margin - gap;
+      let placement = menuPlacement;
+
+      if (
+        placement === "bottom" &&
+        spaceBelow < 180 &&
+        spaceAbove > spaceBelow
+      ) {
+        placement = "top";
+      }
+
+      if (placement === "top" && spaceAbove < 180 && spaceBelow > spaceAbove) {
+        placement = "bottom";
+      }
+
+      const availableSpace = Math.max(
+        80,
+        placement === "top" ? spaceAbove : spaceBelow,
+      );
+      const maxHeight = Math.min(256, availableSpace);
+      const top =
+        placement === "top"
+          ? Math.max(margin, rect.top - gap - maxHeight)
+          : Math.min(rect.bottom + gap, viewportHeight - margin - maxHeight);
+
+      setMenuPosition({
+        left,
+        top,
+        width: menuWidth,
+        maxHeight,
+      });
+    }, [menuPlacement]);
 
     React.useEffect(() => {
       if (!open) {
+        setMenuPosition(null);
         return;
       }
 
       function handlePointerDown(event: PointerEvent) {
         const target = event.target as Node;
 
-        if (!wrapperRef.current?.contains(target)) {
+        if (
+          !wrapperRef.current?.contains(target) &&
+          !listboxRef.current?.contains(target)
+        ) {
           setOpen(false);
         }
       }
@@ -105,30 +176,17 @@ export const Select = React.forwardRef<
 
       document.addEventListener("pointerdown", handlePointerDown);
       document.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("resize", updateMenuPosition);
+      window.addEventListener("scroll", updateMenuPosition, true);
+      updateMenuPosition();
 
       return () => {
         document.removeEventListener("pointerdown", handlePointerDown);
         document.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("resize", updateMenuPosition);
+        window.removeEventListener("scroll", updateMenuPosition, true);
       };
-    }, [open]);
-
-    React.useEffect(() => {
-      if (!open) {
-        return;
-      }
-
-      const timeout = window.setTimeout(() => {
-        if (typeof listboxRef.current?.scrollIntoView === "function") {
-          listboxRef.current.scrollIntoView({
-            block: "nearest",
-            inline: "nearest",
-            behavior: "smooth",
-          });
-        }
-      }, 0);
-
-      return () => window.clearTimeout(timeout);
-    }, [open]);
+    }, [open, updateMenuPosition]);
 
     function chooseOption(nextValue: string) {
       if (disabled || nextValue === selectedValue) {
@@ -195,16 +253,34 @@ export const Select = React.forwardRef<
           aria-expanded={open}
           aria-controls={listboxId}
           disabled={disabled}
-          onClick={() => setOpen((current) => !current)}
+          onClick={() => {
+            if (open) {
+              setOpen(false);
+              return;
+            }
+
+            updateMenuPosition();
+            setOpen(true);
+          }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown") {
               event.preventDefault();
-              open ? moveSelection(1) : setOpen(true);
+              if (open) {
+                moveSelection(1);
+              } else {
+                updateMenuPosition();
+                setOpen(true);
+              }
             }
 
             if (event.key === "ArrowUp") {
               event.preventDefault();
-              open ? moveSelection(-1) : setOpen(true);
+              if (open) {
+                moveSelection(-1);
+              } else {
+                updateMenuPosition();
+                setOpen(true);
+              }
             }
           }}
         >
@@ -219,39 +295,49 @@ export const Select = React.forwardRef<
             aria-hidden="true"
           />
         </button>
-        {open ? (
-          <div
-            ref={listboxRef}
-            id={listboxId}
-            role="listbox"
-            aria-labelledby={triggerId}
-            className="absolute left-0 top-[calc(100%+0.375rem)] z-[90] max-h-64 w-full min-w-[12rem] scroll-mb-3 scroll-mt-3 overflow-y-auto rounded-[8px] border border-[#dfe5ef] bg-white p-1.5 text-sm shadow-[var(--surface-shadow-strong)] dark:border-[#263a55] dark:bg-[#0f1b2a]"
-          >
-            {options.map((option) => {
-              const selected = option.value === selectedValue;
+        {open && typeof document !== "undefined"
+          ? createPortal(
+              <div
+                ref={listboxRef}
+                id={listboxId}
+                role="listbox"
+                aria-labelledby={triggerId}
+                className="fixed z-[1000] overflow-y-auto rounded-[8px] border border-[#dfe5ef] bg-white p-1.5 text-sm shadow-[var(--surface-shadow-strong)] dark:border-[#263a55] dark:bg-[#0f1b2a]"
+                style={{
+                  left: menuPosition?.left ?? 0,
+                  top: menuPosition?.top ?? 0,
+                  width: menuPosition?.width,
+                  maxHeight: menuPosition?.maxHeight,
+                  visibility: menuPosition ? "visible" : "hidden",
+                }}
+              >
+                {options.map((option) => {
+                  const selected = option.value === selectedValue;
 
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  disabled={option.disabled}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-2 rounded-[7px] px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-45",
-                    selected
-                      ? "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-blue-100"
-                      : "text-[#344054] hover:bg-[#f6f8fb] dark:text-foreground dark:hover:bg-white/[0.055]",
-                  )}
-                  onClick={() => chooseOption(option.value)}
-                >
-                  <span className="min-w-0 truncate">{option.label}</span>
-                  {selected ? <Check className="h-4 w-4 shrink-0" /> : null}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      disabled={option.disabled}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-2 rounded-[7px] px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-45",
+                        selected
+                          ? "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-blue-100"
+                          : "text-[#344054] hover:bg-[#f6f8fb] dark:text-foreground dark:hover:bg-white/[0.055]",
+                      )}
+                      onClick={() => chooseOption(option.value)}
+                    >
+                      <span className="min-w-0 truncate">{option.label}</span>
+                      {selected ? <Check className="h-4 w-4 shrink-0" /> : null}
+                    </button>
+                  );
+                })}
+              </div>,
+              document.body,
+            )
+          : null}
       </span>
     );
   },

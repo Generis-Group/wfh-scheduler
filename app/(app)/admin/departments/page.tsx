@@ -33,6 +33,7 @@ export default async function AdminDepartmentsPage() {
     () =>
       Promise.all([
         prisma.user.findMany({
+          where: { status: { not: "DISABLED" } },
           orderBy: [{ name: "asc" }, { email: "asc" }],
           select: adminUserSelect,
         }),

@@ -8,7 +8,12 @@ import { flushSync } from "react-dom";
 import { Building2, FileText, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AdminDepartmentsSectionSkeleton,
+  AdminReportsSectionSkeleton,
+  AdminTeamSectionSkeleton,
+  type AdminSkeletonSection,
+} from "@/components/reports/page-loading-skeleton";
 import { cn } from "@/lib/utils";
 
 export type AdminSectionId = "team" | "departments" | "reports";
@@ -17,7 +22,6 @@ type AdminSection = {
   id: AdminSectionId;
   href: string;
   label: string;
-  description: string;
   icon: LucideIcon;
 };
 
@@ -31,21 +35,18 @@ const adminSections: AdminSection[] = [
     id: "team",
     href: "/admin/team",
     label: "Team members",
-    description: "Manage roles, departments, reviewer scope, and passwords.",
     icon: Users,
   },
   {
     id: "departments",
     href: "/admin/departments",
     label: "Departments",
-    description: "Create and remove the departments used for assignments.",
     icon: Building2,
   },
   {
     id: "reports",
     href: "/admin/reports",
-    label: "Reports",
-    description: "Review, reopen, delete, and export employee reports.",
+    label: "Report management",
     icon: FileText,
   },
 ];
@@ -80,10 +81,7 @@ export function AdminSectionFrame({
     (pendingSection ? activeSectionFromPathname(pendingSection.href) : null) ??
     activeSection ??
     activeSectionFromPathname(pathname);
-  const currentSection =
-    adminSections.find((section) => section.id === currentSectionId) ??
-    adminSections[0];
-  const isTeamSection = currentSection.id === "team";
+  const isTeamSection = currentSectionId === "team";
   const displayAction = pendingSection ? null : isTeamSection ? action : null;
 
   useEffect(() => {
@@ -139,26 +137,18 @@ export function AdminSectionFrame({
   return (
     <main className="reference-page min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
       <div className="shrink-0">
-        <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
-          <span className="text-[#2563eb]">Admin</span>
-          <span className="text-[#98a2b3]">/</span>
-          <span className="text-[#475467] dark:text-muted-foreground">
-            {currentSection.label}
-          </span>
-        </div>
         <div className="reference-page-header">
           <div className="min-w-0">
-            <h1 className="reference-title">Admin</h1>
-            <p className="reference-subtitle">
-              {currentSection.description}
-            </p>
+            <h1 className="reference-title">
+              Manage roles, departments, and access
+            </h1>
           </div>
           {displayAction ? <div className="shrink-0">{displayAction}</div> : null}
         </div>
       </div>
 
       <nav
-        className="mb-3 flex shrink-0 flex-wrap gap-x-5 gap-y-2 border-b border-[#d9e1ec] dark:border-[#263a55]"
+        className="reference-section-tabs"
         aria-label="Admin sections"
       >
         {adminSections.map((section) => {
@@ -171,7 +161,7 @@ export function AdminSectionFrame({
               href={section.href}
               onClick={(event) => navigateSection(section.href, event)}
               className={cn(
-                "flex shrink-0 items-center gap-2 border-b-2 px-2 pb-2.5 text-sm font-semibold transition-colors",
+                "reference-section-tab",
                 active
                   ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#bfdbfe]"
                   : "border-transparent text-[#475467] hover:text-[#111827] dark:text-muted-foreground dark:hover:text-foreground",
@@ -186,10 +176,14 @@ export function AdminSectionFrame({
       </nav>
 
       <div
-        className="min-w-0 min-[1024px]:min-h-0 min-[1024px]:flex-1"
+        className="min-w-0 min-[1024px]:flex min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:flex-col"
         aria-busy={Boolean(pendingSection)}
       >
-        {pendingSection ? <AdminSectionContentSkeleton /> : children}
+        {pendingSection ? (
+          <AdminSectionContentSkeleton section={currentSectionId} />
+        ) : (
+          children
+        )}
       </div>
     </main>
   );
@@ -200,32 +194,44 @@ export function AdminSectionLoadingFallback() {
 
   return (
     <AdminSectionFrame activeSection={activeSectionFromPathname(pathname)}>
-      <AdminSectionContentSkeleton />
+      <AdminSectionContentSkeleton section={activeSectionFromPathname(pathname)} />
     </AdminSectionFrame>
   );
 }
 
-function AdminSectionContentSkeleton() {
+function AdminSectionContentSkeleton({
+  section = "team",
+}: {
+  section?: AdminSkeletonSection;
+}) {
+  if (section === "departments") {
+    return (
+      <div
+        className="min-w-0 min-[1024px]:flex min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:flex-col"
+        aria-label="Loading admin section"
+      >
+        <AdminDepartmentsSectionSkeleton />
+      </div>
+    );
+  }
+
+  if (section === "reports") {
+    return (
+      <div
+        className="min-w-0 min-[1024px]:flex min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:flex-col"
+        aria-label="Loading admin section"
+      >
+        <AdminReportsSectionSkeleton />
+      </div>
+    );
+  }
+
   return (
-    <section
-      className="rounded-[10px] bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.07)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]"
+    <div
+      className="min-w-0 min-[1024px]:flex min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:flex-col"
       aria-label="Loading admin section"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Skeleton className="h-7 w-40 rounded-[4px]" />
-        <Skeleton className="h-10 w-32 rounded-[8px]" />
-      </div>
-      <div className="mt-4 grid gap-3 min-[900px]:grid-cols-[minmax(240px,1fr)_180px_180px]">
-        <Skeleton className="h-10 rounded-[8px]" />
-        <Skeleton className="h-10 rounded-[8px]" />
-        <Skeleton className="h-10 rounded-[8px]" />
-      </div>
-      <div className="mt-5 space-y-3">
-        <Skeleton className="h-14 rounded-[8px]" />
-        <Skeleton className="h-14 rounded-[8px]" />
-        <Skeleton className="h-14 rounded-[8px]" />
-        <Skeleton className="h-14 rounded-[8px]" />
-      </div>
-    </section>
+      <AdminTeamSectionSkeleton />
+    </div>
   );
 }

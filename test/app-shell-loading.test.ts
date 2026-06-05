@@ -11,6 +11,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -237,12 +238,21 @@ describe("authenticated app shell loading boundaries", () => {
     expect(shellPageKindFromHref("/", "employee")).toBe("daily");
     expect(shellPageKindFromHref("/reports", "employee")).toBe("reports");
     expect(shellPageKindFromHref("/review", "reviewer")).toBe("review");
-    expect(shellPageKindFromHref("/admin", "admin")).toBe("admin");
-    expect(shellPageKindFromHref("/admin/team", "admin")).toBe("admin");
-    expect(loadingKindFromHref("/admin/team", "admin")).toBe("admin");
+    expect(shellPageKindFromHref("/admin", "admin")).toBe("admin-team");
+    expect(shellPageKindFromHref("/admin/team", "admin")).toBe("admin-team");
+    expect(loadingKindFromHref("/admin/team", "admin")).toBe("admin-team");
+    expect(loadingKindFromHref("/admin/departments", "admin")).toBe(
+      "admin-departments",
+    );
+    expect(loadingKindFromHref("/admin/reports", "admin")).toBe(
+      "admin-reports",
+    );
     expect(shellPageKindFromHref("/bugs", "employee")).toBe("bugs");
     expect(shellPageKindFromHref("/settings#account", "employee")).toBe(
-      "settings",
+      "settings-account",
+    );
+    expect(shellPageKindFromHref("/settings#integrations", "employee")).toBe(
+      "settings-integrations",
     );
     expect(shellPageKindFromHref("/change-password", "employee")).toBeNull();
   });
@@ -251,7 +261,7 @@ describe("authenticated app shell loading boundaries", () => {
     renderReferenceShell();
 
     const reportsLink = screen.getAllByRole("link", {
-      name: "Reports",
+      name: "My reports",
     })[0];
 
     fireEvent.click(reportsLink);
@@ -274,7 +284,7 @@ describe("authenticated app shell loading boundaries", () => {
     renderReferenceShell("Current page content", "reviewer");
 
     expect(
-      screen.getAllByRole("link", { name: "Review" }).length,
+      screen.getAllByRole("link", { name: "Team review" }).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByRole("link", { name: "Admin" })).toBeNull();
 
@@ -282,7 +292,7 @@ describe("authenticated app shell loading boundaries", () => {
 
     renderReferenceShell("Current page content", "admin");
 
-    expect(uniqueLinkHrefs("Review")).toEqual(["/review"]);
+    expect(uniqueLinkHrefs("Team review")).toEqual(["/review"]);
     expect(uniqueLinkHrefs("Admin")).toEqual(["/admin/team"]);
   });
 
@@ -293,11 +303,29 @@ describe("authenticated app shell loading boundaries", () => {
       "ADMIN",
     ]);
 
-    expect(uniqueLinkHrefs("Daily")).toEqual([`/?date=${todayDateString()}`]);
-    expect(uniqueLinkHrefs("Reports")).toEqual(["/reports"]);
-    expect(uniqueLinkHrefs("Review")).toEqual(["/review"]);
+    const primaryNav = screen.getByRole("navigation", {
+      name: "Primary navigation",
+    });
+    expect(
+      within(primaryNav)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual([
+      "Daily update",
+      "My reports",
+      "Team review",
+      "Admin",
+      "Bug reports",
+      "Settings",
+    ]);
+
+    expect(uniqueLinkHrefs("Daily update")).toEqual([
+      `/?date=${todayDateString()}`,
+    ]);
+    expect(uniqueLinkHrefs("My reports")).toEqual(["/reports"]);
+    expect(uniqueLinkHrefs("Team review")).toEqual(["/review"]);
     expect(uniqueLinkHrefs("Admin")).toEqual(["/admin/team"]);
-    expect(uniqueLinkHrefs("Issues")).toEqual(["/bugs?from=%2F"]);
+    expect(uniqueLinkHrefs("Bug reports")).toEqual(["/bugs?from=%2F"]);
     expect(uniqueLinkHrefs("Settings")).toEqual(["/settings"]);
   });
 
@@ -307,7 +335,7 @@ describe("authenticated app shell loading boundaries", () => {
 
     renderReferenceShell();
 
-    expect(uniqueLinkHrefs("Issues")).toEqual([
+    expect(uniqueLinkHrefs("Bug reports")).toEqual([
       "/bugs?from=%2Freports%3Fdate%3D2026-05-27",
     ]);
   });
@@ -325,7 +353,9 @@ describe("authenticated app shell loading boundaries", () => {
       expect(window.localStorage.getItem("generis.lastReviewDate")).toBe(
         "2026-05-19",
       );
-      expect(uniqueLinkHrefs("Review")).toEqual(["/review?date=2026-05-19"]);
+      expect(uniqueLinkHrefs("Team review")).toEqual([
+        "/review?date=2026-05-19",
+      ]);
     });
   });
 
@@ -335,7 +365,7 @@ describe("authenticated app shell loading boundaries", () => {
     try {
       renderReferenceShell("Settings page content");
 
-      fireEvent.click(screen.getAllByRole("link", { name: "Reports" })[0]);
+      fireEvent.click(screen.getAllByRole("link", { name: "My reports" })[0]);
 
       act(() => {
         vi.advanceTimersByTime(15_000);
@@ -355,14 +385,14 @@ describe("authenticated app shell loading boundaries", () => {
 
     renderReferenceShell();
 
-    expect(uniqueLinkHrefs("Daily")).toEqual(["/"]);
+    expect(uniqueLinkHrefs("Daily update")).toEqual(["/"]);
 
     cleanup();
     mockPathname.current = "/admin";
 
     renderReferenceShell("Current page content", "admin");
 
-    expect(uniqueLinkHrefs("Review")).toEqual(["/review"]);
+    expect(uniqueLinkHrefs("Team review")).toEqual(["/review"]);
     expect(uniqueLinkHrefs("Generis")).toEqual(["/admin/team"]);
   });
 
@@ -377,7 +407,7 @@ describe("authenticated app shell loading boundaries", () => {
     renderReferenceShell();
 
     await waitFor(() => {
-      expect(uniqueLinkHrefs("Daily")).toEqual(["/?date=2026-05-20"]);
+      expect(uniqueLinkHrefs("Daily update")).toEqual(["/?date=2026-05-20"]);
     });
 
     cleanup();
@@ -394,7 +424,9 @@ describe("authenticated app shell loading boundaries", () => {
     ]);
 
     await waitFor(() => {
-      expect(uniqueLinkHrefs("Review")).toEqual(["/review?date=2026-05-19"]);
+      expect(uniqueLinkHrefs("Team review")).toEqual([
+        "/review?date=2026-05-19",
+      ]);
       expect(uniqueLinkHrefs("Generis")).toEqual([
         "/review?date=2026-05-19",
       ]);

@@ -72,6 +72,24 @@ describe("ReportHistory review notes", () => {
     render(<ReportHistory reports={[reportWithComment]} />);
 
     expect(screen.queryByRole("heading", { name: "Daily Report" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Reports" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", {
+        name: "Review your submitted updates",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("shows an empty report list without stranded table headers", () => {
+    render(<ReportHistory reports={[]} />);
+
+    expect(
+      screen.getByText(
+        "No reports match the current filters. Create a report or clear your filters.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Date")).toBeNull();
+    expect(screen.queryByText("Status")).toBeNull();
+    expect(screen.queryByText("Summary")).toBeNull();
+    expect(screen.queryByText("Actions")).toBeNull();
   });
 });

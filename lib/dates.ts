@@ -18,6 +18,26 @@ export function isFutureReportDateString(
   );
 }
 
+export function isValidReportDateString(value?: string | null) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const parsed = parseReportDate(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return false;
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() + 1 === month &&
+    parsed.getUTCDate() === day
+  );
+}
+
 export function clampReportDateToToday(
   value?: string | null,
   timezone = DEFAULT_TIMEZONE,

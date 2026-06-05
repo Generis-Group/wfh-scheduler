@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CalendarDays, Loader2, Search, Trash2 } from "lucide-react";
 
 import { EmptyReferenceState } from "@/components/reports/reference-shell";
@@ -8,9 +8,15 @@ import { ReportStatusBadge } from "@/components/reports/report-ui";
 import { Button } from "@/components/ui/button";
 import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Select } from "@/components/ui/select";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
-import { cn, initials } from "@/lib/utils";
+import {
+  fetchJsonWithClientCache,
+  writeClientJsonCache,
+} from "@/lib/client-request-cache";
+import { defaultPaginationPageSize } from "@/lib/pagination";
+import { initials } from "@/lib/utils";
 
 type AdminManagedReport = {
   id: string;
@@ -38,46 +44,168 @@ type AdminManagedReport = {
 };
 
 type StatusFilter = "ALL" | "SUBMITTED" | "DRAFT";
+const defaultAdminReportPageSize = defaultPaginationPageSize;
+
+type AdminReportsPageResponse = {
+  reports?: AdminManagedReport[];
+  totalCount?: number;
+  error?: string;
+};
 
 export function AdminReportsManager({
   initialReports,
+  initialTotalCount = initialReports.length,
 }: {
   initialReports: AdminManagedReport[];
+  initialTotalCount?: number;
 }) {
   const [reports, setReports] = useState(initialReports);
+  const [totalCount, setTotalCount] = useState(initialTotalCount);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [reportPage, setReportPage] = useState(1);
+  const [reportPageSize, setReportPageSize] = useState(
+    defaultAdminReportPageSize,
+  );
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const filterReadyRef = useRef(false);
+  const cacheSeededRef = useRef(false);
+  const immediateRefreshRef = useRef(false);
+  const requestIdRef = useRef(0);
 
-  const filteredReports = useMemo(() => {
-    const query = search.trim().toLowerCase();
+  const reportPageCount = Math.max(1, Math.ceil(totalCount / reportPageSize));
+  const currentReportPage = Math.min(reportPage, reportPageCount);
 
-    return reports.filter((report) => {
-      if (statusFilter !== "ALL" && report.status !== statusFilter) {
+  const reportsUrl = useCallback(() => {
+    const params = new URLSearchParams({
+      limit: String(reportPageSize),
+      page: String(currentReportPage),
+      status: statusFilter,
+    });
+    const query = search.trim();
+
+    if (query) {
+      params.set("search", query);
+    }
+
+    return `/api/admin/reports?${params.toString()}`;
+  }, [currentReportPage, reportPageSize, search, statusFilter]);
+
+  const loadReports = useCallback(async ({
+    signal,
+  }: {
+    signal?: AbortSignal;
+  } = {}) => {
+    const requestId = ++requestIdRef.current;
+
+    setIsRefreshing(true);
+
+    try {
+      const data = await fetchJsonWithClientCache<AdminReportsPageResponse>(
+        reportsUrl(),
+        {
+          signal,
+          errorMessage: "Unable to load reports.",
+        },
+      );
+
+      if (requestId !== requestIdRef.current) {
         return false;
       }
 
-      if (!query) {
-        return true;
+      setReports(data.reports ?? []);
+      setTotalCount(data.totalCount ?? 0);
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return false;
       }
 
-      const haystack = [
-        report.user.name,
-        report.user.email,
-        report.summary,
-        formatReportDate(report.reportDate),
-        departmentLabel(report),
-        report.workLocation,
-        report.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      setMessage(
+        error instanceof Error ? error.message : "Unable to load reports.",
+      );
+      return false;
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setIsRefreshing(false);
+      }
+    }
+  }, [reportsUrl]);
 
-      return haystack.includes(query);
+  function requestImmediateRefresh() {
+    immediateRefreshRef.current = true;
+    setIsRefreshing(true);
+  }
+
+  function changeReportPage(nextPage: number) {
+    requestImmediateRefresh();
+    setReportPage(nextPage);
+  }
+
+  function changeReportPageSize(nextPageSize: number) {
+    if (nextPageSize === reportPageSize) {
+      return;
+    }
+
+    requestImmediateRefresh();
+    setReportPageSize(nextPageSize);
+    setReportPage(1);
+  }
+
+  async function refreshReportsAfterMutation({
+    pageMayBeEmpty = false,
+  }: {
+    pageMayBeEmpty?: boolean;
+  } = {}) {
+    markServerDataStale();
+
+    if (pageMayBeEmpty && reports.length <= 1 && currentReportPage > 1) {
+      requestImmediateRefresh();
+      setReportPage(currentReportPage - 1);
+      return true;
+    }
+
+    return loadReports();
+  }
+
+  useEffect(() => {
+    if (cacheSeededRef.current) {
+      return;
+    }
+
+    cacheSeededRef.current = true;
+    writeClientJsonCache<AdminReportsPageResponse>(reportsUrl(), {
+      reports: initialReports,
+      totalCount: initialTotalCount,
     });
-  }, [reports, search, statusFilter]);
+  }, [initialReports, initialTotalCount, reportsUrl]);
+
+  useEffect(() => {
+    if (!filterReadyRef.current) {
+      filterReadyRef.current = true;
+      return;
+    }
+
+    const controller = new AbortController();
+    const delayMs = immediateRefreshRef.current ? 0 : 250;
+    immediateRefreshRef.current = false;
+    const timeoutId = window.setTimeout(() => {
+      void loadReports({ signal: controller.signal });
+    }, delayMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [loadReports]);
+
+  useEffect(() => {
+    if (reportPage > reportPageCount) {
+      setReportPage(reportPageCount);
+    }
+  }, [reportPage, reportPageCount]);
 
   async function deleteReport(report: AdminManagedReport) {
     if (deletingReportId) {
@@ -109,7 +237,15 @@ export function AdminReportsManager({
       }
 
       setReports((current) => current.filter((item) => item.id !== report.id));
-      markServerDataStale();
+      setTotalCount((current) => Math.max(0, current - 1));
+      const refreshed = await refreshReportsAfterMutation({
+        pageMayBeEmpty: true,
+      });
+
+      if (!refreshed) {
+        return;
+      }
+
       setMessage("Report deleted.");
     } catch (error) {
       setMessage(
@@ -124,7 +260,7 @@ export function AdminReportsManager({
 
   return (
     <>
-      <section className="min-w-0 overflow-hidden rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43] min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
+      <section className="reference-card reference-paginated-surface p-0 min-[1024px]:h-full">
         <div className="shrink-0 border-b border-[#e5eaf2] p-3 dark:border-[#263a55]">
           <div className="flex flex-col gap-3 min-[820px]:flex-row min-[820px]:items-center">
             <div className="relative min-w-0 flex-1">
@@ -137,30 +273,44 @@ export function AdminReportsManager({
                 className="h-10 bg-white pl-9 ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]"
                 placeholder="Search employee, date, department, or summary"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setReportPage(1);
+                }}
               />
             </div>
             <Select
               aria-label="Filter reports by status"
               className="w-full min-[820px]:w-44"
               value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(event.target.value as StatusFilter)
-              }
+              onChange={(event) => {
+                setStatusFilter(event.target.value as StatusFilter);
+                setReportPage(1);
+              }}
             >
               <option value="ALL">All statuses</option>
               <option value="SUBMITTED">Submitted</option>
               <option value="DRAFT">Drafts</option>
             </Select>
             <div className="text-sm font-semibold text-[#64748b] dark:text-muted-foreground min-[820px]:min-w-28 min-[820px]:text-right">
-              {filteredReports.length} report
-              {filteredReports.length === 1 ? "" : "s"}
+              {totalCount} report
+              {totalCount === 1 ? "" : "s"}
             </div>
           </div>
         </div>
 
-        <div className="min-h-0 min-[1024px]:flex-1 min-[1024px]:overflow-y-auto min-[1024px]:overscroll-contain min-[1024px]:[scrollbar-gutter:stable]">
-          {filteredReports.length === 0 ? (
+        <div
+          className="reference-paginated-viewport"
+          data-pagination-loading={
+            isRefreshing && reports.length > 0 ? "true" : undefined
+          }
+          aria-busy={isRefreshing}
+        >
+          {isRefreshing && reports.length === 0 ? (
+            <div className="p-3">
+              <EmptyReferenceState>Loading reports...</EmptyReferenceState>
+            </div>
+          ) : reports.length === 0 ? (
             <div className="p-3">
               <EmptyReferenceState>
                 No reports match the current filters.
@@ -168,10 +318,10 @@ export function AdminReportsManager({
             </div>
           ) : (
             <div className="divide-y divide-[#e5eaf2] dark:divide-[#263a55]">
-              {filteredReports.map((report) => (
+              {reports.map((report) => (
                 <article
                   key={report.id}
-                  className="grid min-w-0 gap-3 p-3 min-[860px]:grid-cols-[minmax(0,1fr)_160px_130px_auto] min-[860px]:items-center"
+                  className="reference-admin-report-row-grid"
                 >
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-start gap-3">
@@ -229,6 +379,17 @@ export function AdminReportsManager({
             </div>
           )}
         </div>
+        <PaginationControls
+          className="reference-paginated-footer px-3 pb-3 pt-5"
+          page={currentReportPage}
+          pageSize={reportPageSize}
+          pageSizeMenuPlacement="top"
+          totalItems={totalCount}
+          itemLabel="managed reports"
+          isLoading={isRefreshing}
+          onPageChange={changeReportPage}
+          onPageSizeChange={changeReportPageSize}
+        />
       </section>
       <FixedToast message={message} onDismiss={() => setMessage(null)} />
     </>

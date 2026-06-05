@@ -29,15 +29,15 @@ export function AuthLoadingSkeleton({
           </div>
         </div>
         <Card
-          className="w-full max-w-md"
+          className="w-full max-w-md shadow-[var(--surface-shadow-strong)]"
           aria-busy="true"
           aria-label="Loading"
         >
-          <CardHeader className="items-center text-center">
-            <Skeleton className="h-7 w-52 rounded-[4px]" />
+          <CardHeader className="space-y-2 px-5 pt-5 text-center">
+            <Skeleton className="mx-auto h-8 w-52 rounded-[4px]" />
             <Skeleton className="h-4 w-72 max-w-full rounded-[4px]" />
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 px-5 pb-5">
             {Array.from({ length: fields }).map((_, index) => (
               <div key={index} className="space-y-2">
                 <Skeleton className="h-4 w-24 rounded-[4px]" />
@@ -47,11 +47,12 @@ export function AuthLoadingSkeleton({
             <Skeleton className="h-10 w-full rounded-[7px]" />
             {oauthActions ? (
               <>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="space-y-2">
                   <Skeleton className="h-10 rounded-[7px]" />
                   <Skeleton className="h-10 rounded-[7px]" />
                 </div>
-                <Skeleton className="h-3 w-56 rounded-[4px]" />
+                <Skeleton className="h-8 w-full rounded-[8px]" />
+                <Skeleton className="h-3 w-72 max-w-full rounded-[4px]" />
               </>
             ) : null}
           </CardContent>

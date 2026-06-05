@@ -33,21 +33,11 @@ function applyTheme(theme: Theme) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("light");
-  const [mounted, setMounted] = useState(false);
+  const [theme, setThemeState] = useState<Theme>(() => getInitialTheme());
 
   useEffect(() => {
-    const initialTheme = getInitialTheme();
-    setThemeState(initialTheme);
-    applyTheme(initialTheme);
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (mounted) {
-      applyTheme(theme);
-    }
-  }, [mounted, theme]);
+    applyTheme(theme);
+  }, [theme]);
 
   const value = useMemo<ThemeContextValue>(
     () => ({

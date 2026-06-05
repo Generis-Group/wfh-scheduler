@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   CheckCircle2,
@@ -27,6 +27,7 @@ import {
 import { EmptyReferenceState } from "@/components/reports/reference-shell";
 import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Textarea } from "@/components/ui/textarea";
 import {
   maxBugReportBodyCharacters,
@@ -34,6 +35,11 @@ import {
   maxBugReportBodyWords,
 } from "@/lib/bug-report-limits";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
+import {
+  fetchJsonWithClientCache,
+  writeClientJsonCache,
+} from "@/lib/client-request-cache";
+import { defaultPaginationPageSize } from "@/lib/pagination";
 import { cn, initials } from "@/lib/utils";
 
 type BugReportAttachment = {
@@ -72,29 +78,87 @@ type BugReport = {
   attachments: BugReportAttachment[];
 };
 
+type BugReportsPageResponse = {
+  reports?: BugReport[];
+  totalCount?: number;
+  error?: string;
+};
+
 const maxAttachments = 4;
 const maxAttachmentBytes = 900_000;
 const acceptedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export function BugReportPage({
   initialReports,
+  initialOpenReports,
+  initialSolvedReports,
+  initialOpenTotalCount,
+  initialSolvedTotalCount,
+  initialSelectedReport,
   canReviewAll,
   currentUserName,
   sourcePagePath,
   initialSelectedReportId,
 }: {
-  initialReports: BugReport[];
+  initialReports?: BugReport[];
+  initialOpenReports?: BugReport[];
+  initialSolvedReports?: BugReport[];
+  initialOpenTotalCount?: number;
+  initialSolvedTotalCount?: number;
+  initialSelectedReport?: BugReport | null;
   canReviewAll: boolean;
   currentUserName: string;
   sourcePagePath?: string | null;
   initialSelectedReportId?: string | null;
 }) {
-  const [reports, setReports] = useState(initialReports);
+  const seededReports = initialReports ?? [
+    ...(initialOpenReports ?? []),
+    ...(initialSolvedReports ?? []),
+  ];
+  const seededSelectedReport =
+    initialSelectedReport &&
+    initialSelectedReport.id === initialSelectedReportId
+      ? initialSelectedReport
+      : null;
+  const seededInitialReport = initialSelectedReportId
+    ? (seededReports.find((report) => report.id === initialSelectedReportId) ??
+        seededSelectedReport)
+    : null;
+  const seededOpenCount =
+    initialOpenTotalCount ??
+    seededReports.filter((report) => bugReportStatus(report) === "OPEN").length;
+  const seededSolvedCount =
+    initialSolvedTotalCount ??
+    seededReports.filter((report) => bugReportStatus(report) === "SOLVED")
+      .length;
+  const [reports, setReports] = useState(() => dedupeBugReports(seededReports));
+  const [selectedReportDetail, setSelectedReportDetail] =
+    useState<BugReport | null>(() =>
+      seededSelectedReport &&
+      !seededReports.some((report) => report.id === seededSelectedReport.id)
+        ? seededSelectedReport
+        : null,
+    );
+  const [openTotalCount, setOpenTotalCount] = useState(seededOpenCount);
+  const [solvedTotalCount, setSolvedTotalCount] = useState(seededSolvedCount);
+  const [openResultCount, setOpenResultCount] = useState(seededOpenCount);
+  const [solvedResultCount, setSolvedResultCount] =
+    useState(seededSolvedCount);
+  const [openPage, setOpenPage] = useState(1);
+  const [solvedPage, setSolvedPage] = useState(1);
+  const [openPageSize, setOpenPageSize] = useState(defaultPaginationPageSize);
+  const [solvedPageSize, setSolvedPageSize] = useState(
+    defaultPaginationPageSize,
+  );
+  const [refreshingStatus, setRefreshingStatus] = useState<
+    "OPEN" | "SOLVED" | null
+  >(null);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(
     initialSelectedReportId &&
-      initialReports.some((report) => report.id === initialSelectedReportId)
+      seededInitialReport
       ? initialSelectedReportId
-      : (initialReports[0]?.id ?? null),
+      : (seededReports.find((report) => bugReportStatus(report) === "OPEN")
+          ?.id ?? null),
   );
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -104,11 +168,8 @@ export function BugReportPage({
   const [detailOpen, setDetailOpen] = useState(() =>
     Boolean(
       initialSelectedReportId &&
-        initialReports.some(
-          (report) =>
-            report.id === initialSelectedReportId &&
-            bugReportStatus(report) === "OPEN",
-        ),
+        seededInitialReport &&
+        bugReportStatus(seededInitialReport) === "OPEN",
     ),
   );
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -117,15 +178,25 @@ export function BugReportPage({
     string | null
   >(null);
   const handledInitialReportIdRef = useRef<string | null>(null);
-  const openReportCount = useMemo(
-    () => reports.filter((report) => bugReportStatus(report) === "OPEN").length,
-    [reports],
+  const openSearchReadyRef = useRef(false);
+  const archiveSearchReadyRef = useRef(false);
+  const cacheSeededRef = useRef(false);
+  const immediateListRefreshRef = useRef({ OPEN: false, SOLVED: false });
+  const listRequestIdsRef = useRef({ OPEN: 0, SOLVED: 0 });
+  const hasOpenSearch = search.trim().length > 0;
+  const hasArchiveSearch = archiveSearch.trim().length > 0;
+  const openReportCount = hasOpenSearch ? openResultCount : openTotalCount;
+  const solvedReportCount = solvedTotalCount;
+  const archiveReportCount = hasArchiveSearch
+    ? solvedResultCount
+    : solvedTotalCount;
+  const openPageCount = Math.max(1, Math.ceil(openReportCount / openPageSize));
+  const currentOpenPage = Math.min(openPage, openPageCount);
+  const archivePageCount = Math.max(
+    1,
+    Math.ceil(archiveReportCount / solvedPageSize),
   );
-  const solvedReportCount = useMemo(
-    () =>
-      reports.filter((report) => bugReportStatus(report) === "SOLVED").length,
-    [reports],
-  );
+  const currentSolvedPage = Math.min(solvedPage, archivePageCount);
   const openReports = useMemo(() => {
     const query = search.trim().toLowerCase();
     const openItems = reports.filter(
@@ -153,11 +224,26 @@ export function BugReportPage({
       bugReportMatchesQuery(report, query),
     );
   }, [archiveSearch, solvedReports]);
+  const selectedDetailReport =
+    selectedReportDetail &&
+    (selectedReportDetail.id === selectedReportId ||
+      selectedReportDetail.id === selectedArchiveReportId)
+      ? selectedReportDetail
+      : null;
   const selectedArchiveReport =
+    (selectedDetailReport?.id === selectedArchiveReportId &&
+    bugReportStatus(selectedDetailReport) === "SOLVED"
+      ? selectedDetailReport
+      : null) ??
     archiveReports.find((report) => report.id === selectedArchiveReportId) ??
     archiveReports[0] ??
     null;
   const mainSelectedReport =
+    (detailOpen &&
+    selectedDetailReport?.id === selectedReportId &&
+    bugReportStatus(selectedDetailReport) === "OPEN"
+      ? selectedDetailReport
+      : null) ??
     openReports.find((report) => report.id === selectedReportId) ??
     openReports[0] ??
     null;
@@ -181,11 +267,311 @@ export function BugReportPage({
   const openReportListClassName =
     "min-h-0 max-h-[min(34rem,calc(100dvh-18rem))] overflow-y-auto overscroll-contain [scrollbar-gutter:stable] min-[980px]:max-h-none min-[980px]:flex-1";
 
+  const bugReportsUrl = useCallback(
+    (
+      status: "OPEN" | "SOLVED",
+      {
+        page,
+        pageSize,
+        searchValue,
+      }: {
+        page: number;
+        pageSize: number;
+        searchValue: string;
+      },
+    ) => {
+      const params = new URLSearchParams({
+        status,
+        limit: String(pageSize),
+        page: String(page),
+      });
+      const query = searchValue.trim();
+
+      if (query) {
+        params.set("search", query);
+      }
+
+      return `/api/bug-reports?${params.toString()}`;
+    },
+    [],
+  );
+
+  const loadBugReportPage = useCallback(
+    async (
+      status: "OPEN" | "SOLVED",
+      {
+        page,
+        pageSize,
+        searchValue,
+        signal,
+      }: {
+        page: number;
+        pageSize: number;
+        searchValue: string;
+        signal?: AbortSignal;
+      },
+    ) => {
+      const requestId = listRequestIdsRef.current[status] + 1;
+      listRequestIdsRef.current = {
+        ...listRequestIdsRef.current,
+        [status]: requestId,
+      };
+
+      setRefreshingStatus(status);
+
+      try {
+        const data = await fetchJsonWithClientCache<BugReportsPageResponse>(
+          bugReportsUrl(status, { page, pageSize, searchValue }),
+          {
+            signal,
+            errorMessage: "Unable to load bug reports.",
+          },
+        );
+
+        if (listRequestIdsRef.current[status] !== requestId) {
+          return false;
+        }
+
+        setReports((current) => {
+          const kept = current.filter((report) => bugReportStatus(report) !== status);
+
+          return mergeBugReports(kept, data.reports ?? []);
+        });
+
+        const resultCount = data.totalCount ?? 0;
+
+        if (status === "OPEN") {
+          if (searchValue.trim()) {
+            setOpenResultCount(resultCount);
+          } else {
+            setOpenTotalCount(resultCount);
+            setOpenResultCount(resultCount);
+          }
+        } else {
+          if (searchValue.trim()) {
+            setSolvedResultCount(resultCount);
+          } else {
+            setSolvedTotalCount(resultCount);
+            setSolvedResultCount(resultCount);
+          }
+        }
+        return true;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return false;
+        }
+
+        setMessage(
+          error instanceof Error ? error.message : "Unable to load bug reports.",
+        );
+        return false;
+      } finally {
+        if (listRequestIdsRef.current[status] === requestId) {
+          setRefreshingStatus((current) =>
+            current === status ? null : current,
+          );
+        }
+      }
+    },
+    [bugReportsUrl],
+  );
+
+  function requestImmediateListRefresh(status: "OPEN" | "SOLVED") {
+    immediateListRefreshRef.current = {
+      ...immediateListRefreshRef.current,
+      [status]: true,
+    };
+    setRefreshingStatus(status);
+  }
+
+  function changeOpenPage(nextPage: number) {
+    requestImmediateListRefresh("OPEN");
+    setOpenPage(nextPage);
+  }
+
+  function changeOpenPageSize(nextPageSize: number) {
+    if (nextPageSize === openPageSize) {
+      return;
+    }
+
+    requestImmediateListRefresh("OPEN");
+    setOpenPageSize(nextPageSize);
+    setOpenPage(1);
+  }
+
+  function changeSolvedPage(nextPage: number) {
+    requestImmediateListRefresh("SOLVED");
+    setSolvedPage(nextPage);
+  }
+
+  function changeSolvedPageSize(nextPageSize: number) {
+    if (nextPageSize === solvedPageSize) {
+      return;
+    }
+
+    requestImmediateListRefresh("SOLVED");
+    setSolvedPageSize(nextPageSize);
+    setSolvedPage(1);
+  }
+
+  async function refreshBugReportStatusAfterMutation(
+    status: "OPEN" | "SOLVED",
+    {
+      pageMayBeEmpty = false,
+      visibleCount,
+    }: {
+      pageMayBeEmpty?: boolean;
+      visibleCount: number;
+    },
+  ) {
+    markServerDataStale();
+
+    if (status === "OPEN") {
+      if (pageMayBeEmpty && visibleCount <= 1 && currentOpenPage > 1) {
+        requestImmediateListRefresh("OPEN");
+        setOpenPage(currentOpenPage - 1);
+        return true;
+      }
+
+      return loadBugReportPage("OPEN", {
+        page: currentOpenPage,
+        pageSize: openPageSize,
+        searchValue: search,
+      });
+    }
+
+    if (pageMayBeEmpty && visibleCount <= 1 && currentSolvedPage > 1) {
+      requestImmediateListRefresh("SOLVED");
+      setSolvedPage(currentSolvedPage - 1);
+      return true;
+    }
+
+    return loadBugReportPage("SOLVED", {
+      page: currentSolvedPage,
+      pageSize: solvedPageSize,
+      searchValue: archiveSearch,
+    });
+  }
+
+  useEffect(() => {
+    if (cacheSeededRef.current) {
+      return;
+    }
+
+    cacheSeededRef.current = true;
+    writeClientJsonCache<BugReportsPageResponse>(
+      bugReportsUrl("OPEN", {
+        page: 1,
+        pageSize: openPageSize,
+        searchValue: "",
+      }),
+      {
+        reports: openReports,
+        totalCount: openTotalCount,
+      },
+    );
+    writeClientJsonCache<BugReportsPageResponse>(
+      bugReportsUrl("SOLVED", {
+        page: 1,
+        pageSize: solvedPageSize,
+        searchValue: "",
+      }),
+      {
+        reports: solvedReports,
+        totalCount: solvedTotalCount,
+      },
+    );
+  }, [
+    bugReportsUrl,
+    openPageSize,
+    openReports,
+    openTotalCount,
+    solvedPageSize,
+    solvedReports,
+    solvedTotalCount,
+  ]);
+
+  useEffect(() => {
+    if (!openSearchReadyRef.current) {
+      openSearchReadyRef.current = true;
+      return;
+    }
+
+    const controller = new AbortController();
+    const delayMs = immediateListRefreshRef.current.OPEN ? 0 : 250;
+    immediateListRefreshRef.current = {
+      ...immediateListRefreshRef.current,
+      OPEN: false,
+    };
+    const timeoutId = window.setTimeout(() => {
+      void loadBugReportPage("OPEN", {
+        page: currentOpenPage,
+        pageSize: openPageSize,
+        searchValue: search,
+        signal: controller.signal,
+      });
+    }, delayMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [currentOpenPage, loadBugReportPage, openPageSize, search]);
+
+  useEffect(() => {
+    if (!archiveOpen) {
+      return;
+    }
+
+    if (!archiveSearchReadyRef.current) {
+      archiveSearchReadyRef.current = true;
+      return;
+    }
+
+    const controller = new AbortController();
+    const delayMs = immediateListRefreshRef.current.SOLVED ? 0 : 250;
+    immediateListRefreshRef.current = {
+      ...immediateListRefreshRef.current,
+      SOLVED: false,
+    };
+    const timeoutId = window.setTimeout(() => {
+      void loadBugReportPage("SOLVED", {
+        page: currentSolvedPage,
+        pageSize: solvedPageSize,
+        searchValue: archiveSearch,
+        signal: controller.signal,
+      });
+    }, delayMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [
+    archiveOpen,
+    archiveSearch,
+    currentSolvedPage,
+    loadBugReportPage,
+    solvedPageSize,
+  ]);
+
   useEffect(() => {
     if (selectedReportId !== selectedMainReportId) {
       setSelectedReportId(selectedMainReportId);
     }
   }, [selectedMainReportId, selectedReportId]);
+
+  useEffect(() => {
+    if (openPage > openPageCount) {
+      setOpenPage(openPageCount);
+    }
+  }, [openPage, openPageCount]);
+
+  useEffect(() => {
+    if (solvedPage > archivePageCount) {
+      setSolvedPage(archivePageCount);
+    }
+  }, [archivePageCount, solvedPage]);
 
   useEffect(() => {
     if (!archiveOpen) {
@@ -250,14 +636,9 @@ export function BugReportPage({
     if (!archiveOpen) {
       setArchiveSearch("");
       setSelectedArchiveReportId(null);
+      setSolvedPage(1);
     }
   }, [archiveOpen]);
-
-  useEffect(() => {
-    if (archiveOpen && solvedReportCount === 0) {
-      setArchiveOpen(false);
-    }
-  }, [archiveOpen, solvedReportCount]);
 
   useEffect(() => {
     if (!initialSelectedReportId) {
@@ -271,7 +652,9 @@ export function BugReportPage({
 
     const selectedInitialReport = reports.find(
       (report) => report.id === initialSelectedReportId,
-    );
+    ) ?? (selectedReportDetail?.id === initialSelectedReportId
+      ? selectedReportDetail
+      : null);
 
     if (!selectedInitialReport) {
       return;
@@ -285,7 +668,7 @@ export function BugReportPage({
     } else {
       setDetailOpen(true);
     }
-  }, [initialSelectedReportId, reports]);
+  }, [initialSelectedReportId, reports, selectedReportDetail]);
 
   useEffect(() => {
     if (!selectedReportDetailId || !selectedReportNeedsAttachments) {
@@ -315,6 +698,9 @@ export function BugReportPage({
               report.id === reportId ? data.bugReport : report,
             ),
           );
+          setSelectedReportDetail((current) =>
+            current?.id === reportId ? data.bugReport : current,
+          );
         }
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
@@ -341,7 +727,29 @@ export function BugReportPage({
   }, [selectedReportDetailId, selectedReportNeedsAttachments]);
 
   function addReport(report: BugReport) {
-    setReports((current) => [report, ...current]);
+    const canUpdateCurrentPage = currentOpenPage === 1 && !search.trim();
+
+    if (!canUpdateCurrentPage) {
+      requestImmediateListRefresh("OPEN");
+    }
+    setSearch("");
+    setOpenPage(1);
+    setReports((current) => {
+      const keptReports = current.filter(
+        (item) => bugReportStatus(item) !== "OPEN",
+      );
+      const currentOpenReports = canUpdateCurrentPage
+        ? current.filter((item) => bugReportStatus(item) === "OPEN")
+        : [];
+      const nextOpenReports = mergeBugReports(
+        [report],
+        currentOpenReports,
+      ).slice(0, openPageSize);
+
+      return mergeBugReports(keptReports, nextOpenReports);
+    });
+    setOpenTotalCount((current) => current + 1);
+    setOpenResultCount((current) => current + 1);
     setSelectedReportId(report.id);
     setDetailOpen(true);
   }
@@ -373,11 +781,50 @@ export function BugReportPage({
       }
 
       if (data.bugReport) {
+        const previousStatus = bugReportStatus(report);
+        const nextStatus = bugReportStatus(data.bugReport);
+        const sourceVisibleCount =
+          previousStatus === "OPEN" ? openReports.length : archiveReports.length;
+
         setReports((current) =>
-          current.map((item) =>
-            item.id === report.id ? data.bugReport : item,
-          ),
+          current.some((item) => item.id === report.id)
+            ? mergeBugReports(
+                current.filter((item) => item.id !== report.id),
+                [data.bugReport],
+              )
+            : current,
         );
+        setSelectedReportDetail((current) =>
+          current?.id === report.id ? data.bugReport : current,
+        );
+
+        if (previousStatus !== nextStatus) {
+          if (nextStatus === "SOLVED") {
+            setOpenTotalCount((current) => Math.max(0, current - 1));
+            setSolvedTotalCount((current) => current + 1);
+            setOpenResultCount((current) =>
+              matchesSearchValue(report, search) ? Math.max(0, current - 1) : current,
+            );
+            setSolvedResultCount((current) =>
+              matchesSearchValue(data.bugReport, archiveSearch)
+                ? current + 1
+                : current,
+            );
+          } else {
+            setSolvedTotalCount((current) => Math.max(0, current - 1));
+            setOpenTotalCount((current) => current + 1);
+            setSolvedResultCount((current) =>
+              matchesSearchValue(report, archiveSearch)
+                ? Math.max(0, current - 1)
+                : current,
+            );
+            setOpenResultCount((current) =>
+              matchesSearchValue(data.bugReport, search)
+                ? current + 1
+                : current,
+            );
+          }
+        }
 
         if (status === "SOLVED") {
           setSelectedReportId(null);
@@ -388,9 +835,20 @@ export function BugReportPage({
           setSelectedArchiveReportId(null);
           setArchiveOpen(false);
         }
+
+        const refreshed = await refreshBugReportStatusAfterMutation(
+          previousStatus,
+          {
+            pageMayBeEmpty: previousStatus !== nextStatus,
+            visibleCount: sourceVisibleCount,
+          },
+        );
+
+        if (!refreshed) {
+          return;
+        }
       }
 
-      markServerDataStale();
       setMessage(
         status === "SOLVED"
           ? "Bug report marked solved."
@@ -420,6 +878,9 @@ export function BugReportPage({
     setMessage(null);
 
     try {
+      const deletedStatus = bugReportStatus(report);
+      const sourceVisibleCount =
+        deletedStatus === "OPEN" ? openReports.length : archiveReports.length;
       const response = await fetch(
         `/api/bug-reports/${encodeURIComponent(report.id)}`,
         { method: "DELETE" },
@@ -433,6 +894,22 @@ export function BugReportPage({
       setReports((current) =>
         current.filter((item) => item.id !== report.id),
       );
+      setSelectedReportDetail((current) =>
+        current?.id === report.id ? null : current,
+      );
+      if (bugReportStatus(report) === "OPEN") {
+        setOpenTotalCount((current) => Math.max(0, current - 1));
+        setOpenResultCount((current) =>
+          matchesSearchValue(report, search) ? Math.max(0, current - 1) : current,
+        );
+      } else {
+        setSolvedTotalCount((current) => Math.max(0, current - 1));
+        setSolvedResultCount((current) =>
+          matchesSearchValue(report, archiveSearch)
+            ? Math.max(0, current - 1)
+            : current,
+        );
+      }
 
       if (selectedReportId === report.id) {
         setSelectedReportId(null);
@@ -443,7 +920,18 @@ export function BugReportPage({
       }
 
       setDetailOpen(false);
-      markServerDataStale();
+      const refreshed = await refreshBugReportStatusAfterMutation(
+        deletedStatus,
+        {
+          pageMayBeEmpty: true,
+          visibleCount: sourceVisibleCount,
+        },
+      );
+
+      if (!refreshed) {
+        return;
+      }
+
       setMessage("Bug report deleted.");
     } catch (error) {
       setMessage(
@@ -460,12 +948,7 @@ export function BugReportPage({
     <main className="reference-page min-[980px]:flex min-[980px]:h-full min-[980px]:min-h-0 min-[980px]:flex-col min-[980px]:overflow-hidden">
       <div className="reference-page-header min-[980px]:shrink-0">
         <div>
-          <h1 className="reference-title">Bug Reports</h1>
-          <p className="reference-subtitle">
-            {canReviewAll
-              ? "Review submitted issues and screenshots from the team."
-              : "Send a bug report with screenshots when something feels off."}
-          </p>
+          <h1 className="reference-title">Review reported issues</h1>
         </div>
       </div>
 
@@ -505,7 +988,10 @@ export function BugReportPage({
                 className="h-9 bg-white pl-9 text-sm ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]"
                 placeholder="Search open reports"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setOpenPage(1);
+                }}
               />
             </div>
             <BugReportList
@@ -514,10 +1000,22 @@ export function BugReportPage({
               emptyText={openEmptyText}
               className={openReportListClassName}
               variant="inbox"
+              loading={refreshingStatus === "OPEN"}
               onSelect={(reportId) => {
                 setSelectedReportId(reportId);
                 setDetailOpen(true);
               }}
+            />
+            <PaginationControls
+              className="reference-paginated-footer px-1 pb-0 pt-2"
+              page={currentOpenPage}
+              pageSize={openPageSize}
+              pageSizeMenuPlacement="top"
+              totalItems={openReportCount}
+              itemLabel="open bug reports"
+              isLoading={refreshingStatus === "OPEN"}
+              onPageChange={changeOpenPage}
+              onPageSizeChange={changeOpenPageSize}
             />
           </CardContent>
         </Card>
@@ -548,7 +1046,7 @@ export function BugReportPage({
       {archiveOpen ? (
         <BugReportArchiveDialog
           reports={archiveReports}
-          totalCount={solvedReportCount}
+          totalCount={archiveReportCount}
           search={archiveSearch}
           selectedReport={selectedArchiveReport}
           selectedReportId={selectedArchiveReport?.id ?? null}
@@ -568,8 +1066,14 @@ export function BugReportPage({
           canManageStatus={canReviewAll}
           emptyText={archiveEmptyText}
           onSearchChange={setArchiveSearch}
+          onSearchResetPage={() => setSolvedPage(1)}
           onSelect={setSelectedArchiveReportId}
           onClose={() => setArchiveOpen(false)}
+          loading={refreshingStatus === "SOLVED"}
+          page={currentSolvedPage}
+          pageSize={solvedPageSize}
+          onPageChange={changeSolvedPage}
+          onPageSizeChange={changeSolvedPageSize}
           onStatusChange={(status) => {
             if (selectedArchiveReport) {
               updateSelectedReportStatus(selectedArchiveReport, status);
@@ -625,8 +1129,14 @@ function BugReportArchiveDialog({
   canManageStatus,
   emptyText,
   onSearchChange,
+  onSearchResetPage,
   onSelect,
   onClose,
+  loading,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
   onStatusChange,
   onDelete,
 }: {
@@ -641,8 +1151,14 @@ function BugReportArchiveDialog({
   canManageStatus: boolean;
   emptyText: string;
   onSearchChange: (value: string) => void;
+  onSearchResetPage: () => void;
   onSelect: (reportId: string) => void;
   onClose: () => void;
+  loading: boolean;
+  page: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
   onStatusChange: (status: "OPEN" | "SOLVED") => void;
   onDelete: () => void;
 }) {
@@ -694,7 +1210,10 @@ function BugReportArchiveDialog({
                 className="h-9 bg-white pl-9 text-sm ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]"
                 placeholder="Search archive"
                 value={search}
-                onChange={(event) => onSearchChange(event.target.value)}
+                onChange={(event) => {
+                  onSearchChange(event.target.value);
+                  onSearchResetPage();
+                }}
               />
             </div>
             <BugReportList
@@ -702,7 +1221,19 @@ function BugReportArchiveDialog({
               selectedReportId={selectedReportId}
               emptyText={emptyText}
               className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]"
+              loading={loading}
               onSelect={onSelect}
+            />
+            <PaginationControls
+              className="reference-paginated-footer px-1 pb-0 pt-2"
+              page={page}
+              pageSize={pageSize}
+              pageSizeMenuPlacement="top"
+              totalItems={totalCount}
+              itemLabel="solved bug reports"
+              isLoading={loading}
+              onPageChange={onPageChange}
+              onPageSizeChange={onPageSizeChange}
             />
           </div>
 
@@ -881,8 +1412,8 @@ function BugReportComposer({
         return;
       }
 
-      onCreated(data.bugReport);
       markServerDataStale();
+      onCreated(data.bugReport);
       setBody("");
       setAttachments([]);
       onMessage("Bug report sent.");
@@ -1034,6 +1565,7 @@ function BugReportList({
   emptyText,
   className,
   variant = "card",
+  loading = false,
   onSelect,
 }: {
   reports: BugReport[];
@@ -1042,6 +1574,7 @@ function BugReportList({
   emptyText?: string;
   className?: string;
   variant?: "card" | "inbox";
+  loading?: boolean;
   onSelect: (reportId: string) => void;
 }) {
   const isInbox = variant === "inbox";
@@ -1054,13 +1587,19 @@ function BugReportList({
           : "space-y-1.5",
         className,
       )}
+      data-pagination-loading={
+        loading && reports.length > 0 ? "true" : undefined
+      }
+      aria-busy={loading}
     >
       {title ? (
         <div className="px-1 text-xs font-semibold uppercase tracking-wide text-[#64748b] dark:text-muted-foreground">
           {title}
         </div>
       ) : null}
-      {reports.length === 0 ? (
+      {loading && reports.length === 0 ? (
+        <EmptyReferenceState>Loading bug reports...</EmptyReferenceState>
+      ) : reports.length === 0 ? (
         <EmptyReferenceState>
           {emptyText ??
             (title
@@ -1068,59 +1607,61 @@ function BugReportList({
               : "No bug reports match this search.")}
         </EmptyReferenceState>
       ) : (
-        reports.map((report) => {
-          const selected = report.id === selectedReportId;
+        <>
+          {reports.map((report) => {
+            const selected = report.id === selectedReportId;
 
-          return (
-            <button
-              key={report.id}
-              type="button"
-              className={cn(
-                isInbox
-                  ? "w-full border-l-2 border-transparent bg-white px-3 py-3 text-left transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563eb] dark:bg-[#0b1523] dark:hover:bg-white/[0.04]"
-                  : "w-full rounded-[8px] bg-white p-2.5 text-left ring-1 ring-[#dbe5f4] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#0f1b2a] dark:ring-[#263a55] dark:hover:bg-white/[0.04]",
-                selected
-                  ? isInbox
-                    ? "border-[#2563eb] bg-[#eff6ff] dark:border-[#60a5fa] dark:bg-blue-400/10"
-                    : "bg-[#eff6ff] ring-[#93c5fd] dark:bg-blue-400/10 dark:ring-blue-300/40"
-                  : null,
-              )}
-              onClick={() => onSelect(report.id)}
-            >
-              <div className="flex items-start gap-2">
-                <ReporterAvatar report={report} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center justify-between gap-2">
-                    <div className="truncate text-sm font-semibold text-[#0f172a] dark:text-foreground">
-                      {reportReporterName(report)}
+            return (
+              <button
+                key={report.id}
+                type="button"
+                className={cn(
+                  isInbox
+                    ? "w-full border-l-2 border-transparent bg-white px-3 py-3 text-left transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563eb] dark:bg-[#0b1523] dark:hover:bg-white/[0.04]"
+                    : "w-full rounded-[8px] bg-white p-2.5 text-left ring-1 ring-[#dbe5f4] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#0f1b2a] dark:ring-[#263a55] dark:hover:bg-white/[0.04]",
+                  selected
+                    ? isInbox
+                      ? "border-[#2563eb] bg-[#eff6ff] dark:border-[#60a5fa] dark:bg-blue-400/10"
+                      : "bg-[#eff6ff] ring-[#93c5fd] dark:bg-blue-400/10 dark:ring-blue-300/40"
+                    : null,
+                )}
+                onClick={() => onSelect(report.id)}
+              >
+                <div className="flex items-start gap-2">
+                  <ReporterAvatar report={report} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <div className="truncate text-sm font-semibold text-[#0f172a] dark:text-foreground">
+                        {reportReporterName(report)}
+                      </div>
+                      <span className="shrink-0 text-[11px] font-medium text-[#64748b] dark:text-muted-foreground">
+                        {formatShortDate(report.createdAt)}
+                      </span>
                     </div>
-                    <span className="shrink-0 text-[11px] font-medium text-[#64748b] dark:text-muted-foreground">
-                      {formatShortDate(report.createdAt)}
-                    </span>
+                    {bugReportStatus(report) === "SOLVED" ? (
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {report.solvedAt ? (
+                          <span className="text-[11px] font-medium text-[#64748b] dark:text-muted-foreground">
+                            {formatShortDate(report.solvedAt)}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div className="mt-1 line-clamp-2 break-words text-xs leading-5 text-[#475569] [overflow-wrap:anywhere] dark:text-muted-foreground">
+                      {report.body}
+                    </div>
+                    {report.attachments.length > 0 ? (
+                      <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#2563eb]">
+                        <Paperclip className="h-3.5 w-3.5" />
+                        {report.attachments.length}
+                      </div>
+                    ) : null}
                   </div>
-                  {bugReportStatus(report) === "SOLVED" ? (
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      {report.solvedAt ? (
-                        <span className="text-[11px] font-medium text-[#64748b] dark:text-muted-foreground">
-                          {formatShortDate(report.solvedAt)}
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  <div className="mt-1 line-clamp-2 break-words text-xs leading-5 text-[#475569] [overflow-wrap:anywhere] dark:text-muted-foreground">
-                    {report.body}
-                  </div>
-                  {report.attachments.length > 0 ? (
-                    <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#2563eb]">
-                      <Paperclip className="h-3.5 w-3.5" />
-                      {report.attachments.length}
-                    </div>
-                  ) : null}
                 </div>
-              </div>
-            </button>
-          );
-        })
+              </button>
+            );
+          })}
+        </>
       )}
     </div>
   );
@@ -1334,6 +1875,51 @@ function reportReporterName(report: BugReport) {
   return report.reporter.name ?? report.reporter.email ?? "Unknown reporter";
 }
 
+function dedupeBugReports(reports: BugReport[]) {
+  return mergeBugReports([], reports);
+}
+
+function mergeBugReports(current: BugReport[], next: BugReport[]) {
+  const byId = new Map(current.map((report) => [report.id, report]));
+
+  for (const report of next) {
+    const existing = byId.get(report.id);
+    byId.set(report.id, existing ? mergeBugReport(existing, report) : report);
+  }
+
+  return [...byId.values()].sort((first, second) => {
+    const createdDelta =
+      new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime();
+
+    return createdDelta || second.id.localeCompare(first.id);
+  });
+}
+
+function mergeBugReport(existing: BugReport, next: BugReport): BugReport {
+  const existingAttachments = new Map(
+    existing.attachments.map((attachment) => [attachment.id, attachment]),
+  );
+
+  return {
+    ...existing,
+    ...next,
+    attachments: next.attachments.map((attachment) => {
+      const existingAttachment = attachment.id
+        ? existingAttachments.get(attachment.id)
+        : null;
+
+      if (!existingAttachment?.dataUrl || attachment.dataUrl) {
+        return attachment;
+      }
+
+      return {
+        ...attachment,
+        dataUrl: existingAttachment.dataUrl,
+      };
+    }),
+  };
+}
+
 function bugReportStatus(report: BugReport) {
   return report.status ?? "OPEN";
 }
@@ -1346,6 +1932,12 @@ function bugReportMatchesQuery(report: BugReport, query: string) {
   return (
     reporter.includes(query) || email.includes(query) || body.includes(query)
   );
+}
+
+function matchesSearchValue(report: BugReport, value: string) {
+  const query = value.trim().toLowerCase();
+
+  return !query || bugReportMatchesQuery(report, query);
 }
 
 function bugReportTextStats(value: string) {

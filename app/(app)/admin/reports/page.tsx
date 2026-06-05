@@ -34,7 +34,10 @@ export default async function AdminReportsPage() {
 
   return (
     <AdminSectionFrame activeSection="reports">
-      <AdminReportsManager initialReports={serialize(reports)} />
+      <AdminReportsManager
+        initialReports={serialize(reports.reports)}
+        initialTotalCount={reports.totalCount}
+      />
     </AdminSectionFrame>
   );
 }

@@ -49,6 +49,7 @@ import { SummaryRenderer } from "@/components/reports/summary-renderer";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FixedToast } from "@/components/ui/fixed-toast";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
@@ -59,6 +60,7 @@ import {
   reportDayEnd,
   todayDateString,
 } from "@/lib/dates";
+import { defaultPaginationPageSize } from "@/lib/pagination";
 import type { SummaryActivityReferenceMap } from "@/lib/summary-format";
 import { cn, initials, titleCase } from "@/lib/utils";
 
@@ -614,6 +616,7 @@ const employeeSortKeys: EmployeeSortKey[] = [
 ];
 const sortDirections: SortDirection[] = ["asc", "desc"];
 const employeeTableControlsStorageKey = "generis.reviewer.employeeReports";
+const defaultEmployeeTablePageSize = defaultPaginationPageSize;
 
 const defaultEmployeeSortState: EmployeeSortState = {
   key: "employee",
@@ -808,8 +811,8 @@ export function ReviewerDashboard({
   viewerRoles,
   initialOpenedReportId,
   basePath = "/review",
-  title = "Review Dashboard",
-  description = "Track report submissions across the team.",
+  title = "Track report submissions across the team",
+  description,
   embedded = false,
 }: {
   rows: Row[];
@@ -838,6 +841,10 @@ export function ReviewerDashboard({
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState<EmployeeStatusFilter>("ALL");
+  const [employeePage, setEmployeePage] = useState(1);
+  const [employeePageSize, setEmployeePageSize] = useState(
+    defaultEmployeeTablePageSize,
+  );
   const [sortState, setSortState] = useState<EmployeeSortState>(
     defaultEmployeeSortState,
   );
@@ -908,9 +915,18 @@ export function ReviewerDashboard({
         compareEmployeeRows(first, second, date, sortState),
       );
   }, [date, departmentFilter, items, search, sortState, statusFilter]);
+  const employeePageCount = Math.max(
+    1,
+    Math.ceil(filteredItems.length / employeePageSize),
+  );
+  const currentEmployeePage = Math.min(employeePage, employeePageCount);
+  const pagedItems = filteredItems.slice(
+    (currentEmployeePage - 1) * employeePageSize,
+    currentEmployeePage * employeePageSize,
+  );
 
   const visibleReportIds = canUseReviewerActions
-    ? filteredItems.flatMap((row) =>
+    ? pagedItems.flatMap((row) =>
         canReviewReport(row) && row.report ? [row.report.id] : [],
       )
     : [];
@@ -954,7 +970,18 @@ export function ReviewerDashboard({
     setRemindingUserId(null);
     pendingDateRef.current = null;
     setPendingDateControl(null);
+    setEmployeePage(1);
   }, [date, initialOpenedReportId, rows]);
+
+  useEffect(() => {
+    setEmployeePage(1);
+  }, [departmentFilter, search, sortState, statusFilter]);
+
+  useEffect(() => {
+    if (employeePage > employeePageCount) {
+      setEmployeePage(employeePageCount);
+    }
+  }, [employeePage, employeePageCount]);
 
   useEffect(() => {
     return () => {
@@ -1741,7 +1768,7 @@ export function ReviewerDashboard({
           )}
 
           <ReportSurface className="mb-3 shrink-0">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="grid gap-2 min-[760px]:h-10 min-[760px]:grid-cols-[minmax(240px,300px)_auto] min-[760px]:items-center min-[760px]:justify-between">
               <ReportDateSwitcher
                 value={currentReviewDate}
                 maxDate={maxReportDate}
@@ -1750,7 +1777,7 @@ export function ReviewerDashboard({
                 onChange={goToDate}
               />
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 min-[760px]:flex-nowrap">
                 <Button
                   variant="outline"
                   className="h-10 min-w-[118px] shrink-0 justify-center rounded-[8px] bg-white px-3 text-xs shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]"
@@ -1774,7 +1801,7 @@ export function ReviewerDashboard({
 
           <ReportSurface
             padded={false}
-            className="min-[1024px]:flex min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:flex-col"
+            className="reference-paginated-surface min-[1024px]:flex-1"
           >
             <div className="grid shrink-0 gap-3 p-3 min-[1180px]:grid-cols-[auto_minmax(0,1fr)] min-[1180px]:items-start">
               <div className="flex min-w-0 items-center gap-3 pt-1">
@@ -1857,9 +1884,12 @@ export function ReviewerDashboard({
                 ) : null}
               </div>
             </div>
-            <div className="min-[1024px]:min-h-0 min-[1024px]:flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 [scrollbar-gutter:stable]">
+            <div
+              aria-label="Employee reports table viewport"
+              className="reference-paginated-viewport reference-visible-rows-viewport reference-review-table-viewport px-3"
+            >
               <table className="w-full table-fixed text-xs">
-                <thead>
+                <thead className="sticky top-0 z-10 bg-white dark:bg-[#0f1b2a]">
                   <tr className="border-b border-[#e5eaf2] text-left text-[10px] font-semibold uppercase tracking-[0.02em] text-[#64748b] dark:border-[#263a55] dark:text-muted-foreground">
                     <th className="w-[32px] px-1 py-2 min-[700px]:w-[36px] min-[700px]:px-2">
                       <Checkbox
@@ -1937,8 +1967,8 @@ export function ReviewerDashboard({
                         onSort={toggleEmployeeSort}
                       />
                     </th>
-                    <th className="w-[44px] px-1 py-2 text-right min-[700px]:w-[56px] min-[700px]:px-2">
-                      Actions
+                    <th className="w-[58px] px-1 py-2 text-right min-[700px]:w-[68px] min-[700px]:px-2">
+                      <span className="whitespace-nowrap">Actions</span>
                     </th>
                   </tr>
                 </thead>
@@ -1952,7 +1982,7 @@ export function ReviewerDashboard({
                       </td>
                     </tr>
                   ) : (
-                    filteredItems.map((row) => {
+                    pagedItems.map((row) => {
                       const status = reportStatus(row, date);
                       const canReview = canReviewReport(row);
                       const blockedReason =
@@ -1976,7 +2006,7 @@ export function ReviewerDashboard({
                               : blockedReason
                           }
                           className={cn(
-                            "border-b border-[#e5eaf2] text-[#344054] transition-colors last:border-b-0 hover:bg-[#f8fbff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563eb] dark:border-[#263a55] dark:text-muted-foreground dark:hover:bg-white/[0.04]",
+                            "h-14 border-b border-[#e5eaf2] text-[#344054] transition-colors last:border-b-0 hover:bg-[#f8fbff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563eb] dark:border-[#263a55] dark:text-muted-foreground dark:hover:bg-white/[0.04]",
                             canReview && "cursor-pointer",
                             unread && "bg-[#f4f8ff] dark:bg-blue-400/10",
                           )}
@@ -2102,6 +2132,19 @@ export function ReviewerDashboard({
                 </tbody>
               </table>
             </div>
+            <PaginationControls
+              className="reference-paginated-footer px-3 pb-3 pt-5"
+              page={currentEmployeePage}
+              pageSize={employeePageSize}
+              pageSizeMenuPlacement="top"
+              totalItems={filteredItems.length}
+              itemLabel="employee reports"
+              onPageChange={setEmployeePage}
+              onPageSizeChange={(nextPageSize) => {
+                setEmployeePageSize(nextPageSize);
+                setEmployeePage(1);
+              }}
+            />
           </ReportSurface>
         </main>
       )}

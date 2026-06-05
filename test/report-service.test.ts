@@ -24,8 +24,8 @@ describe.runIf(process.env.TEST_DATABASE_URL)("report revisions", () => {
     const history = await listReportHistory(user.id);
 
     expect(updated?.revisions.length).toBeGreaterThan(0);
-    expect(history[0]?.summary).toBe("Edited summary");
-    expect(history[0]?.revisions.length).toBeGreaterThan(0);
+    expect(history.reports[0]?.summary).toBe("Edited summary");
+    expect(history.reports[0]?.revisions.length).toBeGreaterThan(0);
 
     await prisma.user.delete({ where: { id: user.id } });
   });

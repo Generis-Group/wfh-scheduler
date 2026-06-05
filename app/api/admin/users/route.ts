@@ -12,6 +12,7 @@ export async function GET() {
 
     const users = await withServerTiming("api:admin:list-users", () =>
       prisma.user.findMany({
+        where: { status: { not: "DISABLED" } },
         orderBy: [{ role: "asc" }, { name: "asc" }, { email: "asc" }],
         select: adminUserSelect,
       }),
@@ -27,9 +28,8 @@ export async function POST(request: Request) {
   try {
     await requireRole(["ADMIN"]);
     const input = createUserSchema.parse(await request.json());
-    const result = await withServerTiming(
-      "api:admin:create-user",
-      () => createAppUser(input),
+    const result = await withServerTiming("api:admin:create-user", () =>
+      createAppUser(input),
     );
     revalidateAdminRoutes();
 

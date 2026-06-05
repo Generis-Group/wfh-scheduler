@@ -136,7 +136,7 @@ export function AccountSettings({
         user.hasPassword && "min-[1080px]:grid-cols-[minmax(0,1fr)_420px]",
       )}
     >
-      <Card className="overflow-hidden">
+      <Card className="flex flex-col overflow-hidden min-[1080px]:min-h-[414px]">
         <CardHeader className="px-5 py-5">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
@@ -150,8 +150,8 @@ export function AccountSettings({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="px-5 pb-5">
-          <form className="space-y-5" onSubmit={saveProfile}>
+        <CardContent className="flex flex-1 flex-col px-5 pb-5">
+          <form className="flex flex-1 flex-col gap-5" onSubmit={saveProfile}>
             <div className="relative flex min-h-[114px] flex-wrap items-center gap-5 rounded-[8px] border border-[#dfe7f2] bg-white px-5 py-4 shadow-[inset_0_1px_0_rgba(15,23,42,0.02)] dark:border-[#263a55] dark:bg-[#0b1523]">
               <button
                 type="button"
@@ -192,28 +192,34 @@ export function AccountSettings({
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="account-name">Name</Label>
-                <Input
-                  id="account-name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Your name"
-                />
+                <div className="relative h-11">
+                  <Input
+                    id="account-name"
+                    className="h-11"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="Your name"
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="account-email">Email</Label>
-                <Input
-                  id="account-email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="name@generisgp.com"
-                  required
-                />
+                <div className="relative h-11">
+                  <Input
+                    id="account-email"
+                    className="h-11"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="name@generisgp.com"
+                    required
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e6ebf3] pt-5 dark:border-[#263a55]">
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[#e6ebf3] pt-5 dark:border-[#263a55]">
               <p
                 className={cn(
                   "min-h-5 text-sm",

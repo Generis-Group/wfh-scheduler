@@ -7,8 +7,17 @@ import { prisma } from "@/lib/prisma";
 import { hasUserRole, normalizeUserRoles, primaryUserRole } from "@/lib/roles";
 import type { EmailDelivery } from "@/lib/email";
 import { sendTemporaryPasswordEmail } from "@/lib/services/account-emails";
-import { createDepartment as createDepartmentRecord, departmentMembershipSelect } from "@/lib/services/departments";
-import type { accountProfileSchema, changePasswordSchema, createUserSchema, resetPasswordSchema, updateUserSchema } from "@/lib/validation";
+import {
+  createDepartment as createDepartmentRecord,
+  departmentMembershipSelect,
+} from "@/lib/services/departments";
+import type {
+  accountProfileSchema,
+  changePasswordSchema,
+  createUserSchema,
+  resetPasswordSchema,
+  updateUserSchema,
+} from "@/lib/validation";
 import type { z } from "zod";
 
 type AccountProfileInput = z.infer<typeof accountProfileSchema>;
@@ -28,7 +37,7 @@ export const adminUserSelect = {
   roles: true,
   status: true,
   reviewerAllDepartments: true,
-  ...departmentMembershipSelect
+  ...departmentMembershipSelect,
 };
 
 function generateTemporaryPassword() {
@@ -62,7 +71,10 @@ function resolveLegacyDepartmentIds(input: {
   const hasEmployee = roles.includes("EMPLOYEE");
   const hasReviewer = roles.includes("REVIEWER");
 
-  if (input.employeeDepartmentIds !== undefined || input.reviewerDepartmentIds !== undefined) {
+  if (
+    input.employeeDepartmentIds !== undefined ||
+    input.reviewerDepartmentIds !== undefined
+  ) {
     return {
       employeeDepartmentIds: input.employeeDepartmentIds,
       reviewerDepartmentIds: input.reviewerDepartmentIds,
@@ -78,7 +90,8 @@ function resolveLegacyDepartmentIds(input: {
 
   return {
     employeeDepartmentIds: hasEmployee ? input.departmentIds : undefined,
-    reviewerDepartmentIds: hasReviewer && !hasEmployee ? input.departmentIds : undefined,
+    reviewerDepartmentIds:
+      hasReviewer && !hasEmployee ? input.departmentIds : undefined,
   };
 }
 
@@ -108,13 +121,22 @@ export async function createAppUser(input: CreateUserInput) {
     throw new HttpError(422, "User email must end with @generisgp.com.");
   }
 
-  const temporaryPassword = input.temporaryPassword ?? generateTemporaryPassword();
+  const temporaryPassword =
+    input.temporaryPassword ?? generateTemporaryPassword();
   const passwordHash = await bcrypt.hash(temporaryPassword, 12);
-  const roles = normalizeUserRoles({ role: input.role ?? "EMPLOYEE", roles: input.roles });
+  const roles = normalizeUserRoles({
+    role: input.role ?? "EMPLOYEE",
+    roles: input.roles,
+  });
   const role = primaryUserRole({ roles });
-  const { employeeDepartmentIds, reviewerDepartmentIds } = resolveLegacyDepartmentIds(input);
-  const employeeIds = roles.includes("EMPLOYEE") ? uniqueIds(employeeDepartmentIds) : [];
-  const reviewerIds = roles.includes("REVIEWER") ? uniqueIds(reviewerDepartmentIds) : [];
+  const { employeeDepartmentIds, reviewerDepartmentIds } =
+    resolveLegacyDepartmentIds(input);
+  const employeeIds = roles.includes("EMPLOYEE")
+    ? uniqueIds(employeeDepartmentIds)
+    : [];
+  const reviewerIds = roles.includes("REVIEWER")
+    ? uniqueIds(reviewerDepartmentIds)
+    : [];
 
   const user = await prisma.user.create({
     data: {
@@ -125,23 +147,26 @@ export async function createAppUser(input: CreateUserInput) {
       status: input.status,
       passwordHash,
       mustChangePassword: true,
-      reviewerAllDepartments: roles.includes("REVIEWER") ? Boolean(input.reviewerAllDepartments) : false,
-      departments: employeeIds.length || reviewerIds.length
-        ? {
-            create: [
-              ...employeeIds.map((departmentId) => ({
-                departmentId,
-                role: "EMPLOYEE" as const
-              })),
-              ...reviewerIds.map((departmentId) => ({
-                departmentId,
-                role: "REVIEWER" as const
-              }))
-            ]
-          }
-        : undefined
+      reviewerAllDepartments: roles.includes("REVIEWER")
+        ? Boolean(input.reviewerAllDepartments)
+        : false,
+      departments:
+        employeeIds.length || reviewerIds.length
+          ? {
+              create: [
+                ...employeeIds.map((departmentId) => ({
+                  departmentId,
+                  role: "EMPLOYEE" as const,
+                })),
+                ...reviewerIds.map((departmentId) => ({
+                  departmentId,
+                  role: "REVIEWER" as const,
+                })),
+              ],
+            }
+          : undefined,
     },
-    select: adminUserSelect
+    select: adminUserSelect,
   });
 
   const emailDelivery = await deliverTemporaryPasswordEmail({
@@ -158,7 +183,15 @@ export async function updateAppUser(
   input: UpdateUserInput,
   options: UpdateAppUserOptions = {},
 ) {
-  const { departmentIds, employeeDepartmentIds, reviewerDepartmentIds, reviewerAllDepartments, role, roles, ...userInput } = input;
+  const {
+    departmentIds,
+    employeeDepartmentIds,
+    reviewerDepartmentIds,
+    reviewerAllDepartments,
+    role,
+    roles,
+    ...userInput
+  } = input;
 
   return prisma.$transaction(async (tx) => {
     const existingUser = await tx.user.findUniqueOrThrow({
@@ -170,13 +203,15 @@ export async function updateAppUser(
         departments: {
           select: {
             departmentId: true,
-            role: true
-          }
-        }
-      }
+            role: true,
+          },
+        },
+      },
     });
     const rolesChanged = roles !== undefined || role !== undefined;
-    const nextRoles = rolesChanged ? normalizeUserRoles({ role, roles }) : normalizeUserRoles(existingUser);
+    const nextRoles = rolesChanged
+      ? normalizeUserRoles({ role, roles })
+      : normalizeUserRoles(existingUser);
     const canBeReviewer = nextRoles.includes("REVIEWER");
     const legacyDepartmentIds = resolveLegacyDepartmentIds({
       roles: nextRoles,
@@ -186,7 +221,7 @@ export async function updateAppUser(
       reviewerDepartmentIds,
     });
     const nextReviewerAllDepartments = canBeReviewer
-      ? reviewerAllDepartments ?? existingUser.reviewerAllDepartments
+      ? (reviewerAllDepartments ?? existingUser.reviewerAllDepartments)
       : false;
     const assignmentsChanged =
       rolesChanged ||
@@ -194,7 +229,10 @@ export async function updateAppUser(
       employeeDepartmentIds !== undefined ||
       reviewerDepartmentIds !== undefined ||
       reviewerAllDepartments !== undefined;
-    const nextEmployeeDepartmentIds = hasUserRole({ roles: nextRoles }, "EMPLOYEE")
+    const nextEmployeeDepartmentIds = hasUserRole(
+      { roles: nextRoles },
+      "EMPLOYEE",
+    )
       ? uniqueIds(
           legacyDepartmentIds.employeeDepartmentIds ??
             membershipIds(existingUser.departments, "EMPLOYEE"),
@@ -209,6 +247,10 @@ export async function updateAppUser(
 
     if (options.actorUserId === userId && !nextRoles.includes("ADMIN")) {
       throw new HttpError(400, "You cannot remove your own admin access.");
+    }
+
+    if (options.actorUserId === userId && userInput.status === "DISABLED") {
+      throw new HttpError(400, "You cannot remove your own account.");
     }
 
     if (
@@ -237,13 +279,16 @@ export async function updateAppUser(
         ...userInput,
         role: primaryUserRole({ roles: nextRoles }),
         roles: nextRoles,
-        reviewerAllDepartments: nextReviewerAllDepartments
-      }
+        reviewerAllDepartments: nextReviewerAllDepartments,
+      },
     });
 
-    if (legacyDepartmentIds.employeeDepartmentIds !== undefined || !hasUserRole({ roles: nextRoles }, "EMPLOYEE")) {
+    if (
+      legacyDepartmentIds.employeeDepartmentIds !== undefined ||
+      !hasUserRole({ roles: nextRoles }, "EMPLOYEE")
+    ) {
       await tx.userDepartment.deleteMany({
-        where: { userId, role: "EMPLOYEE" }
+        where: { userId, role: "EMPLOYEE" },
       });
 
       if (nextEmployeeDepartmentIds.length > 0) {
@@ -251,16 +296,19 @@ export async function updateAppUser(
           data: nextEmployeeDepartmentIds.map((departmentId) => ({
             userId,
             departmentId,
-            role: "EMPLOYEE"
+            role: "EMPLOYEE",
           })),
-          skipDuplicates: true
+          skipDuplicates: true,
         });
       }
     }
 
-    if (legacyDepartmentIds.reviewerDepartmentIds !== undefined || !canBeReviewer) {
+    if (
+      legacyDepartmentIds.reviewerDepartmentIds !== undefined ||
+      !canBeReviewer
+    ) {
       await tx.userDepartment.deleteMany({
-        where: { userId, role: "REVIEWER" }
+        where: { userId, role: "REVIEWER" },
       });
 
       if (nextReviewerDepartmentIds.length > 0) {
@@ -268,16 +316,16 @@ export async function updateAppUser(
           data: nextReviewerDepartmentIds.map((departmentId) => ({
             userId,
             departmentId,
-            role: "REVIEWER"
+            role: "REVIEWER",
           })),
-          skipDuplicates: true
+          skipDuplicates: true,
         });
       }
     }
 
     return tx.user.findUniqueOrThrow({
       where: { id: user.id },
-      select: adminUserSelect
+      select: adminUserSelect,
     });
   });
 }
@@ -286,14 +334,23 @@ export async function createDepartment(name: string) {
   return createDepartmentRecord(name);
 }
 
-export async function changeOwnPassword(userId: string, input: ChangePasswordInput) {
+export async function changeOwnPassword(
+  userId: string,
+  input: ChangePasswordInput,
+) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
 
   if (!user?.passwordHash) {
-    throw new HttpError(400, "This account does not have a credentials password.");
+    throw new HttpError(
+      400,
+      "This account does not have a credentials password.",
+    );
   }
 
-  const isValid = await bcrypt.compare(input.currentPassword, user.passwordHash);
+  const isValid = await bcrypt.compare(
+    input.currentPassword,
+    user.passwordHash,
+  );
 
   if (!isValid) {
     throw new HttpError(400, "Current password was not accepted.");
@@ -306,12 +363,15 @@ export async function changeOwnPassword(userId: string, input: ChangePasswordInp
     data: {
       passwordHash,
       mustChangePassword: false,
-      status: user.status === "INVITED" ? "ACTIVE" : user.status
-    }
+      status: user.status === "INVITED" ? "ACTIVE" : user.status,
+    },
   });
 }
 
-export async function updateOwnProfile(userId: string, input: AccountProfileInput) {
+export async function updateOwnProfile(
+  userId: string,
+  input: AccountProfileInput,
+) {
   const name = input.name?.trim() || null;
   const email = normalizeEmail(input.email);
 
@@ -322,9 +382,9 @@ export async function updateOwnProfile(userId: string, input: AccountProfileInpu
   const existingUser = await prisma.user.findFirst({
     where: {
       email,
-      id: { not: userId }
+      id: { not: userId },
     },
-    select: { id: true }
+    select: { id: true },
   });
 
   if (existingUser) {
@@ -337,7 +397,7 @@ export async function updateOwnProfile(userId: string, input: AccountProfileInpu
     image?: string | null;
   } = {
     name,
-    email
+    email,
   };
 
   if ("image" in input) {
@@ -346,12 +406,16 @@ export async function updateOwnProfile(userId: string, input: AccountProfileInpu
 
   return prisma.user.update({
     where: { id: userId },
-    data
+    data,
   });
 }
 
-export async function resetAppUserPassword(userId: string, input: ResetPasswordInput) {
-  const temporaryPassword = input.temporaryPassword ?? generateTemporaryPassword();
+export async function resetAppUserPassword(
+  userId: string,
+  input: ResetPasswordInput,
+) {
+  const temporaryPassword =
+    input.temporaryPassword ?? generateTemporaryPassword();
   const passwordHash = await bcrypt.hash(temporaryPassword, 12);
 
   const user = await prisma.user.update({
@@ -359,9 +423,9 @@ export async function resetAppUserPassword(userId: string, input: ResetPasswordI
     data: {
       passwordHash,
       mustChangePassword: true,
-      status: "ACTIVE"
+      status: "ACTIVE",
     },
-    select: adminUserSelect
+    select: adminUserSelect,
   });
 
   const emailDelivery = await deliverTemporaryPasswordEmail({
@@ -371,4 +435,95 @@ export async function resetAppUserPassword(userId: string, input: ResetPasswordI
   });
 
   return { user, temporaryPassword, emailDelivery };
+}
+
+export async function deleteAppUserReportData(userId: string) {
+  return prisma.$transaction(async (tx) => {
+    const reports = await tx.dailyReport.findMany({
+      where: { userId },
+      select: { id: true },
+    });
+    const reportIds = reports.map((report) => report.id);
+    const bugReports = await tx.bugReport.findMany({
+      where: { reporterId: userId },
+      select: { id: true },
+    });
+    const bugReportIds = bugReports.map((report) => report.id);
+
+    const reportReadReceipts = await tx.reportReadReceipt.deleteMany({
+      where: {
+        OR: [
+          { reviewerId: userId },
+          ...(reportIds.length ? [{ reportId: { in: reportIds } }] : []),
+        ],
+      },
+    });
+    const reportComments = await tx.reportComment.deleteMany({
+      where: {
+        OR: [
+          { authorId: userId },
+          ...(reportIds.length ? [{ reportId: { in: reportIds } }] : []),
+        ],
+      },
+    });
+    const reportRevisions = await tx.reportRevision.deleteMany({
+      where: {
+        OR: [
+          { editedById: userId },
+          ...(reportIds.length ? [{ reportId: { in: reportIds } }] : []),
+        ],
+      },
+    });
+    const activityItems = await tx.activityItem.deleteMany({
+      where: {
+        OR: [
+          { userId },
+          ...(reportIds.length ? [{ dailyReportId: { in: reportIds } }] : []),
+        ],
+      },
+    });
+    const dailyReports = await tx.dailyReport.deleteMany({
+      where: { userId },
+    });
+    const weeklyReports = await tx.weeklyReport.deleteMany({
+      where: { employeeId: userId },
+    });
+    const generatedWeeklyReports = await tx.weeklyReport.updateMany({
+      where: { generatedById: userId },
+      data: { generatedById: null },
+    });
+    const syncRuns = await tx.syncRun.deleteMany({
+      where: { userId },
+    });
+    const integrationSettings = await tx.userIntegrationSettings.deleteMany({
+      where: { userId },
+    });
+    const bugReportAttachments = bugReportIds.length
+      ? await tx.bugReportAttachment.deleteMany({
+          where: { bugReportId: { in: bugReportIds } },
+        })
+      : { count: 0 };
+    const bugReportsDeleted = await tx.bugReport.deleteMany({
+      where: { reporterId: userId },
+    });
+
+    await tx.bugReport.updateMany({
+      where: { solvedById: userId },
+      data: { solvedById: null },
+    });
+
+    return {
+      activityItems: activityItems.count,
+      bugReportAttachments: bugReportAttachments.count,
+      bugReports: bugReportsDeleted.count,
+      dailyReports: dailyReports.count,
+      integrationSettings: integrationSettings.count,
+      reportComments: reportComments.count,
+      reportReadReceipts: reportReadReceipts.count,
+      reportRevisions: reportRevisions.count,
+      generatedWeeklyReports: generatedWeeklyReports.count,
+      syncRuns: syncRuns.count,
+      weeklyReports: weeklyReports.count,
+    };
+  });
 }

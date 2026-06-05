@@ -359,29 +359,21 @@ export function SettingsPanel({
     window.history.replaceState(null, "", `/settings#${sectionId}`);
   }
 
-  const activeSectionConfig =
-    settingsSections.find((section) => section.id === activeSection) ??
-    settingsSections[0];
-
   return (
     <>
       <main className="reference-page min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
-        <div className="mb-5 shrink-0">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
-            <span className="text-[#2563eb]">Settings</span>
-            <span className="text-[#98a2b3]">/</span>
-            <span className="text-[#475467] dark:text-muted-foreground">
-              {activeSectionConfig.label}
-            </span>
+        <div className="shrink-0">
+          <div className="reference-page-header">
+            <div className="min-w-0">
+              <h1 className="reference-title">
+                Update your account and preferences
+              </h1>
+            </div>
           </div>
-          <h1 className="reference-title">Settings</h1>
-          <p className="reference-subtitle">
-            Manage your account, integrations, and reporting preferences.
-          </p>
         </div>
 
         <nav
-          className="mb-6 flex shrink-0 flex-wrap gap-x-6 gap-y-2 border-b border-[#d9e1ec] dark:border-[#263a55]"
+          className="reference-section-tabs"
           aria-label="Settings categories"
         >
           {settingsSections.map((section) => {
@@ -393,7 +385,7 @@ export function SettingsPanel({
                 key={section.id}
                 type="button"
                 className={cn(
-                  "flex shrink-0 items-center gap-2 border-b-2 px-2 pb-3 text-sm font-semibold transition-colors",
+                  "reference-section-tab",
                   isActive
                     ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#bfdbfe]"
                     : "border-transparent text-[#475467] hover:text-[#111827] dark:text-muted-foreground dark:hover:text-foreground",

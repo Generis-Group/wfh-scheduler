@@ -6,6 +6,7 @@ import { withServerTiming } from "@/lib/performance";
 import { serialize } from "@/lib/serializers";
 import {
   canReviewBugReports,
+  getVisibleBugReport,
   listVisibleBugReports,
 } from "@/lib/services/bug-reports";
 
@@ -56,20 +57,40 @@ export default async function BugsPage({ searchParams }: BugsPageProps) {
   }
 
   const canReviewAll = canReviewBugReports(session.user);
-  const bugReports = await withServerTiming("page:bug-reports:data", () =>
-    listVisibleBugReports({
-      userId: session.user.id,
-      canReviewAll,
-    }),
+  const targetReportId = normalizeReportId(searchParams?.reportId);
+  const [openBugReports, solvedBugReports, targetBugReport] = await withServerTiming(
+    "page:bug-reports:data",
+    () =>
+      Promise.all([
+        listVisibleBugReports({
+          userId: session.user.id,
+          canReviewAll,
+          status: "OPEN",
+        }),
+        listVisibleBugReports({
+          userId: session.user.id,
+          canReviewAll,
+          status: "SOLVED",
+        }),
+        targetReportId
+          ? getVisibleBugReport(targetReportId, {
+              userId: session.user.id,
+              canReviewAll,
+            })
+          : Promise.resolve(null),
+      ]),
   );
-
   return (
     <BugReportPage
-      initialReports={serialize(bugReports)}
+      initialOpenReports={serialize(openBugReports.reports)}
+      initialSolvedReports={serialize(solvedBugReports.reports)}
+      initialOpenTotalCount={openBugReports.totalCount}
+      initialSolvedTotalCount={solvedBugReports.totalCount}
+      initialSelectedReport={serialize(targetBugReport)}
       canReviewAll={canReviewAll}
       currentUserName={session.user.name ?? session.user.email ?? "You"}
       sourcePagePath={normalizeSourcePagePath(searchParams?.from)}
-      initialSelectedReportId={normalizeReportId(searchParams?.reportId)}
+      initialSelectedReportId={targetReportId}
     />
   );
 }

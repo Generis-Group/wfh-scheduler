@@ -37,14 +37,17 @@ describe("ReportsPage", () => {
         mustChangePassword: false,
       },
     });
-    mockListReportHistory.mockResolvedValue([]);
+    mockListReportHistory.mockResolvedValue({ reports: [], totalCount: 0 });
 
     const { default: ReportsPage } = await import("@/app/(app)/reports/page");
     const element = await ReportsPage({
       searchParams: { reportId: ["report-1", "report-2"] },
     });
 
-    expect(mockListReportHistory).toHaveBeenCalledWith("user-1", 30, null);
+    expect(mockListReportHistory).toHaveBeenCalledWith("user-1", {
+      limit: 10,
+      targetReportId: null,
+    });
     expect(element.props.initialOpenedReportId).toBeNull();
   });
 
@@ -57,18 +60,17 @@ describe("ReportsPage", () => {
         mustChangePassword: false,
       },
     });
-    mockListReportHistory.mockResolvedValue([]);
+    mockListReportHistory.mockResolvedValue({ reports: [], totalCount: 0 });
 
     const { default: ReportsPage } = await import("@/app/(app)/reports/page");
     const element = await ReportsPage({
       searchParams: { reportId: "report-1" },
     });
 
-    expect(mockListReportHistory).toHaveBeenCalledWith(
-      "user-1",
-      30,
-      "report-1",
-    );
+    expect(mockListReportHistory).toHaveBeenCalledWith("user-1", {
+      limit: 10,
+      targetReportId: "report-1",
+    });
     expect(element.props.initialOpenedReportId).toBe("report-1");
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { flushSync } from "react-dom";
 import {
@@ -24,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Select } from "@/components/ui/select";
 import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
 import { EmptyReferenceState } from "@/components/reports/reference-shell";
@@ -37,12 +38,17 @@ import {
   summaryPlainText,
 } from "@/components/reports/summary-renderer";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
+import {
+  fetchJsonWithClientCache,
+  writeClientJsonCache,
+} from "@/lib/client-request-cache";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
 import {
   clampReportDateToToday,
   reportDayEnd,
   todayDateString,
 } from "@/lib/dates";
+import { defaultPaginationPageSize } from "@/lib/pagination";
 import { cn, titleCase } from "@/lib/utils";
 
 type HistoryActivity = {
@@ -85,10 +91,19 @@ type HistoryReport = {
   }>;
 };
 
+type ReportHistoryPageResponse = {
+  reports?: HistoryReport[];
+  totalCount?: number;
+  error?: string;
+};
+
 type PendingReportAction = {
   id: string;
   type: "submit" | "delete";
 };
+
+const reportHistoryRowGridClass =
+  "min-[860px]:grid min-[860px]:grid-cols-[minmax(8.5rem,0.75fr)_minmax(7.5rem,0.6fr)_minmax(14rem,2.5fr)_minmax(7rem,0.55fr)] min-[860px]:items-center";
 
 function toDate(value?: string | Date | null) {
   if (!value) {
@@ -210,12 +225,24 @@ function statusTone(report: HistoryReport): "green" | "orange" | "neutral" {
 
 export function ReportHistory({
   reports,
+  initialTotalCount = reports.length,
   initialOpenedReportId = null,
+  initialOpenedReport = null,
 }: {
   reports: HistoryReport[];
+  initialTotalCount?: number;
   initialOpenedReportId?: string | null;
+  initialOpenedReport?: HistoryReport | null;
 }) {
   const [items, setItems] = useState(reports);
+  const [openedReportDetail, setOpenedReportDetail] =
+    useState<HistoryReport | null>(initialOpenedReport);
+  const [totalCount, setTotalCount] = useState(initialTotalCount);
+  const [reportPage, setReportPage] = useState(1);
+  const [reportPageSize, setReportPageSize] = useState(
+    defaultPaginationPageSize,
+  );
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [openedReportId, setOpenedReportId] = useState(
     initialOpenedReportId ?? "",
   );
@@ -237,6 +264,10 @@ export function ReportHistory({
   >(null);
   const datePickerRef = useRef<HTMLDivElement | null>(null);
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
+  const filterReadyRef = useRef(false);
+  const cacheSeededRef = useRef(false);
+  const immediateRefreshRef = useRef(false);
+  const requestIdRef = useRef(0);
   const maxReportDate = todayDateString();
 
   useDismissableLayer({
@@ -251,28 +282,12 @@ export function ReportHistory({
     onDismiss: () => setRowMenu(null),
   });
 
-  const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    return items.filter((report) => {
-      const date = dateInputValue(report.reportDate);
-      const matchesQuery =
-        !normalizedQuery ||
-        report.summary.toLowerCase().includes(normalizedQuery) ||
-        report.activities.some((activity) =>
-          activity.title.toLowerCase().includes(normalizedQuery),
-        );
-      const matchesStatus =
-        statusFilter === "ALL" || report.status === statusFilter;
-      const matchesFrom = !fromDate || date >= fromDate;
-      const matchesTo = !toDateValue || date <= toDateValue;
-
-      return matchesQuery && matchesStatus && matchesFrom && matchesTo;
-    });
-  }, [fromDate, items, query, statusFilter, toDateValue]);
+  const reportPageCount = Math.max(1, Math.ceil(totalCount / reportPageSize));
+  const currentReportPage = Math.min(reportPage, reportPageCount);
 
   const openedReport =
-    items.find((report) => report.id === openedReportId) ?? null;
+    items.find((report) => report.id === openedReportId) ??
+    (openedReportDetail?.id === openedReportId ? openedReportDetail : null);
   const dateRangeLabel = useMemo(() => {
     if (fromDate || toDateValue) {
       return `${fromDate ? formatReportDate(fromDate) : "Start"} - ${toDateValue ? formatReportDate(toDateValue) : "Today"}`;
@@ -288,9 +303,155 @@ export function ReportHistory({
     return `${formatReportDate(sortedDates[0])} - ${formatReportDate(sortedDates[sortedDates.length - 1])}`;
   }, [fromDate, items, toDateValue]);
 
+  const reportsUrl = useCallback(() => {
+    const params = new URLSearchParams({
+      limit: String(reportPageSize),
+      page: String(currentReportPage),
+      status: statusFilter,
+    });
+    const trimmedQuery = query.trim();
+
+    if (trimmedQuery) {
+      params.set("search", trimmedQuery);
+    }
+
+    if (fromDate) {
+      params.set("fromDate", fromDate);
+    }
+
+    if (toDateValue) {
+      params.set("toDate", toDateValue);
+    }
+
+    return `/api/reports/history?${params.toString()}`;
+  }, [
+    currentReportPage,
+    fromDate,
+    query,
+    reportPageSize,
+    statusFilter,
+    toDateValue,
+  ]);
+
+  const loadReports = useCallback(async ({
+    signal,
+  }: {
+    signal?: AbortSignal;
+  } = {}) => {
+    const requestId = ++requestIdRef.current;
+
+    setIsRefreshing(true);
+    setMessage(null);
+
+    try {
+      const data = await fetchJsonWithClientCache<ReportHistoryPageResponse>(
+        reportsUrl(),
+        {
+          signal,
+          errorMessage: "Unable to load reports.",
+        },
+      );
+
+      if (requestId !== requestIdRef.current) {
+        return false;
+      }
+
+      setItems(data.reports ?? []);
+      setTotalCount(data.totalCount ?? 0);
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return false;
+      }
+
+      setMessage(
+        error instanceof Error ? error.message : "Unable to load reports.",
+      );
+      return false;
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setIsRefreshing(false);
+      }
+    }
+  }, [reportsUrl]);
+
+  function requestImmediateRefresh() {
+    immediateRefreshRef.current = true;
+    setIsRefreshing(true);
+  }
+
+  function changeReportPage(nextPage: number) {
+    requestImmediateRefresh();
+    setReportPage(nextPage);
+  }
+
+  function changeReportPageSize(nextPageSize: number) {
+    if (nextPageSize === reportPageSize) {
+      return;
+    }
+
+    requestImmediateRefresh();
+    setReportPageSize(nextPageSize);
+    setReportPage(1);
+  }
+
+  async function refreshReportsAfterMutation({
+    pageMayBeEmpty = false,
+  }: {
+    pageMayBeEmpty?: boolean;
+  } = {}) {
+    markServerDataStale();
+
+    if (pageMayBeEmpty && items.length <= 1 && currentReportPage > 1) {
+      requestImmediateRefresh();
+      setReportPage(currentReportPage - 1);
+      return true;
+    }
+
+    return loadReports();
+  }
+
   useEffect(() => {
     setOpenedReportId(initialOpenedReportId ?? "");
-  }, [initialOpenedReportId]);
+    setOpenedReportDetail(initialOpenedReport);
+  }, [initialOpenedReport, initialOpenedReportId]);
+
+  useEffect(() => {
+    if (cacheSeededRef.current) {
+      return;
+    }
+
+    cacheSeededRef.current = true;
+    writeClientJsonCache<ReportHistoryPageResponse>(reportsUrl(), {
+      reports,
+      totalCount: initialTotalCount,
+    });
+  }, [initialTotalCount, reports, reportsUrl]);
+
+  useEffect(() => {
+    if (!filterReadyRef.current) {
+      filterReadyRef.current = true;
+      return;
+    }
+
+    const controller = new AbortController();
+    const delayMs = immediateRefreshRef.current ? 0 : 250;
+    immediateRefreshRef.current = false;
+    const timeoutId = window.setTimeout(() => {
+      void loadReports({ signal: controller.signal });
+    }, delayMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [loadReports]);
+
+  useEffect(() => {
+    if (reportPage > reportPageCount) {
+      setReportPage(reportPageCount);
+    }
+  }, [reportPage, reportPageCount]);
 
   useEffect(() => {
     if (!pendingPrintReportId || openedReport?.id !== pendingPrintReportId) {
@@ -339,6 +500,7 @@ export function ReportHistory({
 
   function openReport(report: HistoryReport) {
     setOpenedReportId(report.id);
+    setOpenedReportDetail(report);
     setRowMenu(null);
     updateReportParam(report.id);
   }
@@ -389,9 +551,26 @@ export function ReportHistory({
         report: HistoryReport;
       };
       setItems((current) =>
-        current.map((item) => (item.id === submitted.id ? submitted : item)),
+        statusFilter === "DRAFT"
+          ? current.filter((item) => item.id !== submitted.id)
+          : current.map((item) =>
+              item.id === submitted.id ? submitted : item,
+            ),
       );
-      markServerDataStale();
+      setOpenedReportDetail((current) =>
+        current?.id === submitted.id ? submitted : current,
+      );
+      if (statusFilter === "DRAFT") {
+        setTotalCount((current) => Math.max(0, current - 1));
+      }
+      const refreshed = await refreshReportsAfterMutation({
+        pageMayBeEmpty: statusFilter === "DRAFT",
+      });
+
+      if (!refreshed) {
+        return;
+      }
+
       setMessage("Draft submitted for review.");
     } catch {
       setMessage("Unable to submit draft. Check your connection and try again.");
@@ -430,11 +609,22 @@ export function ReportHistory({
       }
 
       setItems((current) => current.filter((item) => item.id !== report.id));
+      setOpenedReportDetail((current) =>
+        current?.id === report.id ? null : current,
+      );
+      setTotalCount((current) => Math.max(0, current - 1));
       if (openedReportId === report.id) {
         backToReports();
       }
       setRowMenu(null);
-      markServerDataStale();
+      const refreshed = await refreshReportsAfterMutation({
+        pageMayBeEmpty: true,
+      });
+
+      if (!refreshed) {
+        return;
+      }
+
       setMessage("Draft deleted.");
     } catch {
       setMessage("Unable to delete draft. Check your connection and try again.");
@@ -511,13 +701,12 @@ export function ReportHistory({
         />
       ) : (
         <main className="reference-page min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
-          <div className="mb-3 shrink-0">
-            <h1 className="text-[24px] font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">
-              Reports
-            </h1>
-            <p className="mt-0.5 text-sm text-[#667085] dark:text-muted-foreground">
-              Review saved drafts and submitted reports.
-            </p>
+          <div className="reference-page-header shrink-0">
+            <div className="min-w-0">
+              <h1 className="reference-title">
+                Review your submitted updates
+              </h1>
+            </div>
           </div>
 
           <section className="mb-3 shrink-0 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
@@ -526,7 +715,10 @@ export function ReportHistory({
                 <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#667085]" />
                 <Input
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setReportPage(1);
+                  }}
                   placeholder="Search reports..."
                   className="h-11 rounded-[8px] bg-white pl-11 text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
                 />
@@ -535,6 +727,7 @@ export function ReportHistory({
                 value={statusFilter}
                 onChange={(event) => {
                   setStatusFilter(event.target.value);
+                  setReportPage(1);
                 }}
                 className="h-11 rounded-[8px] bg-white text-sm ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
               >
@@ -565,13 +758,14 @@ export function ReportHistory({
                           type="date"
                           value={fromDate}
                           max={maxReportDate}
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            setReportPage(1);
                             setFromDate(
                               event.target.value
                                 ? clampReportDateToToday(event.target.value)
                                 : "",
-                            )
-                          }
+                            );
+                          }}
                           className="mt-1 h-10"
                         />
                       </label>
@@ -581,13 +775,14 @@ export function ReportHistory({
                           type="date"
                           value={toDateValue}
                           max={maxReportDate}
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            setReportPage(1);
                             setToDateValue(
                               event.target.value
                                 ? clampReportDateToToday(event.target.value)
                                 : "",
-                            )
-                          }
+                            );
+                          }}
                           className="mt-1 h-10"
                         />
                       </label>
@@ -597,6 +792,7 @@ export function ReportHistory({
                         onClick={() => {
                           setFromDate("");
                           setToDateValue("");
+                          setReportPage(1);
                           setDatePickerOpen(false);
                         }}
                       >
@@ -616,84 +812,113 @@ export function ReportHistory({
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43] min-[1024px]:flex min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:flex-col">
-            <div className="hidden border-b border-[#e8ecf3] px-4 py-3 text-sm font-semibold text-[#667085] dark:border-[#263a55] dark:text-muted-foreground min-[860px]:grid min-[860px]:grid-cols-[140px_130px_minmax(0,1fr)_150px] min-[1180px]:grid-cols-[170px_190px_minmax(0,1fr)_190px]">
-              <div className="flex items-center gap-2">
-                Date
-                <ArrowUpDown className="h-3.5 w-3.5" />
+          <section className="reference-paginated-surface rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43] min-[1024px]:flex-1">
+            <div
+              className="reference-paginated-viewport overflow-x-hidden"
+              data-pagination-loading={
+                isRefreshing && items.length > 0 ? "true" : undefined
+              }
+              aria-busy={isRefreshing}
+            >
+            {isRefreshing && items.length === 0 ? (
+              <div className="p-4">
+                <EmptyReferenceState>Loading reports...</EmptyReferenceState>
               </div>
-              <div>Status</div>
-              <div>Summary</div>
-              <div className="text-right">Actions</div>
-            </div>
-
-            <div className="min-[1024px]:min-h-0 min-[1024px]:flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable]">
-            {filtered.length === 0 ? (
-              <div className="p-6">
+            ) : items.length === 0 ? (
+              <div className="p-4">
                 <EmptyReferenceState>
                   No reports match the current filters. Create a report or clear
                   your filters.
                 </EmptyReferenceState>
               </div>
             ) : (
-              filtered.map((report) => (
-                <article
-                  key={report.id}
-                  className="space-y-3 border-b border-[#e8ecf3] px-4 py-3 last:border-b-0 dark:border-[#263a55] min-[860px]:grid min-[860px]:min-h-[86px] min-[860px]:grid-cols-[140px_130px_minmax(0,1fr)_150px] min-[860px]:items-center min-[860px]:space-y-0 min-[1180px]:grid-cols-[170px_190px_minmax(0,1fr)_190px]"
+              <>
+                <div
+                  className={cn(
+                    "sticky top-0 z-10 hidden border-b border-[#e8ecf3] bg-white px-4 py-3 text-sm font-semibold text-[#667085] dark:border-[#263a55] dark:bg-[#0f1b2a] dark:text-muted-foreground",
+                    reportHistoryRowGridClass,
+                  )}
                 >
-                  <div>
-                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
-                      Date
-                    </div>
-                    <div className="text-sm font-medium text-[#111827] dark:text-foreground">
-                      {formatReportDate(report.reportDate)}
-                    </div>
-                    <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
-                      {formatWeekday(report.reportDate)}
-                    </div>
+                  <div className="flex items-center gap-2">
+                    Date
+                    <ArrowUpDown className="h-3.5 w-3.5" />
                   </div>
-                  <div>
-                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
-                      Status
+                  <div>Status</div>
+                  <div>Summary</div>
+                  <div className="text-right">Actions</div>
+                </div>
+                {items.map((report) => (
+                  <article
+                    key={report.id}
+                    className={cn(
+                      "space-y-3 border-b border-[#e8ecf3] px-4 py-3 last:border-b-0 dark:border-[#263a55] min-[860px]:min-h-[86px] min-[860px]:space-y-0",
+                      reportHistoryRowGridClass,
+                    )}
+                  >
+                    <div>
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
+                        Date
+                      </div>
+                      <div className="text-sm font-medium text-[#111827] dark:text-foreground">
+                        {formatReportDate(report.reportDate)}
+                      </div>
+                      <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
+                        {formatWeekday(report.reportDate)}
+                      </div>
                     </div>
-                    <StatusPill tone={statusTone(report)}>
-                      {statusLabel(report)}
-                    </StatusPill>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
-                      Summary
+                    <div>
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
+                        Status
+                      </div>
+                      <StatusPill tone={statusTone(report)}>
+                        {statusLabel(report)}
+                      </StatusPill>
                     </div>
-                    <div className="truncate text-base text-[#111827] dark:text-foreground">
-                      {summaryPlainText(report.summary)}
+                    <div className="min-w-0">
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
+                        Summary
+                      </div>
+                      <div className="truncate text-base text-[#111827] dark:text-foreground">
+                        {summaryPlainText(report.summary)}
+                      </div>
+                      <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
+                        {report.activities.length} activit
+                        {report.activities.length === 1 ? "y" : "ies"} included
+                      </div>
                     </div>
-                    <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
-                      {report.activities.length} activit
-                      {report.activities.length === 1 ? "y" : "ies"} included
+                    <div className="flex items-center justify-start gap-3 min-[860px]:justify-end">
+                      <Button
+                        variant="outline"
+                        className="h-9 rounded-[7px] bg-white px-4 text-sm font-medium ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
+                        onClick={() => openReport(report)}
+                      >
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        Open
+                      </Button>
+                      <button
+                        className="reference-menu-button"
+                        aria-label={`More actions for ${formatReportDate(report.reportDate)}`}
+                        onClick={(event) => toggleRowMenu(report, event)}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
                     </div>
-                  </div>
-                  <div className="flex items-center justify-start gap-3 min-[860px]:justify-end">
-                    <Button
-                      variant="outline"
-                      className="h-9 rounded-[7px] bg-white px-4 text-sm font-medium ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
-                      onClick={() => openReport(report)}
-                    >
-                      <ExternalLink className="mr-2 h-4 w-4" />
-                      Open
-                    </Button>
-                    <button
-                      className="reference-menu-button"
-                      aria-label={`More actions for ${formatReportDate(report.reportDate)}`}
-                      onClick={(event) => toggleRowMenu(report, event)}
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </button>
-                  </div>
-                </article>
-              ))
+                  </article>
+                ))}
+              </>
             )}
             </div>
-
+            <PaginationControls
+              className="reference-paginated-footer px-3 pb-3 pt-5"
+              page={currentReportPage}
+              pageSize={reportPageSize}
+              pageSizeMenuPlacement="top"
+              totalItems={totalCount}
+              itemLabel="reports"
+              isLoading={isRefreshing}
+              onPageChange={changeReportPage}
+              onPageSizeChange={changeReportPageSize}
+            />
           </section>
 
           {menuReport && rowMenu ? (

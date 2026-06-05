@@ -112,6 +112,15 @@ describe("ReviewerDashboard weekly reports", () => {
     expect(
       screen.getByRole("button", { name: "More actions for Jad Chahin" }),
     ).toBeTruthy();
+    expect(
+      screen.getByLabelText("Employee reports table viewport").className,
+    ).toContain("reference-paginated-viewport");
+    expect(
+      screen.getByLabelText("Employee reports table viewport").className,
+    ).toContain("reference-visible-rows-viewport");
+    expect(
+      screen.getByLabelText("Employee reports table viewport").className,
+    ).toContain("reference-review-table-viewport");
 
     fireEvent.click(
       screen.getByRole("button", { name: "More actions for Alex Employee" }),

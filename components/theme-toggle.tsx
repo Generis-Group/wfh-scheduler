@@ -6,20 +6,20 @@ import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme-provider";
 
 export function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === "dark";
+  const { toggleTheme } = useTheme();
 
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon"
-      className="h-9 w-9 rounded-[8px] text-[#667085] hover:bg-[#f3f6fb] dark:text-[#cbd5e1] dark:hover:bg-white/[0.08]"
+      className="h-8 w-8 rounded-[8px] text-[#667085] hover:bg-[#f3f6fb] dark:text-[#cbd5e1] dark:hover:bg-white/[0.08]"
       onClick={toggleTheme}
-      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label="Toggle color theme"
+      title="Toggle color theme"
     >
-      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      <Moon className="h-4 w-4 dark:hidden" />
+      <Sun className="hidden h-4 w-4 dark:block" />
     </Button>
   );
 }

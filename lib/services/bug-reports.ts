@@ -1,6 +1,11 @@
 import type { z } from "zod";
 
 import { HttpError } from "@/lib/http";
+import {
+  defaultPaginationPageSize,
+  normalizedPage,
+  normalizedPageSize,
+} from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import { hasUserRole, type RoleBearingUser } from "@/lib/roles";
 import type {
@@ -10,6 +15,16 @@ import type {
 
 type CreateBugReportInput = z.infer<typeof createBugReportSchema>;
 type UpdateBugReportStatusInput = z.infer<typeof updateBugReportStatusSchema>;
+type BugReportListOptions = {
+  userId: string;
+  canReviewAll: boolean;
+  status?: "OPEN" | "SOLVED";
+  search?: string | null;
+  page?: number | null;
+  limit?: number;
+};
+
+const defaultBugReportPageSize = defaultPaginationPageSize;
 
 const bugReportReporterSelect = {
   id: true,
@@ -61,6 +76,42 @@ export function canReviewBugReports(user?: RoleBearingUser | null) {
   return hasUserRole(user, "ADMIN");
 }
 
+function pageSize(value: number | undefined, fallback = defaultBugReportPageSize) {
+  return normalizedPageSize(value, fallback);
+}
+
+function bugReportListWhere({
+  userId,
+  canReviewAll,
+  status,
+  search,
+}: Pick<
+  BugReportListOptions,
+  "userId" | "canReviewAll" | "status" | "search"
+>) {
+  const where = {
+    ...(canReviewAll ? {} : { reporterId: userId }),
+    ...(status ? { status } : {}),
+  };
+  const query = search?.trim();
+
+  if (!query) {
+    return where;
+  }
+
+  const textFilter = { contains: query, mode: "insensitive" as const };
+
+  return {
+    ...where,
+    OR: [
+      { body: textFilter },
+      { pagePath: textFilter },
+      { reporter: { is: { name: textFilter } } },
+      { reporter: { is: { email: textFilter } } },
+    ],
+  };
+}
+
 export async function createBugReport(
   reporterId: string,
   input: CreateBugReportInput,
@@ -87,19 +138,27 @@ export async function createBugReport(
   });
 }
 
-export async function listVisibleBugReports({
-  userId,
-  canReviewAll,
-}: {
-  userId: string;
-  canReviewAll: boolean;
-}) {
-  return prisma.bugReport.findMany({
-    where: canReviewAll ? undefined : { reporterId: userId },
-    include: bugReportListInclude,
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  });
+export async function listVisibleBugReports(options: BugReportListOptions) {
+  const limit = pageSize(options.limit);
+  const currentPage = normalizedPage(options.page);
+  const where = bugReportListWhere(options);
+  const [totalCount, records] = await prisma.$transaction([
+    prisma.bugReport.count({ where }),
+    prisma.bugReport.findMany({
+      where,
+      include: bugReportListInclude,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (currentPage - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    reports: records,
+    page: currentPage,
+    pageSize: limit,
+    totalCount,
+  };
 }
 
 export async function getVisibleBugReport(

@@ -32,7 +32,7 @@ type ReportSurfaceProps = HTMLAttributes<HTMLElement> & {
 
 type ReportPageHeaderProps = {
   title: string;
-  description: string;
+  description?: string;
   actions?: ReactNode;
   className?: string;
   actionsClassName?: string;
@@ -204,17 +204,19 @@ export function ReportPageHeader({
   return (
     <div
       className={cn(
-        "mb-3 flex flex-col gap-3 min-[900px]:flex-row min-[900px]:items-center min-[900px]:justify-between",
+        "reference-page-header",
         className,
       )}
     >
       <div>
-        <h1 className="text-[24px] font-semibold leading-tight tracking-normal text-[#101828] dark:text-foreground">
+        <h1 className="reference-title">
           {title}
         </h1>
-        <p className="mt-0.5 text-sm text-[#667085] dark:text-muted-foreground">
-          {description}
-        </p>
+        {description ? (
+          <p className="mt-0.5 text-xs leading-5 text-[#667085] dark:text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
       </div>
       {actions ? (
         <div
@@ -263,7 +265,7 @@ export function ReportStatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 text-xs font-semibold",
+        "inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold",
         statusTextTone(status),
         className,
       )}
