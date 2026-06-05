@@ -343,6 +343,54 @@ describe("DailyReportApp drafts", () => {
     ).toBe(false);
   });
 
+  it("imports all connected providers from the import menu", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (
+        url.includes("/api/sync/jira") ||
+        url.includes("/api/sync/google-calendar") ||
+        url.includes("/api/sync/google-tasks")
+      ) {
+        return Response.json({
+          importedCount: 0,
+          skippedCount: 0,
+          staleCount: 0,
+          activities: [],
+        });
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <DailyReportApp
+        initialReport={emptyReport}
+        date="2026-05-20"
+        integrationStatus={{ google: true, atlassian: true }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import all" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/sync/jira",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/sync/google-calendar",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/sync/google-tasks",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+  });
+
   it("shows unavailable imports as disabled actions before integrations are connected", () => {
     render(
       <DailyReportApp
@@ -354,6 +402,10 @@ describe("DailyReportApp drafts", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
+    expect(
+      (screen.getByRole("button", { name: "Import all" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
     expect(
       (screen.getByRole("button", { name: "Import Jira" }) as HTMLButtonElement)
         .disabled,
@@ -373,15 +425,13 @@ describe("DailyReportApp drafts", () => {
       ).disabled,
     ).toBe(true);
     expect(
-      (
-        screen.getByRole("button", {
-          name: "Find unfinished Google Tasks",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
+      screen.queryByRole("button", {
+        name: "Find unfinished Google Tasks",
+      }),
+    ).toBeNull();
     expect(
-      screen.getByRole("link", { name: "Manage integrations" }),
-    ).toBeTruthy();
+      screen.queryByRole("link", { name: "Manage integrations" }),
+    ).toBeNull();
   });
 
   it("shows actionable streamed import errors", async () => {
@@ -415,175 +465,6 @@ describe("DailyReportApp drafts", () => {
         screen.getByText("Connect Atlassian before syncing."),
       ).toBeTruthy();
     });
-  });
-
-  it("adds an unfinished Google Task manually", async () => {
-    vi.useFakeTimers();
-    const fetchMock = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-
-        if (url.includes("/api/google-tasks/search")) {
-          return Response.json({
-            tasks: [
-              {
-                taskId: "task-manual",
-                taskListId: "list-1",
-                taskListTitle: "Primary tasks",
-                title: "Draft rollout plan",
-                notes: null,
-                status: "needsAction",
-                due: null,
-                updated: "2026-05-20T12:00:00.000Z",
-                sourceUrl: "#",
-              },
-            ],
-          });
-        }
-
-        if (url === "/api/reports/google-task") {
-          expect(init).toEqual(
-            expect.objectContaining({
-              method: "POST",
-              body: expect.stringContaining("task-manual"),
-            }),
-          );
-
-          return Response.json({
-            report: { ...savedDraft, activities: [manualGoogleTask] },
-          });
-        }
-
-        return Response.json({ error: "Unexpected request." }, { status: 500 });
-      },
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderDailyReportApp(savedDraft);
-
-    fireEvent.click(screen.getByRole("button", { name: "Import" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Find unfinished Google Tasks" }),
-    );
-    fireEvent.change(
-      screen.getByRole("textbox", { name: "Find unfinished Google Tasks" }),
-      { target: { value: "rollout" } },
-    );
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(300);
-    });
-    await flushReact();
-
-    const taskButton = screen.getByRole("button", {
-      name: /Draft rollout plan/i,
-    });
-    fireEvent.click(taskButton);
-
-    await flushReact();
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/reports/google-task",
-      expect.objectContaining({
-        method: "POST",
-      }),
-    );
-    expect(screen.getAllByText("Draft rollout plan")).toHaveLength(1);
-    expect(screen.getByText("Google Task added to this report.")).toBeTruthy();
-    expect(
-      (screen.getByRole("button", { name: "Save draft" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-  });
-
-  it("keeps unsaved imported Google Tasks when adding an unfinished task", async () => {
-    vi.useFakeTimers();
-    const fetchMock = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-
-        if (url.includes("/api/sync/google-tasks")) {
-          return Response.json({
-            importedCount: 1,
-            skippedCount: 0,
-            staleCount: 0,
-            activities: [importedTask],
-          });
-        }
-
-        if (url.includes("/api/google-tasks/search")) {
-          return Response.json({
-            tasks: [
-              {
-                taskId: "task-manual",
-                taskListId: "list-1",
-                taskListTitle: "Primary tasks",
-                title: "Draft rollout plan",
-                notes: null,
-                status: "needsAction",
-                due: null,
-                updated: "2026-05-20T12:00:00.000Z",
-                sourceUrl: "#",
-              },
-            ],
-          });
-        }
-
-        if (url === "/api/reports/google-task") {
-          expect(init).toEqual(
-            expect.objectContaining({
-              method: "POST",
-              body: expect.stringContaining("task-manual"),
-            }),
-          );
-
-          return Response.json({
-            report: { ...savedDraft, activities: [manualGoogleTask] },
-          });
-        }
-
-        return Response.json({ error: "Unexpected request." }, { status: 500 });
-      },
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderDailyReportApp(savedDraft);
-
-    fireEvent.click(screen.getByRole("button", { name: "Import" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Import Google Tasks" }),
-    );
-
-    await flushReact();
-    expect(screen.getByText("Imported task")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Import" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Find unfinished Google Tasks" }),
-    );
-    fireEvent.change(
-      screen.getByRole("textbox", { name: "Find unfinished Google Tasks" }),
-      { target: { value: "rollout" } },
-    );
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(300);
-    });
-    await flushReact();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /Draft rollout plan/i }),
-    );
-
-    await flushReact();
-    expect(screen.getByText("Imported task")).toBeTruthy();
-    expect(screen.getAllByText("Draft rollout plan")).toHaveLength(1);
-    expect(
-      (screen.getByRole("button", { name: "Save draft" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(false);
   });
 
   it("saves the latest edited summary when Save draft is clicked", async () => {

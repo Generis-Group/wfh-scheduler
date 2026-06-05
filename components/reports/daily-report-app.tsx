@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   startTransition,
@@ -21,11 +20,9 @@ import {
   ExternalLink,
   Loader2,
   MoreHorizontal,
-  Plus,
   Save,
   Send,
   Trash2,
-  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -171,18 +168,6 @@ type AutoDraftSnapshot = {
   hasMeaningfulContent: boolean;
 };
 
-type GoogleTaskSuggestion = {
-  taskId: string;
-  taskListId: string;
-  taskListTitle: string;
-  title: string;
-  notes: string | null;
-  status: string | null;
-  due: string | null;
-  updated: string | null;
-  sourceUrl: string | null;
-};
-type GoogleTaskSearchStatus = "idle" | "loading" | "error";
 type ActivityDragPreview = {
   id: string;
   source: ActivitySource;
@@ -262,15 +247,6 @@ function mergeSyncedActivities(
   return sortActivitiesForDisplay([
     ...current.filter((activity) => activity.source !== source),
     ...synced,
-  ]);
-}
-
-function mergeActivitiesById(current: Activity[], next: Activity[]) {
-  const nextIds = new Set(next.map((activity) => activity.id));
-
-  return sortActivitiesForDisplay([
-    ...current.filter((activity) => !nextIds.has(activity.id)),
-    ...next,
   ]);
 }
 
@@ -440,16 +416,6 @@ export function DailyReportApp({
   const [pendingDateControl, setPendingDateControl] =
     useState<ReportDateControl | null>(null);
   const [activitySearch, setActivitySearch] = useState("");
-  const [googleTaskFinderOpen, setGoogleTaskFinderOpen] = useState(false);
-  const [googleTaskQuery, setGoogleTaskQuery] = useState("");
-  const [googleTaskResults, setGoogleTaskResults] = useState<
-    GoogleTaskSuggestion[]
-  >([]);
-  const [googleTaskSearchStatus, setGoogleTaskSearchStatus] =
-    useState<GoogleTaskSearchStatus>("idle");
-  const [addingGoogleTaskKey, setAddingGoogleTaskKey] = useState<string | null>(
-    null,
-  );
   const [activityDragPreview, setActivityDragPreview] =
     useState<ActivityDragPreview | null>(null);
   const summaryEditorRef = useRef<SummaryEditorHandle | null>(null);
@@ -458,7 +424,6 @@ export function DailyReportApp({
   const importMenuRef = useRef<HTMLDivElement | null>(null);
   const activityMenuRef = useRef<HTMLDivElement | null>(null);
   const activityMenuOpenedAtRef = useRef(0);
-  const googleTaskSearchAbortRef = useRef<AbortController | null>(null);
   const reportRef = useRef(initialReport);
   const latestDraftRef = useRef<AutoDraftSnapshot | null>(null);
   const lastSavedSignatureRef = useRef(
@@ -523,13 +488,6 @@ export function DailyReportApp({
     setImportProgress(null);
     setActivitySearch("");
     setActivityDragPreview(null);
-    setGoogleTaskFinderOpen(false);
-    setGoogleTaskQuery("");
-    setGoogleTaskResults([]);
-    setGoogleTaskSearchStatus("idle");
-    setAddingGoogleTaskKey(null);
-    googleTaskSearchAbortRef.current?.abort();
-    googleTaskSearchAbortRef.current = null;
     setPendingDateControl(null);
     pendingSummarySnapshotRef.current = null;
   }, [initialReport, date, reportDate]);
@@ -586,60 +544,6 @@ export function DailyReportApp({
       window.removeEventListener("dragend", clearPreview);
     };
   }, [activityDragPreviewId]);
-
-  useEffect(() => {
-    googleTaskSearchAbortRef.current?.abort();
-
-    if (!googleTaskFinderOpen) {
-      setGoogleTaskResults([]);
-      setGoogleTaskSearchStatus("idle");
-      return;
-    }
-
-    const query = googleTaskQuery.trim();
-
-    if (query.length < 2) {
-      setGoogleTaskResults([]);
-      setGoogleTaskSearchStatus("idle");
-      return;
-    }
-
-    const controller = new AbortController();
-    googleTaskSearchAbortRef.current = controller;
-    const timer = window.setTimeout(async () => {
-      setGoogleTaskSearchStatus("loading");
-
-      try {
-        const response = await fetch(
-          `/api/google-tasks/search?q=${encodeURIComponent(query)}`,
-          { signal: controller.signal },
-        );
-
-        if (!response.ok) {
-          throw new Error(
-            await responseErrorMessage(response, "Unable to search tasks."),
-          );
-        }
-
-        const body = (await response.json()) as {
-          tasks?: GoogleTaskSuggestion[];
-        };
-        setGoogleTaskResults(body.tasks ?? []);
-        setGoogleTaskSearchStatus("idle");
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-
-        setGoogleTaskSearchStatus("error");
-      }
-    }, 250);
-
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [googleTaskFinderOpen, googleTaskQuery]);
 
   function setActivity(id: string, patch: Partial<Activity>) {
     setActivities((items) =>
@@ -1004,7 +908,7 @@ export function DailyReportApp({
   }
 
   async function saveDraft() {
-    if (busyAction || importingProvider || addingGoogleTaskKey) {
+    if (busyAction || importingProvider) {
       return;
     }
 
@@ -1295,94 +1199,20 @@ export function DailyReportApp({
     }
   }
 
-  async function addGoogleTask(task: GoogleTaskSuggestion) {
-    if (busyAction || importingProvider || addingGoogleTaskKey) {
+  async function syncAll() {
+    if (busyAction || importingProvider) {
       return;
     }
 
-    const snapshotBeforeTask = captureCurrentDraftSnapshot();
-    const activitiesBeforeTask = activities;
-    const wasDraftCleanBeforeTask =
-      snapshotBeforeTask.signature === lastSavedSignatureRef.current;
-    const taskKey = `${task.taskListId}:${task.taskId}`;
-    flushSync(() => {
-      setAddingGoogleTaskKey(taskKey);
-      setMessage(null);
-    });
+    const providers: SyncProviderKey[] = [
+      ...(canSyncJira ? (["jira"] as const) : []),
+      ...(canSyncGoogle
+        ? (["google-calendar", "google-tasks"] as const)
+        : []),
+    ];
 
-    try {
-      const response = await fetch("/api/reports/google-task", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date,
-          taskId: task.taskId,
-          taskListId: task.taskListId,
-        }),
-      });
-
-      if (!response.ok) {
-        setMessage(
-          await responseErrorMessage(response, "Unable to add Google Task."),
-        );
-        return;
-      }
-
-      const body = (await response.json()) as { report: Report };
-      const returnedGoogleTasks = body.report.activities.filter(
-        (activity) => activity.source === "GOOGLE_TASKS",
-      );
-      const savedActivities = mergeSyncedActivities(
-        activitiesBeforeTask,
-        "GOOGLE_TASKS",
-        returnedGoogleTasks,
-      );
-      const nextReport: Report = {
-        ...reportRef.current,
-        id: body.report.id,
-        reportDate: body.report.reportDate,
-        status: body.report.status,
-        submittedAt: body.report.submittedAt,
-        updatedAt: body.report.updatedAt,
-        revisions: body.report.revisions ?? reportRef.current.revisions,
-      };
-      reportRef.current = nextReport;
-      setReport(nextReport);
-      setActivities((current) =>
-        mergeActivitiesById(current, returnedGoogleTasks),
-      );
-      if (
-        wasDraftCleanBeforeTask &&
-        latestDraftRef.current?.signature === snapshotBeforeTask.signature
-      ) {
-        const savedPayload = buildReportPayload(
-          snapshotBeforeTask.payload.summary,
-          snapshotBeforeTask.payload.workLocation,
-          savedActivities,
-          snapshotBeforeTask.payload.deletedActivityIds,
-        );
-        const savedSignature = draftPayloadSignature(reportDate, savedPayload);
-
-        lastSavedSignatureRef.current = savedSignature;
-        latestDraftRef.current = {
-          reportId: nextReport.id,
-          reportDate,
-          payload: savedPayload,
-          signature: savedSignature,
-          hasMeaningfulContent: hasMeaningfulDraftPayload(savedPayload),
-        };
-      }
-      markServerDataStale();
-      setGoogleTaskQuery("");
-      setGoogleTaskResults([]);
-      setGoogleTaskSearchStatus("idle");
-      setMessage("Google Task added to this report.");
-    } catch {
-      setMessage(
-        "Unable to add Google Task. Check your connection and try again.",
-      );
-    } finally {
-      setAddingGoogleTaskKey(null);
+    for (const provider of providers) {
+      await sync(provider);
     }
   }
 
@@ -1481,11 +1311,11 @@ export function DailyReportApp({
 
   const canSyncJira = integrationStatus.atlassian;
   const canSyncGoogle = integrationStatus.google;
+  const canSyncAnyIntegration = canSyncJira || canSyncGoogle;
   const isSavingDraft = busyAction === "save";
   const isSubmitting = busyAction === "submit";
   const isDeleting = busyAction === "delete";
   const isImporting = importingProvider !== null;
-  const isAddingGoogleTask = addingGoogleTaskKey !== null;
   const isPublishedReport = report.status === "SUBMITTED";
   const submitButtonText = isPublishedReport
     ? "Resubmit update"
@@ -1497,8 +1327,7 @@ export function DailyReportApp({
   const isBusy =
     busyAction !== null ||
     isImporting ||
-    dateNavigationPending ||
-    isAddingGoogleTask;
+    dateNavigationPending;
   const maxReportDate = todayDateString();
   const visibleActivities = useMemo(
     () => activities.filter((activity) => activity.selected),
@@ -1777,12 +1606,28 @@ export function DailyReportApp({
                 {importMenuOpen ? (
                   <div className="absolute right-0 top-12 z-30 w-64 rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
                     <button
+                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-semibold text-[#111827] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                      disabled={!canSyncAnyIntegration}
+                      title={
+                        canSyncAnyIntegration
+                          ? undefined
+                          : "Connect Jira or Google before importing."
+                      }
+                      onClick={() => {
+                        setImportMenuOpen(false);
+                        syncAll();
+                      }}
+                    >
+                      Import all
+                    </button>
+                    <div className="my-1 h-px bg-[#e1e6ef] dark:bg-[#263a55]" />
+                    <button
                       className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
                       disabled={!canSyncJira}
                       title={
                         canSyncJira
                           ? undefined
-                          : "Connect Jira from Manage integrations first."
+                          : "Connect Jira before importing."
                       }
                       onClick={() => {
                         setImportMenuOpen(false);
@@ -1797,7 +1642,7 @@ export function DailyReportApp({
                       title={
                         canSyncGoogle
                           ? undefined
-                          : "Connect Google from Manage integrations first."
+                          : "Connect Google before importing."
                       }
                       onClick={() => {
                         setImportMenuOpen(false);
@@ -1812,7 +1657,7 @@ export function DailyReportApp({
                       title={
                         canSyncGoogle
                           ? undefined
-                          : "Connect Google from Manage integrations first."
+                          : "Connect Google before importing."
                       }
                       onClick={() => {
                         setImportMenuOpen(false);
@@ -1821,105 +1666,10 @@ export function DailyReportApp({
                     >
                       Import Google Tasks
                     </button>
-                    <button
-                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
-                      disabled={!canSyncGoogle}
-                      title={
-                        canSyncGoogle
-                          ? undefined
-                          : "Connect Google from Manage integrations first."
-                      }
-                      onClick={() => {
-                        setImportMenuOpen(false);
-                        setGoogleTaskFinderOpen(true);
-                      }}
-                    >
-                      Find unfinished Google Tasks
-                    </button>
-                    <Link
-                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#2563eb] hover:bg-[#eff6ff] dark:text-[#93c5fd] dark:hover:bg-white/5"
-                      href="/settings#integrations"
-                      onClick={() => setImportMenuOpen(false)}
-                    >
-                      Manage integrations
-                    </Link>
                   </div>
                 ) : null}
               </div>
             </div>
-
-            {googleTaskFinderOpen ? (
-              <div className="mt-3 rounded-[8px] bg-[#f8fafc] p-2 ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]">
-                <div className="flex items-center gap-2">
-                  <ReportSearchField
-                    value={googleTaskQuery}
-                    onValueChange={setGoogleTaskQuery}
-                    placeholder="Find unfinished Google Tasks"
-                    className="flex-1 dark:bg-[#101d2e] dark:ring-[#3a506d]"
-                    aria-label="Find unfinished Google Tasks"
-                  />
-                  <button
-                    type="button"
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[7px] text-[#667085] transition-colors hover:bg-[#eef2f7] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
-                    aria-label="Close Google Tasks finder"
-                    onClick={() => {
-                      setGoogleTaskFinderOpen(false);
-                      setGoogleTaskQuery("");
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                {googleTaskSearchStatus === "loading" ? (
-                  <div className="mt-2 flex items-center gap-2 px-1 py-1.5 text-xs font-medium text-[#667085] dark:text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Searching...
-                  </div>
-                ) : googleTaskSearchStatus === "error" ? (
-                  <div className="mt-2 px-1 py-1.5 text-xs font-medium text-red-700 dark:text-red-300">
-                    Could not search Google Tasks.
-                  </div>
-                ) : googleTaskQuery.trim().length >= 2 &&
-                  googleTaskResults.length === 0 ? (
-                  <div className="mt-2 px-1 py-1.5 text-xs font-medium text-[#667085] dark:text-muted-foreground">
-                    No unfinished tasks found.
-                  </div>
-                ) : googleTaskResults.length > 0 ? (
-                  <div className="mt-2 max-h-44 space-y-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
-                    {googleTaskResults.map((task) => {
-                      const taskKey = `${task.taskListId}:${task.taskId}`;
-                      const isAdding = addingGoogleTaskKey === taskKey;
-
-                      return (
-                        <button
-                          key={taskKey}
-                          type="button"
-                          className="flex w-full items-center gap-2 rounded-[7px] px-2 py-2 text-left transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:hover:bg-white/5"
-                          disabled={Boolean(addingGoogleTaskKey)}
-                          onClick={() => void addGoogleTask(task)}
-                        >
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] bg-white text-[#2563eb] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#3a506d]">
-                            {isAdding ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Plus className="h-3.5 w-3.5" />
-                            )}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-[#111827] dark:text-foreground">
-                              {task.title}
-                            </span>
-                            <span className="block truncate text-xs text-[#667085] dark:text-muted-foreground">
-                              {isAdding ? "Adding..." : task.taskListTitle}
-                            </span>
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
 
             <ReportSearchField
               value={activitySearch}
