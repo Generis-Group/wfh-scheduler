@@ -109,6 +109,15 @@ type SyncResult = {
   skippedCount: number;
   staleCount: number;
   activities: ActivityItem[];
+  report?: {
+    id: string;
+    reportDate: Date;
+    workLocation: string;
+    summary: string;
+    status: string;
+    submittedAt: Date | null;
+    updatedAt: Date;
+  };
 };
 export type SyncProgressStage =
   | "starting"
@@ -161,9 +170,11 @@ function buildJiraJql(clauses: Array<string | null>, orderBy = "updated ASC") {
   return `${clauses.filter(Boolean).join(" AND ")} ORDER BY ${orderBy}`;
 }
 
-const meaningfulJiraChangeFields = new Set([
+const standaloneJiraChangeFields = new Set([
   "status",
   "resolution",
+]);
+const supportingJiraChangeFields = new Set([
   "assignee",
   "priority",
   "summary",
@@ -180,6 +191,7 @@ const meaningfulJiraChangeFields = new Set([
   "epic link",
   "parent",
 ]);
+type JiraChangeFieldWeight = "standalone" | "supporting";
 const jiraActivityTypeOrder: JiraIssueActivityType[] = [
   "comment",
   "worklog",
@@ -214,10 +226,24 @@ function jiraChangeFieldKey(field: string | undefined) {
     .replace(/\s+/g, " ");
 }
 
-function isMeaningfulJiraChangeField(field: string | undefined) {
+function jiraChangeFieldWeight(
+  field: string | undefined,
+): JiraChangeFieldWeight | null {
   const key = jiraChangeFieldKey(field);
 
-  return Boolean(key && meaningfulJiraChangeFields.has(key));
+  if (!key) {
+    return null;
+  }
+
+  if (standaloneJiraChangeFields.has(key)) {
+    return "standalone";
+  }
+
+  if (supportingJiraChangeFields.has(key)) {
+    return "supporting";
+  }
+
+  return null;
 }
 
 function isJiraStatusChangeField(field: string | undefined) {
@@ -685,6 +711,7 @@ function buildJiraIssueDayEvidence(
   const statusTransitions: NonNullable<
     JiraIssueDayEvidence["statusTransitions"]
   > = [];
+  let hasStandaloneChangelog = false;
   let commentCount = 0;
   let worklogCount = 0;
   let durationMinutes = 0;
@@ -731,25 +758,28 @@ function buildJiraIssueDayEvidence(
       continue;
     }
 
-    const meaningfulItems = (history.items ?? []).filter((item) =>
-      isMeaningfulJiraChangeField(item.field),
+    const recognizedItems = (history.items ?? []).filter((item) =>
+      jiraChangeFieldWeight(item.field),
     );
 
-    if (meaningfulItems.length === 0) {
+    if (recognizedItems.length === 0) {
       continue;
     }
 
-    activityTypes.add("changelog");
     pushDate(activityDates, changedAt);
 
-    for (const item of meaningfulItems) {
+    for (const item of recognizedItems) {
       const fieldName = jiraChangeFieldName(item.field);
+      const fieldWeight = jiraChangeFieldWeight(item.field);
 
-      if (!fieldName) {
+      if (!fieldName || !fieldWeight) {
         continue;
       }
 
       changedFields.add(fieldName);
+      if (fieldWeight === "standalone") {
+        hasStandaloneChangelog = true;
+      }
 
       if (isJiraStatusChangeField(fieldName)) {
         statusTransitions.push({
@@ -782,6 +812,10 @@ function buildJiraIssueDayEvidence(
     activityTypes.add("comment");
     commentCount += 1;
     pushDate(activityDates, commentedAt);
+  }
+
+  if (changedFields.size > 0 && (hasStandaloneChangelog || activityTypes.size > 0)) {
+    activityTypes.add("changelog");
   }
 
   if (activityTypes.size === 0) {

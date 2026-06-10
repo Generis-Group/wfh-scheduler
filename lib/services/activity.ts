@@ -29,9 +29,20 @@ export async function listActivities(userId: string, dateString: string) {
 }
 
 type ImportedActivitySource = Exclude<ActivitySource, "MANUAL">;
+const importedDraftReportSelect = {
+  id: true,
+  userId: true,
+  reportDate: true,
+  workLocation: true,
+  summary: true,
+  status: true,
+  submittedAt: true,
+  updatedAt: true,
+};
 
 type ExistingImportedActivity = {
   id: string;
+  dailyReportId: string | null;
   sourceId: string | null;
   sourceContainerId: string | null;
   title: string;
@@ -44,6 +55,16 @@ type ExistingImportedActivity = {
   selected: boolean;
   metadata: Prisma.JsonValue | null;
   staleAt: Date | null;
+};
+type ImportedDraftReport = {
+  id: string;
+  userId: string;
+  reportDate: Date;
+  workLocation: string;
+  summary: string;
+  status: string;
+  submittedAt: Date | null;
+  updatedAt: Date;
 };
 
 function dateValue(value: Date | null | undefined) {
@@ -88,7 +109,7 @@ function importedActivityData(
     endedAt: item.endedAt ?? null,
     durationMinutes: item.durationMinutes ?? null,
     metadata,
-    selected: true,
+    selected: existingActivity?.selected ?? true,
     staleAt: null,
   };
 }
@@ -96,8 +117,10 @@ function importedActivityData(
 function importedActivityChanged(
   existing: ExistingImportedActivity,
   data: ReturnType<typeof importedActivityData>,
+  dailyReportId: string,
 ) {
   return (
+    existing.dailyReportId !== dailyReportId ||
     existing.sourceContainerId !== data.sourceContainerId ||
     existing.title !== data.title ||
     existing.description !== data.description ||
@@ -144,6 +167,7 @@ export async function upsertImportedActivities(
         },
         select: {
           id: true,
+          dailyReportId: true,
           sourceId: true,
           sourceContainerId: true,
           title: true,
@@ -164,52 +188,6 @@ export async function upsertImportedActivities(
       activity.sourceId ? [[activity.sourceId, activity]] : [],
     ),
   );
-
-  const activitiesToCreate: Prisma.ActivityItemCreateManyInput[] = [];
-  const activitiesToUpdate: Array<{
-    id: string;
-    data: ReturnType<typeof importedActivityData>;
-  }> = [];
-
-  for (const item of importableActivities) {
-    const existingActivity = existingBySourceId.get(item.sourceId);
-    const data = importedActivityData(item, existingActivity);
-
-    if (!existingActivity) {
-      activitiesToCreate.push({
-        userId,
-        reportDate,
-        source: item.source,
-        sourceId: item.sourceId,
-        ...data,
-      });
-      importedCount += 1;
-      continue;
-    }
-
-    if (importedActivityChanged(existingActivity, data)) {
-      activitiesToUpdate.push({
-        id: existingActivity.id,
-        data,
-      });
-    }
-
-    importedCount += 1;
-  }
-
-  if (activitiesToCreate.length) {
-    await prisma.activityItem.createMany({
-      data: activitiesToCreate,
-      skipDuplicates: true,
-    });
-  }
-
-  for (const activity of activitiesToUpdate) {
-    await prisma.activityItem.update({
-      where: { id: activity.id },
-      data: activity.data,
-    });
-  }
 
   const staleCandidates = await prisma.activityItem.findMany({
     where: {
@@ -236,6 +214,76 @@ export async function upsertImportedActivities(
         ),
     )
     .map((activity) => activity.id);
+  const shouldPersistDraft =
+    importableActivities.length > 0 || staleIds.length > 0;
+  const report: ImportedDraftReport | null = shouldPersistDraft
+    ? await prisma.dailyReport.upsert({
+        where: {
+          userId_reportDate: {
+            userId,
+            reportDate,
+          },
+        },
+        update: {},
+        create: {
+          userId,
+          reportDate,
+        },
+        select: importedDraftReportSelect,
+      })
+    : null;
+
+  const activitiesToCreate: Prisma.ActivityItemCreateManyInput[] = [];
+  const activitiesToUpdate: Array<{
+    id: string;
+    data: ReturnType<typeof importedActivityData>;
+  }> = [];
+
+  if (report) {
+    for (const item of importableActivities) {
+      const existingActivity = existingBySourceId.get(item.sourceId);
+      const data = importedActivityData(item, existingActivity);
+
+      if (!existingActivity) {
+        activitiesToCreate.push({
+          userId,
+          dailyReportId: report.id,
+          reportDate,
+          source: item.source,
+          sourceId: item.sourceId,
+          ...data,
+        });
+        importedCount += 1;
+        continue;
+      }
+
+      if (importedActivityChanged(existingActivity, data, report.id)) {
+        activitiesToUpdate.push({
+          id: existingActivity.id,
+          data,
+        });
+      }
+
+      importedCount += 1;
+    }
+  }
+
+  if (activitiesToCreate.length) {
+    await prisma.activityItem.createMany({
+      data: activitiesToCreate,
+      skipDuplicates: true,
+    });
+  }
+
+  for (const activity of activitiesToUpdate) {
+    await prisma.activityItem.update({
+      where: { id: activity.id },
+      data: {
+        ...activity.data,
+        dailyReportId: report?.id,
+      },
+    });
+  }
 
   const staleResult = staleIds.length
     ? await prisma.activityItem.updateMany({
@@ -263,5 +311,6 @@ export async function upsertImportedActivities(
     skippedCount,
     staleCount: staleResult.count,
     activities: importedActivities,
+    ...(report ? { report } : {}),
   };
 }

@@ -522,7 +522,7 @@ describe("sync service pagination", () => {
     ]);
   });
 
-  it("imports Jira changelog display-name fields as meaningful activity", async () => {
+  it("keeps Jira display-name fields as supporting detail with status changes", async () => {
     const jiraFetch = vi.fn(async (path: string, init?: RequestInit) => {
       if (path === "/rest/api/3/myself") {
         return { accountId: "jira-user-1", displayName: "Employee" };
@@ -560,6 +560,7 @@ describe("sync service pagination", () => {
               created: "2026-05-14T19:00:00.000Z",
               author: { accountId: "jira-user-1" },
               items: [
+                { field: "status", fromString: "To Do", toString: "In Progress" },
                 { field: "Fix Version/s", fromString: null, toString: "Release 1" },
                 { field: "Component/s", fromString: null, toString: "Platform" }
               ]
@@ -583,13 +584,74 @@ describe("sync service pagination", () => {
     expect(activities).toEqual([
       expect.objectContaining({
         sourceId: "issue:10010",
-        description: "Updated Fix Version/s and Component/s",
+        description: "Changed status, Updated Fix Version/s and Component/s",
         metadata: expect.objectContaining({
           activityTypes: ["changelog"],
-          changedFields: ["Fix Version/s", "Component/s"]
+          changedFields: ["status", "Fix Version/s", "Component/s"],
+          statusTransitions: [{ from: "To Do", to: "In Progress" }]
         })
       })
     ]);
+  });
+
+  it("ignores Jira supporting-only changelog activity", async () => {
+    const jiraFetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/rest/api/3/myself") {
+        return { accountId: "jira-user-1", displayName: "Employee" };
+      }
+
+      if (path === "/rest/api/3/search/jql") {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+
+        return String(body.jql).includes("worklogDate")
+          ? { issues: [] }
+          : {
+              issues: [
+                {
+                  id: "10012",
+                  key: "GEN-12",
+                  fields: {
+                    summary: "Metadata-only update",
+                    updated: "2026-05-14T19:00:00.000Z",
+                    assignee: { accountId: "jira-user-1" },
+                    reporter: { accountId: "someone-else" }
+                  }
+                }
+              ]
+            };
+      }
+
+      if (path.includes("GEN-12/changelog")) {
+        return {
+          startAt: 0,
+          maxResults: 100,
+          total: 1,
+          values: [
+            {
+              id: "c12",
+              created: "2026-05-14T19:00:00.000Z",
+              author: { accountId: "jira-user-1" },
+              items: [
+                { field: "assignee", fromString: "A", toString: "Employee" },
+                { field: "priority", fromString: "Medium", toString: "High" },
+                { field: "labels", fromString: null, toString: "follow-up" }
+              ]
+            }
+          ]
+        };
+      }
+
+      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+    });
+    mockGetJiraConnection.mockResolvedValue({
+      resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
+      fetch: jiraFetch
+    });
+
+    const { syncJira } = await import("@/lib/services/sync");
+    await syncJira("user-1", "2026-05-14");
+
+    expect(mockUpsertImportedActivities.mock.calls.at(-1)?.[3]).toEqual([]);
   });
 
   it("imports newly created Jira issues as issue rows", async () => {
@@ -760,12 +822,28 @@ describe("sync service pagination", () => {
       params.pageToken
         ? {
             data: {
-              items: [{ id: "event-2", summary: "Second", start: { dateTime: "2026-05-14T10:00:00-04:00" }, end: { dateTime: "2026-05-14T10:30:00-04:00" } }]
+              items: [
+                {
+                  id: "event-2",
+                  summary: "Second",
+                  start: { dateTime: "2026-05-14T10:00:00-04:00" },
+                  end: { dateTime: "2026-05-14T10:30:00-04:00" },
+                  attendees: [{ email: "employee@generisgp.com", responseStatus: "accepted" }]
+                }
+              ]
             }
           }
         : {
             data: {
-              items: [{ id: "event-1", summary: "First", start: { dateTime: "2026-05-14T09:00:00-04:00" }, end: { dateTime: "2026-05-14T09:30:00-04:00" } }],
+              items: [
+                {
+                  id: "event-1",
+                  summary: "First",
+                  start: { dateTime: "2026-05-14T09:00:00-04:00" },
+                  end: { dateTime: "2026-05-14T09:30:00-04:00" },
+                  attendees: [{ email: "employee@generisgp.com", responseStatus: "accepted" }]
+                }
+              ],
               nextPageToken: "event-page-2"
             }
           }
@@ -787,6 +865,77 @@ describe("sync service pagination", () => {
         expect.objectContaining({ sourceId: "event-1" }),
         expect.objectContaining({ sourceId: "event-2" })
       ])
+    );
+  });
+
+  it("imports only accepted Google Calendar meetings", async () => {
+    const eventsList = vi.fn(async () => ({
+      data: {
+        items: [
+          {
+            id: "accepted-event",
+            summary: "Accepted meeting",
+            start: { dateTime: "2026-05-14T09:00:00-04:00" },
+            end: { dateTime: "2026-05-14T09:30:00-04:00" },
+            attendees: [
+              { email: "employee@generisgp.com", responseStatus: "accepted" }
+            ]
+          },
+          {
+            id: "needs-action-event",
+            summary: "Unanswered meeting",
+            start: { dateTime: "2026-05-14T10:00:00-04:00" },
+            end: { dateTime: "2026-05-14T10:30:00-04:00" },
+            attendees: [
+              { email: "employee@generisgp.com", responseStatus: "needsAction" }
+            ]
+          },
+          {
+            id: "tentative-event",
+            summary: "Tentative meeting",
+            start: { dateTime: "2026-05-14T11:00:00-04:00" },
+            end: { dateTime: "2026-05-14T11:30:00-04:00" },
+            attendees: [
+              { email: "employee@generisgp.com", responseStatus: "tentative" }
+            ]
+          },
+          {
+            id: "declined-event",
+            summary: "Declined meeting",
+            start: { dateTime: "2026-05-14T12:00:00-04:00" },
+            end: { dateTime: "2026-05-14T12:30:00-04:00" },
+            attendees: [
+              { email: "employee@generisgp.com", responseStatus: "declined" }
+            ]
+          },
+          {
+            id: "self-created-event",
+            summary: "Focus block",
+            creator: { self: true },
+            start: { dateTime: "2026-05-14T13:00:00-04:00" },
+            end: { dateTime: "2026-05-14T13:30:00-04:00" }
+          }
+        ]
+      }
+    }));
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: { events: { list: eventsList } },
+      tasks: {}
+    });
+
+    const { syncGoogleCalendar } = await import("@/lib/services/sync");
+    await syncGoogleCalendar("user-1", "2026-05-14");
+
+    expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
+      "GOOGLE_CALENDAR",
+      "user-1",
+      "2026-05-14",
+      [
+        expect.objectContaining({
+          sourceId: "accepted-event",
+          status: "accepted"
+        })
+      ]
     );
   });
 

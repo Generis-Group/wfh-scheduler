@@ -27,6 +27,9 @@ type UpdateReportInput = z.infer<typeof updateReportSchema>;
 type ActivityUpdateInput = NonNullable<
   UpdateReportInput["activityUpdates"]
 >[number];
+type ManualActivityInput = NonNullable<
+  UpdateReportInput["manualActivities"]
+>[number];
 type ExistingActivityUpdate = {
   id: string;
   dailyReportId: string | null;
@@ -38,6 +41,16 @@ type ExistingActivityUpdate = {
 type ChangedActivityUpdate = {
   input: ActivityUpdateInput;
   existing: ExistingActivityUpdate;
+};
+type ManualActivityMutationData = {
+  title: string;
+  description: string | null;
+  status: string | null;
+  durationMinutes: number | null;
+  startedAt: Date | null;
+  endedAt: Date | null;
+  employeeNote: string | null;
+  selected: boolean;
 };
 type WeeklyDashboardUser = {
   id: string;
@@ -431,6 +444,21 @@ function reportFieldChanges(
   };
 }
 
+function manualActivityMutationData(
+  manual: ManualActivityInput,
+): ManualActivityMutationData {
+  return {
+    title: manual.title,
+    description: manual.description ?? null,
+    status: manual.status ?? "noted",
+    durationMinutes: manual.durationMinutes ?? null,
+    startedAt: manual.startedAt ? new Date(manual.startedAt) : null,
+    endedAt: manual.endedAt ? new Date(manual.endedAt) : null,
+    employeeNote: manual.employeeNote ?? null,
+    selected: manual.selected ?? true,
+  };
+}
+
 async function changedActivityUpdates(
   report: Awaited<ReturnType<typeof getReportById>>,
   activityUpdates: ActivityUpdateInput[],
@@ -566,20 +594,39 @@ export async function updateReport(
     }
 
     for (const manual of input.manualActivities ?? []) {
+      const sourceId = `manual:${manual.id ?? crypto.randomUUID()}`;
+      const activityData = manualActivityMutationData(manual);
+
+      if (manual.id) {
+        const updated = await tx.activityItem.updateMany({
+          where: {
+            id: manual.id,
+            userId: report.userId,
+            reportDate: report.reportDate,
+            source: "MANUAL",
+          },
+          data: {
+            ...activityData,
+            dailyReportId: report.id,
+            sourceId,
+            staleAt: null,
+          },
+        });
+
+        if (updated.count > 0) {
+          continue;
+        }
+      }
+
       await tx.activityItem.create({
         data: {
+          id: manual.id,
           userId: report.userId,
           dailyReportId: report.id,
           reportDate: report.reportDate,
           source: "MANUAL",
-          sourceId: `manual:${crypto.randomUUID()}`,
-          title: manual.title,
-          description: manual.description ?? null,
-          status: manual.status ?? "noted",
-          durationMinutes: manual.durationMinutes ?? null,
-          startedAt: manual.startedAt ? new Date(manual.startedAt) : null,
-          endedAt: manual.endedAt ? new Date(manual.endedAt) : null,
-          employeeNote: manual.employeeNote ?? null,
+          sourceId,
+          ...activityData,
         },
       });
     }

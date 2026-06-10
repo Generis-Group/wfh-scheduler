@@ -87,4 +87,47 @@ describe.runIf(process.env.TEST_DATABASE_URL)("report revisions", () => {
 
     await prisma.user.delete({ where: { id: user.id } });
   });
+
+  it("updates an existing client-created manual work item when its id is saved again", async () => {
+    process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+    const { prisma } = await import("@/lib/prisma");
+    const { ensureDailyReport, updateReport } = await import("@/lib/services/reports");
+    const suffix = Date.now();
+
+    const user = await prisma.user.create({
+      data: {
+        email: `manual-idempotent-${suffix}@generisgp.com`,
+        name: "Manual Idempotent Test",
+        status: "ACTIVE"
+      }
+    });
+    const report = await ensureDailyReport(user.id, "2026-05-15");
+    const manualId = `manual-${suffix}`;
+
+    expect(report).toBeTruthy();
+
+    await updateReport(report!.id, user.id, {
+      manualActivities: [{ id: manualId, title: "Manual note" }]
+    });
+    const updated = await updateReport(report!.id, user.id, {
+      summary: "Edited while saving",
+      manualActivities: [
+        {
+          id: manualId,
+          title: "Manual note edited",
+          employeeNote: "Still relevant"
+        }
+      ]
+    });
+    const manualActivities = await prisma.activityItem.findMany({
+      where: { id: manualId }
+    });
+
+    expect(manualActivities).toHaveLength(1);
+    expect(manualActivities[0]?.title).toBe("Manual note edited");
+    expect(manualActivities[0]?.employeeNote).toBe("Still relevant");
+    expect(updated?.activities.filter((activity) => activity.id === manualId)).toHaveLength(1);
+
+    await prisma.user.delete({ where: { id: user.id } });
+  });
 });

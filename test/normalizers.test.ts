@@ -54,7 +54,7 @@ describe("provider normalizers", () => {
     });
   });
 
-  it("excludes cancelled, declined, and all-day calendar events", () => {
+  it("excludes calendar events that are not accepted meetings", () => {
     expect(
       normalizeCalendarEvent({
         id: "cancelled",
@@ -85,6 +85,42 @@ describe("provider normalizers", () => {
         "employee@generisgp.com"
       )
     ).toBeNull();
+
+    expect(
+      normalizeCalendarEvent(
+        {
+          id: "needs-action",
+          summary: "Unanswered planning meeting",
+          start: { dateTime: "2026-05-13T14:00:00-04:00" },
+          end: { dateTime: "2026-05-13T14:30:00-04:00" },
+          attendees: [{ email: "employee@generisgp.com", responseStatus: "needsAction" }]
+        },
+        "employee@generisgp.com"
+      )
+    ).toBeNull();
+
+    expect(
+      normalizeCalendarEvent(
+        {
+          id: "tentative",
+          summary: "Maybe meeting",
+          start: { dateTime: "2026-05-13T15:00:00-04:00" },
+          end: { dateTime: "2026-05-13T15:30:00-04:00" },
+          attendees: [{ email: "employee@generisgp.com", responseStatus: "tentative" }]
+        },
+        "employee@generisgp.com"
+      )
+    ).toBeNull();
+
+    expect(
+      normalizeCalendarEvent({
+        id: "self-created",
+        summary: "Personal focus block",
+        creator: { self: true },
+        start: { dateTime: "2026-05-13T16:00:00-04:00" },
+        end: { dateTime: "2026-05-13T16:30:00-04:00" }
+      })
+    ).toBeNull();
   });
 
   it("normalizes accepted calendar events and Google Tasks", () => {
@@ -107,6 +143,21 @@ describe("provider normalizers", () => {
       source: "GOOGLE_CALENDAR",
       sourceId: "meeting-1",
       durationMinutes: 30,
+      status: "accepted"
+    });
+
+    expect(
+      normalizeCalendarEvent({
+        id: "meeting-self",
+        summary: "Accepted self attendee",
+        htmlLink: "https://calendar.google.com/event",
+        start: { dateTime: "2026-05-13T10:00:00-04:00" },
+        end: { dateTime: "2026-05-13T10:30:00-04:00" },
+        attendees: [{ email: "employee@generisgp.com", self: true, responseStatus: "accepted" }]
+      })
+    ).toMatchObject({
+      source: "GOOGLE_CALENDAR",
+      sourceId: "meeting-self",
       status: "accepted"
     });
 

@@ -16,9 +16,16 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor, JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { Bold, Heading2, Italic, List, ListOrdered } from "lucide-react";
+import {
+  Bold,
+  Heading2,
+  Italic,
+  List,
+  ListOrdered,
+  Loader2,
+} from "lucide-react";
 
-import { Skeleton } from "@/components/ui/skeleton";
+import { SummaryEditorBodySkeleton } from "@/components/reports/summary-editor-skeleton";
 import {
   markdownToSummaryHtml,
   normalizeSummaryActivitySource,
@@ -48,6 +55,8 @@ export type SummaryEditorProps = {
   initialSummary: string;
   resetKey: string;
   activityReferences?: SummaryActivityReferenceMap;
+  disabled?: boolean;
+  loadingLabel?: string;
   onChange: (snapshot: SummarySnapshot) => void;
   onActivityReferenceDrop?: (
     payload: SummaryActivityReferenceDragPayload,
@@ -681,23 +690,7 @@ function SummaryToolbarButton({
 }
 
 export function SummaryEditorSkeleton() {
-  return (
-    <div
-      className="summary-tiptap-editor"
-      aria-busy="true"
-      aria-label="Loading summary editor"
-      role="status"
-    >
-      <div className="h-[clamp(22rem,52dvh,30rem)] rounded-[7px] bg-white px-3.5 py-3.5 ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
-        <Skeleton className="h-4 w-11/12 rounded-[4px]" />
-        <Skeleton className="mt-3 h-4 w-4/5 rounded-[4px]" />
-        <Skeleton className="mt-3 h-4 w-9/12 rounded-[4px]" />
-        <Skeleton className="mt-7 h-4 w-10/12 rounded-[4px]" />
-        <Skeleton className="mt-3 h-4 w-7/12 rounded-[4px]" />
-        <Skeleton className="mt-7 h-4 w-8/12 rounded-[4px]" />
-      </div>
-    </div>
-  );
+  return <SummaryEditorBodySkeleton />;
 }
 
 const SummaryEditorComponent = forwardRef<
@@ -708,6 +701,8 @@ const SummaryEditorComponent = forwardRef<
     initialSummary,
     resetKey,
     activityReferences,
+    disabled = false,
+    loadingLabel = "Loading...",
     onChange,
     onActivityReferenceDrop,
   },
@@ -716,6 +711,7 @@ const SummaryEditorComponent = forwardRef<
   const onChangeRef = useRef(onChange);
   const onActivityReferenceDropRef = useRef(onActivityReferenceDrop);
   const activityReferencesRef = useRef(activityReferences);
+  const disabledRef = useRef(disabled);
   const fallbackSnapshotRef = useRef<SummarySnapshot>({
     summary: initialSummary,
   });
@@ -731,6 +727,7 @@ const SummaryEditorComponent = forwardRef<
   }, [onActivityReferenceDrop]);
 
   activityReferencesRef.current = activityReferences;
+  disabledRef.current = disabled;
 
   const updateToolbarState = useCallback((editor: Editor | null) => {
     const nextState = editor
@@ -757,12 +754,18 @@ const SummaryEditorComponent = forwardRef<
       activityReferences,
     ),
     immediatelyRender: false,
+    editable: !disabled,
     editorProps: {
       attributes: {
         class: "summary-tiptap-prosemirror",
       },
       handleDOMEvents: {
         dragstart: (_view, event) => {
+          if (disabledRef.current) {
+            event.preventDefault();
+            return true;
+          }
+
           if (!eventTargetIsActivityReference(event)) {
             return false;
           }
@@ -771,6 +774,10 @@ const SummaryEditorComponent = forwardRef<
           return true;
         },
         dragover: (view, event) => {
+          if (disabledRef.current) {
+            return false;
+          }
+
           if (!hasActivityReferenceDrag(event.dataTransfer)) {
             return false;
           }
@@ -791,6 +798,10 @@ const SummaryEditorComponent = forwardRef<
         },
       },
       handleDrop: (view, event) => {
+        if (disabledRef.current) {
+          return false;
+        }
+
         const payload = parseActivityReferencePayload(event.dataTransfer);
 
         if (!payload) {
@@ -823,6 +834,10 @@ const SummaryEditorComponent = forwardRef<
     },
     onSelectionUpdate: ({ editor }) => updateToolbarState(editor),
   });
+
+  useEffect(() => {
+    editor?.setEditable(!disabled);
+  }, [disabled, editor]);
 
   const setEditorSnapshot = useCallback(
     (nextEditor: Editor, snapshot: SummarySnapshot) => {
@@ -884,7 +899,7 @@ const SummaryEditorComponent = forwardRef<
   );
 
   function runCommand(command: SummaryEditorCommand) {
-    if (!editor) {
+    if (!editor || disabled) {
       return;
     }
 
@@ -897,7 +912,7 @@ const SummaryEditorComponent = forwardRef<
       <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
         <SummaryToolbarButton
           active={toolbarState.heading}
-          disabled={!editor}
+          disabled={!editor || disabled}
           label="Heading"
           onClick={() => runCommand("heading")}
         >
@@ -905,7 +920,7 @@ const SummaryEditorComponent = forwardRef<
         </SummaryToolbarButton>
         <SummaryToolbarButton
           active={toolbarState.bold}
-          disabled={!editor}
+          disabled={!editor || disabled}
           label="Bold"
           onClick={() => runCommand("bold")}
         >
@@ -913,7 +928,7 @@ const SummaryEditorComponent = forwardRef<
         </SummaryToolbarButton>
         <SummaryToolbarButton
           active={toolbarState.italic}
-          disabled={!editor}
+          disabled={!editor || disabled}
           label="Italic"
           onClick={() => runCommand("italic")}
         >
@@ -921,7 +936,7 @@ const SummaryEditorComponent = forwardRef<
         </SummaryToolbarButton>
         <SummaryToolbarButton
           active={toolbarState.bullet}
-          disabled={!editor}
+          disabled={!editor || disabled}
           label="Bulleted list"
           onClick={() => runCommand("bulletList")}
         >
@@ -929,7 +944,7 @@ const SummaryEditorComponent = forwardRef<
         </SummaryToolbarButton>
         <SummaryToolbarButton
           active={toolbarState.numbered}
-          disabled={!editor}
+          disabled={!editor || disabled}
           label="Numbered list"
           onClick={() => runCommand("orderedList")}
         >
@@ -937,13 +952,30 @@ const SummaryEditorComponent = forwardRef<
         </SummaryToolbarButton>
       </div>
       {editor ? (
-        <div className="summary-tiptap-drop-zone">
+        <div className="summary-tiptap-drop-zone relative">
           <EditorContent
             editor={editor}
-            className="summary-tiptap-editor"
+            className={cn(
+              "summary-tiptap-editor",
+              disabled && "pointer-events-none",
+            )}
             role="textbox"
             aria-label="Summary"
+            aria-disabled={disabled}
+            aria-busy={disabled}
           />
+          {disabled ? (
+            <div
+              className="absolute inset-0 z-10 flex items-center justify-center rounded-[7px] bg-white dark:bg-[#0f1b2a]"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="flex items-center gap-2 text-sm font-semibold text-[#111827] dark:text-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-[#2563eb] dark:text-blue-300" />
+                {loadingLabel}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : (
         <SummaryEditorSkeleton />

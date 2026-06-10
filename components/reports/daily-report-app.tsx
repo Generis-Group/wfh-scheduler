@@ -9,7 +9,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { DragEvent, MouseEvent } from "react";
+import type { DragEvent, MouseEvent as ReactMouseEvent } from "react";
+import type { SVGProps } from "react";
 import { flushSync } from "react-dom";
 import {
   CheckCircle2,
@@ -20,6 +21,7 @@ import {
   ExternalLink,
   Loader2,
   MoreHorizontal,
+  Plus,
   Save,
   Send,
   Trash2,
@@ -90,6 +92,7 @@ type Activity = {
   durationMinutes?: number | null;
   selected: boolean;
   employeeNote?: string | null;
+  isNew?: boolean;
 };
 
 type Report = {
@@ -134,7 +137,7 @@ const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
 
 const interactiveActivityControlSelector =
   "a, button, input, textarea, select, [role='button'], [role='textbox'], [contenteditable='true']";
-type BusyAction = "save" | "submit" | "delete";
+type BusyAction = "save" | "submit" | "delete" | "summarize";
 type SyncProviderKey = keyof typeof syncProviderLabels;
 const syncProviderSources: Record<SyncProviderKey, ActivitySource> = {
   jira: "JIRA",
@@ -153,8 +156,10 @@ type ReportPayload = {
   }>;
   deletedActivityIds: string[];
   manualActivities: Array<{
+    id?: string;
     title: string;
     employeeNote: string | null;
+    selected: boolean;
     status?: string | null;
     durationMinutes?: number | null;
   }>;
@@ -185,7 +190,20 @@ type SyncResponseBody = {
   skippedCount: number;
   staleCount?: number;
   activities?: Activity[];
+  report?: Pick<
+    Report,
+    | "id"
+    | "reportDate"
+    | "workLocation"
+    | "summary"
+    | "status"
+    | "submittedAt"
+    | "updatedAt"
+  >;
 };
+type SyncOutcome =
+  | { ok: true; provider: SyncProviderKey; result: SyncResponseBody }
+  | { ok: false; provider: SyncProviderKey; message: string };
 
 function isInteractiveActivityControl(target: EventTarget | null) {
   return target instanceof Element
@@ -291,6 +309,13 @@ function statusTone(
 
 function activityStatusLabel(activity: Activity) {
   if (
+    activity.source === "MANUAL" &&
+    activity.status?.toLowerCase() === "noted"
+  ) {
+    return "Noted";
+  }
+
+  if (
     activity.source === "GOOGLE_TASKS" &&
     activity.status?.toLowerCase() === "completed"
   ) {
@@ -307,12 +332,46 @@ function setTransparentDragImage(dataTransfer: DataTransfer) {
   dataTransfer.setDragImage(canvas, 0, 0);
 }
 
+function manualActivityId() {
+  const randomId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  return `manual-${randomId}`;
+}
+
+function GeminiLogo(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <defs>
+        <linearGradient
+          id="gemini-summary-gradient"
+          x1="3"
+          x2="21"
+          y1="21"
+          y2="3"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0" stopColor="#7c3aed" />
+          <stop offset="0.48" stopColor="#2563eb" />
+          <stop offset="1" stopColor="#06b6d4" />
+        </linearGradient>
+      </defs>
+      <path
+        fill="url(#gemini-summary-gradient)"
+        d="M12 2.5c1.12 4.84 4.66 8.38 9.5 9.5-4.84 1.12-8.38 4.66-9.5 9.5-1.12-4.84-4.66-8.38-9.5-9.5 4.84-1.12 8.38-4.66 9.5-9.5Z"
+      />
+    </svg>
+  );
+}
+
 function editorSummaryForReport(report: Report) {
   return report.summary;
 }
 
 function isNewManualActivity(activity: Activity) {
-  return activity.id.startsWith("manual-new-");
+  return activity.source === "MANUAL" && Boolean(activity.isNew);
 }
 
 function buildReportPayload(
@@ -336,12 +395,67 @@ function buildReportPayload(
     manualActivities: activities
       .filter(isNewManualActivity)
       .map((activity) => ({
+        id: activity.id,
         title: activity.title,
         employeeNote: activity.employeeNote ?? null,
+        selected: activity.selected,
         status: activity.status,
         durationMinutes: activity.durationMinutes ?? null,
       })),
   };
+}
+
+function importResultMessage(providerLabel: string, result: SyncResponseBody) {
+  const staleCount = result.staleCount ?? 0;
+  const staleText = staleCount
+    ? `, ${staleCount} stale item${staleCount === 1 ? "" : "s"} hidden`
+    : "";
+
+  if (result.importedCount > 0) {
+    return `${providerLabel} import complete: ${result.importedCount} work item${result.importedCount === 1 ? "" : "s"} found${staleText}.`;
+  }
+
+  if (staleCount > 0) {
+    return `${providerLabel} import complete: ${staleCount} stale item${staleCount === 1 ? "" : "s"} hidden.`;
+  }
+
+  return `No ${providerLabel.toLowerCase()} work items found for this date.`;
+}
+
+function importAllResultMessage(outcomes: SyncOutcome[]) {
+  let importedCount = 0;
+  let staleCount = 0;
+  const failed: Array<Extract<SyncOutcome, { ok: false }>> = [];
+
+  for (const outcome of outcomes) {
+    if (outcome.ok) {
+      importedCount += outcome.result.importedCount;
+      staleCount += outcome.result.staleCount ?? 0;
+      continue;
+    }
+
+    failed.push(outcome);
+  }
+  const staleText = staleCount
+    ? `, ${staleCount} stale item${staleCount === 1 ? "" : "s"} hidden`
+    : "";
+  const failureText = failed.length
+    ? ` ${failed.map((outcome) => syncProviderLabels[outcome.provider]).join(", ")} import${failed.length === 1 ? "" : "s"} failed.`
+    : "";
+
+  if (importedCount > 0) {
+    return `Import complete: ${importedCount} work item${importedCount === 1 ? "" : "s"} found${staleText}.${failureText}`;
+  }
+
+  if (staleCount > 0) {
+    return `Import complete: ${staleCount} stale item${staleCount === 1 ? "" : "s"} hidden.${failureText}`;
+  }
+
+  if (failed.length > 0) {
+    return failed.map((outcome) => outcome.message).join(" ");
+  }
+
+  return "No work items found for this date.";
 }
 
 function draftPayloadSignature(reportDate: string, payload: ReportPayload) {
@@ -425,6 +539,7 @@ export function DailyReportApp({
   const activityMenuRef = useRef<HTMLDivElement | null>(null);
   const activityMenuOpenedAtRef = useRef(0);
   const reportRef = useRef(initialReport);
+  const activitiesRef = useRef(initialReport.activities);
   const latestDraftRef = useRef<AutoDraftSnapshot | null>(null);
   const lastSavedSignatureRef = useRef(
     draftPayloadSignature(reportDate, initialPayload),
@@ -462,6 +577,7 @@ export function DailyReportApp({
     );
 
     reportRef.current = initialReport;
+    activitiesRef.current = initialReport.activities;
     lastSavedSignatureRef.current = draftPayloadSignature(
       reportDate,
       nextPayload,
@@ -661,6 +777,34 @@ export function DailyReportApp({
     setRenamingActivity(null);
   }
 
+  function addManualActivity() {
+    if (isBusy) {
+      return;
+    }
+
+    const id = manualActivityId();
+    const activity: Activity = {
+      id,
+      source: "MANUAL",
+      title: "New work item",
+      description: null,
+      status: "noted",
+      sourceUrl: null,
+      startedAt: null,
+      durationMinutes: null,
+      selected: true,
+      employeeNote: null,
+      isNew: true,
+    };
+
+    setActivities((items) => [activity, ...items]);
+    setActivitySearch("");
+    setOpenActivityMenu(null);
+    setImportMenuOpen(false);
+    setRenamingActivity({ id, title: activity.title });
+    setMessage("Manual work item added.");
+  }
+
   function startRenamingActivity(activity: Activity) {
     setRenamingActivity({
       id: activity.id,
@@ -709,7 +853,7 @@ export function DailyReportApp({
 
   function toggleActivityMenu(
     activityId: string,
-    event: MouseEvent<HTMLButtonElement>,
+    event: ReactMouseEvent<HTMLButtonElement>,
   ) {
     if (openActivityMenu?.id === activityId) {
       setOpenActivityMenu(null);
@@ -780,6 +924,82 @@ export function DailyReportApp({
     [draftSnapshotFor, summary],
   );
 
+  useEffect(() => {
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      const snapshot = captureCurrentDraftSnapshot({ syncState: false });
+
+      if (!canSaveDraftSnapshot(snapshot)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", warnBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+    };
+  }, [canSaveDraftSnapshot, captureCurrentDraftSnapshot]);
+
+  useEffect(() => {
+    function warnBeforePageNavigation(event: globalThis.MouseEvent) {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+
+      if (
+        !anchor ||
+        anchor.hasAttribute("download") ||
+        (anchor.target && anchor.target !== "_self")
+      ) {
+        return;
+      }
+
+      const nextUrl = new URL(anchor.href, window.location.href);
+      const currentUrl = new URL(window.location.href);
+      const sameRoute =
+        nextUrl.origin === currentUrl.origin &&
+        nextUrl.pathname === currentUrl.pathname &&
+        nextUrl.search === currentUrl.search;
+
+      if (sameRoute) {
+        return;
+      }
+
+      const snapshot = captureCurrentDraftSnapshot({ syncState: false });
+
+      if (!canSaveDraftSnapshot(snapshot)) {
+        return;
+      }
+
+      if (!window.confirm("Discard unsaved changes and leave this update?")) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }
+
+    document.addEventListener("click", warnBeforePageNavigation, true);
+
+    return () => {
+      document.removeEventListener("click", warnBeforePageNavigation, true);
+    };
+  }, [canSaveDraftSnapshot, captureCurrentDraftSnapshot]);
+
   function applySavedReport(
     nextReport: Report,
     replaceLocalState: boolean,
@@ -787,6 +1007,14 @@ export function DailyReportApp({
   ) {
     if (!replaceLocalState) {
       const current = reportRef.current;
+      const savedActivityIds = new Set(
+        nextReport.activities.map((activity) => activity.id),
+      );
+      const nextActivities = activitiesRef.current.map((activity) =>
+        savedActivityIds.has(activity.id)
+          ? { ...activity, isNew: false }
+          : activity,
+      );
       const nextCurrent = {
         ...current,
         id: nextReport.id,
@@ -794,11 +1022,14 @@ export function DailyReportApp({
         status: nextReport.status,
         submittedAt: nextReport.submittedAt,
         updatedAt: nextReport.updatedAt,
+        activities: nextActivities,
         revisions: nextReport.revisions ?? current.revisions,
       };
 
       reportRef.current = nextCurrent;
+      activitiesRef.current = nextActivities;
       setReport(nextCurrent);
+      setActivities(nextActivities);
       lastSavedSignatureRef.current = savedSignature;
 
       if (latestDraftRef.current) {
@@ -822,6 +1053,7 @@ export function DailyReportApp({
     const nextSignature = draftPayloadSignature(nextReportDate, nextPayload);
 
     reportRef.current = nextReport;
+    activitiesRef.current = nextReport.activities;
     lastSavedSignatureRef.current = nextSignature;
     latestDraftRef.current = {
       reportId: nextReport.id,
@@ -837,6 +1069,41 @@ export function DailyReportApp({
     setDeletedActivityIds([]);
     setWorkLocation(nextReport.workLocation);
     setSummaryEditorSnapshot({ summary: nextSummary });
+  }
+
+  function applySyncedDraftReport(
+    syncedReport: NonNullable<SyncResponseBody["report"]>,
+    nextActivities: Activity[],
+  ) {
+    const current = reportRef.current;
+    const nextReport = {
+      ...current,
+      id: syncedReport.id,
+      reportDate: syncedReport.reportDate,
+      workLocation: syncedReport.workLocation,
+      summary: syncedReport.summary,
+      status: syncedReport.status,
+      submittedAt: syncedReport.submittedAt,
+      updatedAt: syncedReport.updatedAt,
+      activities: nextActivities,
+    };
+    const syncedReportDate = dateInputValue(syncedReport.reportDate);
+    const savedActivities = nextActivities.filter(
+      (activity) => !isNewManualActivity(activity),
+    );
+    const savedPayload = buildReportPayload(
+      syncedReport.summary,
+      syncedReport.workLocation,
+      savedActivities,
+      [],
+    );
+
+    reportRef.current = nextReport;
+    lastSavedSignatureRef.current = draftPayloadSignature(
+      syncedReportDate,
+      savedPayload,
+    );
+    setReport(nextReport);
   }
 
   const draftSaveRequest = useCallback(
@@ -1077,6 +1344,7 @@ export function DailyReportApp({
       setDeletedActivityIds([]);
       setSummaryEditorSnapshot({ summary: "" });
       markServerDataStale();
+      refreshStaleServerData(router);
       setMessage("Draft deleted.");
       finishTiming({ status: "success" });
     } catch {
@@ -1089,9 +1357,12 @@ export function DailyReportApp({
     }
   }
 
-  async function sync(provider: SyncProviderKey) {
+  async function sync(
+    provider: SyncProviderKey,
+    { showResultMessage = true }: { showResultMessage?: boolean } = {},
+  ): Promise<SyncOutcome | null> {
     if (busyAction || importingProvider) {
-      return;
+      return null;
     }
 
     const providerLabel = syncProviderLabels[provider];
@@ -1117,14 +1388,13 @@ export function DailyReportApp({
       });
 
       if (!response.ok) {
-        setMessage(
-          await responseErrorMessage(
-            response,
-            `${providerLabel} import failed.`,
-          ),
+        const message = await responseErrorMessage(
+          response,
+          `${providerLabel} import failed.`,
         );
+        setMessage(message);
         finishTiming({ status: "request-failed" });
-        return;
+        return { ok: false, provider, message };
       }
 
       let result: SyncResponseBody | null = null;
@@ -1168,31 +1438,37 @@ export function DailyReportApp({
         throw new Error(`${providerLabel} import did not return results.`);
       }
 
-      setActivities((current) =>
-        mergeSyncedActivities(
-          current,
-          syncProviderSources[provider],
-          syncResult.activities ?? [],
-        ),
+      const nextActivities = mergeSyncedActivities(
+        activitiesRef.current,
+        syncProviderSources[provider],
+        syncResult.activities ?? [],
       );
+
+      activitiesRef.current = nextActivities;
+      setActivities(nextActivities);
+
+      if (syncResult.report) {
+        applySyncedDraftReport(syncResult.report, nextActivities);
+      }
+
       markServerDataStale();
 
-      setMessage(
-        syncResult.importedCount > 0
-          ? `${providerLabel} import complete: ${syncResult.importedCount} work item${syncResult.importedCount === 1 ? "" : "s"} found${syncResult.staleCount ? `, ${syncResult.staleCount} stale item${syncResult.staleCount === 1 ? "" : "s"} hidden` : ""}.`
-          : `No ${providerLabel.toLowerCase()} work items found for this date.`,
-      );
+      if (showResultMessage) {
+        setMessage(importResultMessage(providerLabel, syncResult));
+      }
       finishTiming({
         status: "success",
         importedCount: syncResult.importedCount,
       });
+      return { ok: true, provider, result: syncResult };
     } catch (error) {
       finishTiming({ status: "error" });
-      setMessage(
+      const message =
         error instanceof Error && error.message
           ? error.message
-          : `${providerLabel} import failed. Check your connection and try again.`,
-      );
+          : `${providerLabel} import failed. Check your connection and try again.`;
+      setMessage(message);
+      return { ok: false, provider, message };
     } finally {
       setImportingProvider(null);
       setImportProgress(null);
@@ -1211,8 +1487,94 @@ export function DailyReportApp({
         : []),
     ];
 
+    const outcomes: SyncOutcome[] = [];
+
     for (const provider of providers) {
-      await sync(provider);
+      const outcome = await sync(provider, { showResultMessage: false });
+
+      if (outcome) {
+        outcomes.push(outcome);
+      }
+    }
+
+    if (outcomes.length > 0) {
+      setMessage(importAllResultMessage(outcomes));
+    }
+  }
+
+  async function summarizeWithAi() {
+    if (busyAction || importingProvider || workItemCount === 0) {
+      return;
+    }
+
+    const snapshot = captureCurrentDraftSnapshot();
+
+    if (
+      snapshot.payload.summary.trim() &&
+      !window.confirm("Replace the current summary with an AI-generated summary?")
+    ) {
+      return;
+    }
+
+    const finishTiming = startClientTiming("daily:ai-summary", {
+      hasReport: Boolean(snapshot.reportId || reportRef.current.id),
+      workItemCount,
+    });
+
+    flushSync(() => {
+      setBusyAction("summarize");
+      setMessage(null);
+    });
+
+    try {
+      const saved = await saveDraftSnapshot(snapshot, {
+        forceCreate: !reportRef.current.id,
+        timingName: "daily:ai-summary-save",
+      });
+
+      if (!saved?.id) {
+        setMessage("Save failed. Try again before summarizing with AI.");
+        finishTiming({ status: "save-failed" });
+        return;
+      }
+
+      const response = await fetch(`/api/reports/${saved.id}/summary/ai`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        setMessage(
+          await responseErrorMessage(
+            response,
+            "Unable to summarize with AI. Try again.",
+          ),
+        );
+        finishTiming({ status: "summarize-failed" });
+        return;
+      }
+
+      const body = (await response.json().catch(() => null)) as {
+        summary?: unknown;
+      } | null;
+      const nextSummary =
+        typeof body?.summary === "string" ? body.summary.trim() : "";
+
+      if (!nextSummary) {
+        setMessage("Unable to summarize with AI. Try again.");
+        finishTiming({ status: "empty-summary" });
+        return;
+      }
+
+      const nextSnapshot = { summary: nextSummary };
+      setSummaryEditorSnapshot(nextSnapshot);
+      handleSummaryChange(nextSnapshot);
+      setMessage("AI summary added. Review and save when ready.");
+      finishTiming({ status: "success" });
+    } catch {
+      finishTiming({ status: "error" });
+      setMessage("Unable to summarize with AI. Try again.");
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -1315,6 +1677,7 @@ export function DailyReportApp({
   const isSavingDraft = busyAction === "save";
   const isSubmitting = busyAction === "submit";
   const isDeleting = busyAction === "delete";
+  const isSummarizing = busyAction === "summarize";
   const isImporting = importingProvider !== null;
   const isPublishedReport = report.status === "SUBMITTED";
   const submitButtonText = isPublishedReport
@@ -1329,11 +1692,12 @@ export function DailyReportApp({
     isImporting ||
     dateNavigationPending;
   const maxReportDate = todayDateString();
-  const visibleActivities = useMemo(
+  const selectedActivities = useMemo(
     () => activities.filter((activity) => activity.selected),
     [activities],
   );
-  const workItemCount = visibleActivities.length;
+  const workItemCount = selectedActivities.length;
+  const canSummarizeWithAi = workItemCount > 0;
   const currentPayload = buildReportPayload(
     summary,
     workLocation,
@@ -1352,19 +1716,20 @@ export function DailyReportApp({
     hasMeaningfulContent: hasMeaningfulDraftPayload(currentPayload),
   };
   reportRef.current = report;
+  activitiesRef.current = activities;
   latestDraftRef.current = currentDraftSnapshot;
   const canSaveDraft = canSaveDraftSnapshot(currentDraftSnapshot);
   const normalizedActivitySearch = activitySearch.trim().toLowerCase();
   const filteredActivities = normalizedActivitySearch
-    ? visibleActivities.filter((activity) =>
+    ? activities.filter((activity) =>
         activitySearchText(activity).includes(normalizedActivitySearch),
       )
-    : visibleActivities;
+    : activities;
   const selectedWorkLocationLabel = workLocationLabel(workLocation);
   const activityReferences = useMemo(
     () =>
       Object.fromEntries(
-        visibleActivities.map((activity) => [
+        selectedActivities.map((activity) => [
           activity.id,
           {
             href: activity.sourceUrl,
@@ -1373,7 +1738,7 @@ export function DailyReportApp({
           },
         ]),
       ),
-    [visibleActivities],
+    [selectedActivities],
   );
 
   async function goToReportDate(
@@ -1568,106 +1933,111 @@ export function DailyReportApp({
                   <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
                     Work items
                   </h2>
-                  <ReferenceBadge
-                    tone="neutral"
-                    className="px-2.5 py-1 text-xs"
-                  >
-                    {workItemCount} item{workItemCount === 1 ? "" : "s"}
-                  </ReferenceBadge>
                 </div>
               </div>
-              <div ref={importMenuRef} className="relative">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="outline"
                   className="h-9 rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55]"
                   disabled={isBusy}
-                  onClick={() => {
-                    setOpenActivityMenu(null);
-                    setImportMenuOpen((open) => !open);
-                  }}
+                  onClick={addManualActivity}
                 >
-                  {isImporting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  <span className="max-w-[190px] truncate">
-                    {importProgress
-                      ? importProgress.message
-                      : importingProvider
-                        ? `Importing ${syncProviderLabels[importingProvider]}...`
-                        : "Import"}
-                  </span>
-                  <ChevronDown
-                    className={cn("ml-2 h-4 w-4", isImporting && "opacity-0")}
-                    aria-hidden="true"
-                  />
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add item
                 </Button>
-                {importMenuOpen ? (
-                  <div className="absolute right-0 top-12 z-30 w-64 rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
-                    <button
-                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-semibold text-[#111827] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
-                      disabled={!canSyncAnyIntegration}
-                      title={
-                        canSyncAnyIntegration
-                          ? undefined
-                          : "Connect Jira or Google before importing."
-                      }
-                      onClick={() => {
-                        setImportMenuOpen(false);
-                        syncAll();
-                      }}
-                    >
-                      Import all
-                    </button>
-                    <div className="my-1 h-px bg-[#e1e6ef] dark:bg-[#263a55]" />
-                    <button
-                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
-                      disabled={!canSyncJira}
-                      title={
-                        canSyncJira
-                          ? undefined
-                          : "Connect Jira before importing."
-                      }
-                      onClick={() => {
-                        setImportMenuOpen(false);
-                        sync("jira");
-                      }}
-                    >
-                      Import Jira
-                    </button>
-                    <button
-                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
-                      disabled={!canSyncGoogle}
-                      title={
-                        canSyncGoogle
-                          ? undefined
-                          : "Connect Google before importing."
-                      }
-                      onClick={() => {
-                        setImportMenuOpen(false);
-                        sync("google-calendar");
-                      }}
-                    >
-                      Import Google Calendar
-                    </button>
-                    <button
-                      className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
-                      disabled={!canSyncGoogle}
-                      title={
-                        canSyncGoogle
-                          ? undefined
-                          : "Connect Google before importing."
-                      }
-                      onClick={() => {
-                        setImportMenuOpen(false);
-                        sync("google-tasks");
-                      }}
-                    >
-                      Import Google Tasks
-                    </button>
-                  </div>
-                ) : null}
+                <div ref={importMenuRef} className="relative">
+                  <Button
+                    variant="outline"
+                    className="h-9 rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55]"
+                    disabled={isBusy}
+                    onClick={() => {
+                      setOpenActivityMenu(null);
+                      setImportMenuOpen((open) => !open);
+                    }}
+                  >
+                    {isImporting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    <span className="max-w-[190px] truncate">
+                      {importProgress
+                        ? importProgress.message
+                        : importingProvider
+                          ? `Importing ${syncProviderLabels[importingProvider]}...`
+                          : "Import"}
+                    </span>
+                    <ChevronDown
+                      className={cn("ml-2 h-4 w-4", isImporting && "opacity-0")}
+                      aria-hidden="true"
+                    />
+                  </Button>
+                  {importMenuOpen ? (
+                    <div className="absolute right-0 top-12 z-30 w-64 rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+                      <button
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-semibold text-[#111827] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                        disabled={!canSyncAnyIntegration}
+                        title={
+                          canSyncAnyIntegration
+                            ? undefined
+                            : "Connect Jira or Google before importing."
+                        }
+                        onClick={() => {
+                          setImportMenuOpen(false);
+                          syncAll();
+                        }}
+                      >
+                        Import all
+                      </button>
+                      <div className="my-1 h-px bg-[#e1e6ef] dark:bg-[#263a55]" />
+                      <button
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                        disabled={!canSyncJira}
+                        title={
+                          canSyncJira
+                            ? undefined
+                            : "Connect Jira before importing."
+                        }
+                        onClick={() => {
+                          setImportMenuOpen(false);
+                          sync("jira");
+                        }}
+                      >
+                        Import Jira
+                      </button>
+                      <button
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                        disabled={!canSyncGoogle}
+                        title={
+                          canSyncGoogle
+                            ? undefined
+                            : "Connect Google before importing."
+                        }
+                        onClick={() => {
+                          setImportMenuOpen(false);
+                          sync("google-calendar");
+                        }}
+                      >
+                        Import Google Calendar
+                      </button>
+                      <button
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                        disabled={!canSyncGoogle}
+                        title={
+                          canSyncGoogle
+                            ? undefined
+                            : "Connect Google before importing."
+                        }
+                        onClick={() => {
+                          setImportMenuOpen(false);
+                          sync("google-tasks");
+                        }}
+                      >
+                        Import Google Tasks
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
 
@@ -1680,9 +2050,10 @@ export function DailyReportApp({
             />
 
             <div className="daily-work-items-list mt-3 min-h-[320px] space-y-2 overflow-y-auto overscroll-contain p-1 [scrollbar-gutter:stable] min-[1200px]:min-h-0 min-[1200px]:flex-1">
-              {workItemCount === 0 ? (
+              {activities.length === 0 ? (
                 <EmptyReferenceState>
-                  No activities yet. Import work from Jira, Calendar, or Tasks.
+                  No activities yet. Add a work item or import from Jira,
+                  Calendar, or Tasks.
                 </EmptyReferenceState>
               ) : filteredActivities.length === 0 ? (
                 <EmptyReferenceState>
@@ -1708,14 +2079,15 @@ export function DailyReportApp({
                           className="mt-1 min-[720px]:mt-0"
                           checked={activity.selected}
                           onChange={(event) => {
-                            if (event.target.checked) {
-                              setActivity(activity.id, { selected: true });
-                              return;
+                            const selected = event.target.checked;
+
+                            if (!selected) {
+                              removeSummaryReferencesForActivity(activity.id);
                             }
 
-                            removeActivity(activity);
+                            setActivity(activity.id, { selected });
                           }}
-                          aria-label={`Remove ${activity.title}`}
+                          aria-label={`Include ${activity.title}`}
                         />
                         <div
                           draggable
@@ -1854,16 +2226,32 @@ export function DailyReportApp({
             as="aside"
             className="daily-report-panel daily-summary-panel flex min-h-[520px] flex-col min-[1200px]:min-h-0"
           >
-            <div>
+            <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
                 Summary
               </h2>
+              <button
+                type="button"
+                className="reference-menu-button h-9 w-9 shrink-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                title="Summarize with AI"
+                aria-label="Summarize with AI"
+                disabled={isBusy || !canSummarizeWithAi}
+                onClick={summarizeWithAi}
+              >
+                {isSummarizing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <GeminiLogo className="h-[18px] w-[18px]" />
+                )}
+              </button>
             </div>
             <LazySummaryEditor
               ref={setSummaryEditorHandle}
               initialSummary={summaryEditorSeed}
               resetKey={`${date}:${initialReport.id}:${initialReport.updatedAt ?? ""}`}
               activityReferences={activityReferences}
+              disabled={isSummarizing}
+              loadingLabel="Summarizing with AI..."
               onChange={handleSummaryChange}
               onActivityReferenceDrop={includeDroppedActivityReference}
             />
@@ -1880,13 +2268,13 @@ export function DailyReportApp({
           />
           <div
             ref={activityMenuRef}
-            className="fixed z-50 w-60 rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] dark:bg-[#0f1b2a]"
+            className="fixed z-50 w-60 rounded-[12px] bg-white p-2 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
             style={{ top: openActivityMenu.top, left: openActivityMenu.left }}
             role="menu"
           >
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
               onClick={() => openActivitySource(menuActivity)}
             >
               <ExternalLink className="h-4 w-4" />
@@ -1894,7 +2282,7 @@ export function DailyReportApp({
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
               onClick={() => startRenamingActivity(menuActivity)}
             >
               <Edit3 className="h-4 w-4" />
@@ -1902,7 +2290,7 @@ export function DailyReportApp({
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
               onClick={() => copyActivityTitle(menuActivity)}
             >
               <Copy className="h-4 w-4" />
@@ -1910,7 +2298,7 @@ export function DailyReportApp({
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left text-[#dc2626] hover:bg-[#fef2f2] dark:hover:bg-red-400/10"
+              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#dc2626] hover:bg-[#fef2f2] dark:hover:bg-red-400/10"
               onClick={() => removeActivity(menuActivity)}
             >
               <Trash2 className="h-4 w-4" />

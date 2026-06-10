@@ -70,10 +70,14 @@ vi.mock("@/components/reports/summary-editor", async () => {
       {
         initialSummary,
         resetKey,
+        disabled,
+        loadingLabel,
         onChange,
       }: {
         initialSummary: string;
         resetKey: string;
+        disabled?: boolean;
+        loadingLabel?: string;
         onChange: (snapshot: Snapshot) => void;
       },
       ref,
@@ -104,16 +108,32 @@ vi.mock("@/components/reports/summary-editor", async () => {
         },
       }));
 
-      return ReactModule.createElement("textarea", {
-        "aria-label": "Summary",
-        value: snapshot.summary,
-        onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-          const next = { ...snapshotRef.current, summary: event.target.value };
-          snapshotRef.current = next;
-          setSnapshot(next);
-          onChangeRef.current(next);
-        },
-      });
+      return ReactModule.createElement(
+        ReactModule.Fragment,
+        null,
+        ReactModule.createElement("textarea", {
+          "aria-label": "Summary",
+          "aria-busy": disabled,
+          disabled,
+          value: snapshot.summary,
+          onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+            const next = {
+              ...snapshotRef.current,
+              summary: event.target.value,
+            };
+            snapshotRef.current = next;
+            setSnapshot(next);
+            onChangeRef.current(next);
+          },
+        }),
+        disabled
+          ? ReactModule.createElement(
+              "div",
+              { role: "status" },
+              loadingLabel ?? "Loading...",
+            )
+          : null,
+      );
     }),
   };
 });
@@ -303,7 +323,7 @@ describe("DailyReportApp drafts", () => {
     expect(screen.queryByText("Draft saved.")).toBeNull();
   });
 
-  it("imports tasks without autosaving the draft", async () => {
+  it("imports tasks as part of a draft without an extra save request", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
 
@@ -313,6 +333,10 @@ describe("DailyReportApp drafts", () => {
           skippedCount: 0,
           staleCount: 0,
           activities: [importedTask],
+          report: {
+            ...savedDraft,
+            activities: [importedTask],
+          },
         });
       }
 
@@ -335,7 +359,8 @@ describe("DailyReportApp drafts", () => {
     expect(
       (screen.getByRole("button", { name: "Save draft" }) as HTMLButtonElement)
         .disabled,
-    ).toBe(false);
+    ).toBe(true);
+    expect(screen.getByRole("button", { name: "Delete draft" })).toBeTruthy();
     expect(
       fetchMock.mock.calls.some(([input]) =>
         String(input).includes("/api/activity"),
@@ -343,12 +368,68 @@ describe("DailyReportApp drafts", () => {
     ).toBe(false);
   });
 
+  it("resets imported work items when the draft is deleted", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.includes("/api/sync/google-tasks")) {
+        return Response.json({
+          importedCount: 1,
+          skippedCount: 0,
+          staleCount: 0,
+          activities: [importedTask],
+          report: {
+            ...savedDraft,
+            activities: [importedTask],
+          },
+        });
+      }
+
+      if (url === "/api/reports/report-1" && init?.method === "DELETE") {
+        return Response.json({ ok: true });
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import Google Tasks" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Imported task")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete draft" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Imported task")).toBeNull();
+    });
+    expect(
+      screen.getByText("No activities yet. Add a work item or import from Jira, Calendar, or Tasks."),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Delete draft" })).toBeNull();
+  });
+
   it("imports all connected providers from the import menu", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
 
+      if (url.includes("/api/sync/jira")) {
+        return Response.json({
+          importedCount: 1,
+          skippedCount: 0,
+          staleCount: 0,
+          activities: [linkedJiraTask],
+        });
+      }
+
       if (
-        url.includes("/api/sync/jira") ||
         url.includes("/api/sync/google-calendar") ||
         url.includes("/api/sync/google-tasks")
       ) {
@@ -389,6 +470,182 @@ describe("DailyReportApp drafts", () => {
         expect.objectContaining({ method: "POST" }),
       );
     });
+    expect(screen.getByText("Import complete: 1 work item found.")).toBeTruthy();
+    expect(screen.getByText(linkedJiraTask.title)).toBeTruthy();
+    expect(
+      screen.queryByText("No calendar work items found for this date."),
+    ).toBeNull();
+    expect(
+      screen.queryByText("No tasks work items found for this date."),
+    ).toBeNull();
+  });
+
+  it("shows one no-results message when import all finds nothing", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (
+        url.includes("/api/sync/jira") ||
+        url.includes("/api/sync/google-calendar") ||
+        url.includes("/api/sync/google-tasks")
+      ) {
+        return Response.json({
+          importedCount: 0,
+          skippedCount: 0,
+          staleCount: 0,
+          activities: [],
+        });
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <DailyReportApp
+        initialReport={emptyReport}
+        date="2026-05-20"
+        integrationStatus={{ google: true, atlassian: true }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import all" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("No work items found for this date.")).toBeTruthy();
+    });
+    expect(
+      screen.queryByText("No jira work items found for this date."),
+    ).toBeNull();
+    expect(
+      screen.queryByText("No calendar work items found for this date."),
+    ).toBeNull();
+    expect(
+      screen.queryByText("No tasks work items found for this date."),
+    ).toBeNull();
+  });
+
+  it("summarizes selected work items with AI into the summary editor", async () => {
+    const aiSummary =
+      "## Production Updates\n- Advanced the rollout plan [Draft rollout plan](https://generis.local/activity/task-manual?source=GOOGLE_TASKS).";
+    const aiRequest = deferred<Response>();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/reports/report-1/summary/ai") {
+        return aiRequest.promise;
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp({
+      ...savedDraft,
+      activities: [manualGoogleTask],
+    });
+
+    const summarizeButton = screen.getByRole("button", {
+      name: "Summarize with AI",
+    });
+
+    expect(summarizeButton.getAttribute("title")).toBe("Summarize with AI");
+    fireEvent.click(summarizeButton);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports/report-1/summary/ai",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    expect(
+      (screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByRole("status").textContent).toBe(
+      "Summarizing with AI...",
+    );
+
+    aiRequest.resolve(Response.json({ summary: aiSummary }));
+
+    await waitFor(() => {
+      expect(
+        (screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement)
+          .value,
+      ).toBe(aiSummary);
+    });
+    expect(
+      screen.getByText("AI summary added. Review and save when ready."),
+    ).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes("/submit")),
+    ).toBe(false);
+  });
+
+  it("creates a draft before summarizing with AI when no report exists yet", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/reports") {
+        return Response.json(
+          {
+            report: {
+              ...savedDraft,
+              activities: [manualGoogleTask],
+            },
+          },
+          { status: 201 },
+        );
+      }
+
+      if (url === "/api/reports/report-1/summary/ai") {
+        return Response.json({ summary: "## Production Updates\n- Created." });
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp({
+      ...emptyReport,
+      activities: [manualGoogleTask],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Summarize with AI" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports/report-1/summary/ai",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("/api/reports");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
+      "/api/reports/report-1/summary/ai",
+    );
+  });
+
+  it("asks before replacing an existing summary with AI", () => {
+    const confirmMock = vi.fn(() => false);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("confirm", confirmMock);
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp({
+      ...savedDraft,
+      summary: "Existing summary",
+      activities: [manualGoogleTask],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Summarize with AI" }));
+
+    expect(confirmMock).toHaveBeenCalledWith(
+      "Replace the current summary with an AI-generated summary?",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("shows unavailable imports as disabled actions before integrations are connected", () => {
@@ -528,6 +785,58 @@ describe("DailyReportApp drafts", () => {
     const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
     const body = JSON.parse(String(requestInit.body));
     expect(body.summary).toBe(formattedSummary);
+  });
+
+  it("warns before unloading with unsaved draft progress", () => {
+    renderDailyReportApp();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
+      target: { value: "Needs saving" },
+    });
+
+    const event = new Event("beforeunload", { cancelable: true });
+
+    expect(window.dispatchEvent(event)).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("does not warn before unloading when the draft has not changed", () => {
+    renderDailyReportApp(savedDraft);
+
+    const event = new Event("beforeunload", { cancelable: true });
+
+    expect(window.dispatchEvent(event)).toBe(true);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("warns before following in-app links with unsaved draft progress", () => {
+    const confirmMock = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const link = document.createElement("a");
+    link.href = "/settings";
+    link.textContent = "Settings";
+    document.body.appendChild(link);
+
+    try {
+      renderDailyReportApp();
+
+      fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
+        target: { value: "Needs saving" },
+      });
+
+      const event = new MouseEvent("click", {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+      });
+
+      expect(link.dispatchEvent(event)).toBe(false);
+      expect(event.defaultPrevented).toBe(true);
+      expect(confirmMock).toHaveBeenCalledWith(
+        "Discard unsaved changes and leave this update?",
+      );
+    } finally {
+      link.remove();
+    }
   });
 
   it("keeps newer edits local when they happen during an in-flight save", async () => {
@@ -895,7 +1204,272 @@ describe("DailyReportApp drafts", () => {
     );
   });
 
-  it("removes work items and matching summary references from the report", async () => {
+  it("adds manual work items and saves them with stable summary reference ids", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === "/api/reports/report-1") {
+          const body = JSON.parse(String(init?.body)) as {
+            manualActivities?: Array<{
+              id: string;
+              title: string;
+              employeeNote: string | null;
+              selected: boolean;
+              status?: string | null;
+              durationMinutes?: number | null;
+            }>;
+          };
+          const manualActivity = body.manualActivities?.[0];
+
+          return Response.json({
+            report: {
+              ...savedDraft,
+              activities: manualActivity
+                ? [
+                    {
+                      id: manualActivity.id,
+                      source: "MANUAL",
+                      title: manualActivity.title,
+                      description: null,
+                      status: manualActivity.status ?? "noted",
+                      sourceUrl: null,
+                      startedAt: null,
+                      durationMinutes:
+                        manualActivity.durationMinutes ?? null,
+                      selected: manualActivity.selected,
+                      employeeNote: manualActivity.employeeNote,
+                    },
+                  ]
+                : [],
+            },
+          });
+        }
+
+        return Response.json({ error: "Unexpected request." }, { status: 500 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp(savedDraft);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add item" }));
+
+    const titleInput = screen.getByRole("textbox", {
+      name: "Task title",
+    }) as HTMLInputElement;
+    expect(titleInput.value).toBe("New work item");
+    fireEvent.change(titleInput, {
+      target: { value: "Document client follow-up" },
+    });
+    fireEvent.keyDown(titleInput, { key: "Enter" });
+
+    expect(screen.getByText("Document client follow-up")).toBeTruthy();
+    expect(screen.getByText("Manual")).toBeTruthy();
+    expect(screen.getByText("Noted")).toBeTruthy();
+
+    const dataTransfer = {
+      effectAllowed: "",
+      setData: vi.fn(),
+      setDragImage: vi.fn(),
+    };
+    const workItem = screen.getByTitle(
+      "Drag into the summary to reference this work item",
+    );
+
+    fireEvent.dragStart(workItem, {
+      clientX: 80,
+      clientY: 96,
+      dataTransfer,
+    });
+
+    const referencePayload = JSON.parse(
+      String(dataTransfer.setData.mock.calls[0]?.[1]),
+    ) as { activityId: string; source: string; title: string };
+    expect(referencePayload.activityId).toMatch(/^manual-/);
+    expect(referencePayload.source).toBe("MANUAL");
+    expect(referencePayload.title).toBe("Document client follow-up");
+    fireEvent.dragEnd(workItem);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports/report-1",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
+
+    const requestBody = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    );
+    expect(requestBody.activityUpdates).toEqual([]);
+    expect(requestBody.manualActivities).toEqual([
+      expect.objectContaining({
+        id: referencePayload.activityId,
+        title: "Document client follow-up",
+        employeeNote: null,
+        selected: true,
+        status: "noted",
+        durationMinutes: null,
+      }),
+    ]);
+  });
+
+  it("does not resend a saved manual work item as new after an in-flight save", async () => {
+    const firstSave = deferred<Response>();
+    let manualActivityId = "";
+    const manualActivityTitle = "Document client follow-up";
+    const manualActivity = () => ({
+      id: manualActivityId,
+      source: "MANUAL" as const,
+      title: manualActivityTitle,
+      description: null,
+      status: "noted",
+      sourceUrl: null,
+      startedAt: null,
+      durationMinutes: null,
+      selected: true,
+      employeeNote: null,
+    });
+    const fetchMock = vi.fn(
+      (input: RequestInfo | URL, init?: RequestInit) => {
+        if (
+          String(input) === "/api/reports/report-1" &&
+          init?.method === "PUT"
+        ) {
+          const body = JSON.parse(String(init.body)) as {
+            summary?: string;
+            manualActivities?: Array<{ id: string }>;
+          };
+          const manualActivityInput = body.manualActivities?.[0];
+
+          if (manualActivityInput) {
+            manualActivityId = manualActivityInput.id;
+            return firstSave.promise;
+          }
+
+          return Promise.resolve(
+            Response.json({
+              report: {
+                ...savedDraft,
+                summary: body.summary ?? "",
+                activities: [manualActivity()],
+              },
+            }),
+          );
+        }
+
+        return Promise.resolve(
+          Response.json({ error: "Unexpected request." }, { status: 500 }),
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp(savedDraft);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add item" }));
+    const titleInput = screen.getByRole("textbox", {
+      name: "Task title",
+    }) as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: manualActivityTitle } });
+    fireEvent.keyDown(titleInput, { key: "Enter" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
+      target: { value: "Edited while saving" },
+    });
+    firstSave.resolve(
+      Response.json({
+        report: {
+          ...savedDraft,
+          activities: [manualActivity()],
+        },
+      }),
+    );
+    await flushReact();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    const secondRequestBody = JSON.parse(
+      String((fetchMock.mock.calls[1]?.[1] as RequestInit).body),
+    );
+    expect(secondRequestBody.manualActivities).toEqual([]);
+    expect(secondRequestBody.activityUpdates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: manualActivityId,
+          title: manualActivityTitle,
+          selected: true,
+        }),
+      ]),
+    );
+  });
+
+  it("keeps unchecked work items visible and excludes them from the draft", async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({
+          report: {
+            ...savedDraft,
+            activities: [{ ...manualGoogleTask, selected: false }],
+          },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp({
+      ...savedDraft,
+      activities: [manualGoogleTask],
+    });
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Include Draft rollout plan",
+    }) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+
+    fireEvent.click(checkbox);
+
+    expect(screen.getByText("Draft rollout plan")).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: "Include Draft rollout plan",
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports/report-1",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
+
+    const requestBody = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    );
+    expect(requestBody.activityUpdates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "task-manual",
+          selected: false,
+        }),
+      ]),
+    );
+  });
+
+  it("excludes work items and removes matching summary references from the report", async () => {
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         Response.json({
@@ -922,7 +1496,14 @@ describe("DailyReportApp drafts", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
 
-    expect(screen.queryByText("Draft rollout plan")).toBeNull();
+    expect(screen.getByText("Draft rollout plan")).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: "Include Draft rollout plan",
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(false);
     expect(
       (screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement)
         .value,
@@ -1231,6 +1812,7 @@ describe("DailyReportApp drafts", () => {
     deleteRequest.resolve(Response.json({ ok: true }));
     await flushReact();
     expect(screen.getByText("Draft deleted.")).toBeTruthy();
+    expect(mockRouterRefresh).toHaveBeenCalled();
     expect(
       fetchMock.mock.calls.filter(
         ([input]) => String(input) === "/api/reports",
