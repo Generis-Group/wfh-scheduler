@@ -304,13 +304,17 @@ export function SettingsPanel({
     setIsSavingCompany(false);
   }
 
-  async function disconnect(provider: "google" | "atlassian") {
+  async function disconnect(
+    provider: "google" | "atlassian",
+    options: { reloadAfter?: boolean } = {},
+  ) {
     if (disconnectingProvider) {
-      return;
+      return false;
     }
 
     setDisconnectingProvider(provider);
-    let shouldResetDisconnecting = true;
+    const reloadAfter = options.reloadAfter ?? true;
+    let disconnected = false;
 
     try {
       const response = await fetch(`/api/settings/providers/${provider}`, {
@@ -318,22 +322,37 @@ export function SettingsPanel({
       });
 
       if (response.ok) {
-        shouldResetDisconnecting = false;
         markServerDataStale();
-        window.location.reload();
-        return;
+        disconnected = true;
+
+        if (reloadAfter) {
+          window.location.reload();
+        }
+
+        return true;
       }
 
       setMessage(`Unable to disconnect ${provider}.`);
+      return false;
     } catch {
       setMessage(
         `Unable to disconnect ${provider}. Check your connection and try again.`,
       );
+      return false;
     } finally {
-      if (shouldResetDisconnecting) {
+      if (!reloadAfter || !disconnected) {
         setDisconnectingProvider(null);
       }
     }
+  }
+
+  async function reconnect(provider: "google" | "atlassian") {
+    const wasDisconnected = await disconnect(provider, { reloadAfter: false });
+    if (!wasDisconnected) {
+      return;
+    }
+
+    connect(provider);
   }
 
   function connect(provider: "google" | "atlassian") {
@@ -425,7 +444,11 @@ export function SettingsPanel({
               }
               isDisconnecting={disconnectingProvider === "atlassian"}
               disabled={disconnectingProvider !== null}
-              onConnect={() => connect("atlassian")}
+              onConnect={() =>
+                connectionState.atlassian
+                  ? reconnect("atlassian")
+                  : connect("atlassian")
+              }
               onDisconnect={() => disconnect("atlassian")}
             >
               <div className="min-w-0 space-y-2">
@@ -479,7 +502,9 @@ export function SettingsPanel({
               }
               isDisconnecting={disconnectingProvider === "google"}
               disabled={disconnectingProvider !== null}
-              onConnect={() => connect("google")}
+              onConnect={() =>
+                connectionState.google ? reconnect("google") : connect("google")
+              }
               onDisconnect={() => disconnect("google")}
             >
               <div className="min-w-0 space-y-2">
