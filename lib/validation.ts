@@ -39,8 +39,10 @@ export const updateReportSchema = z.object({
   manualActivities: z
     .array(
       z.object({
+        id: z.string().min(1).max(200).optional(),
         title: z.string().min(1).max(300),
         description: z.string().max(4000).nullable().optional(),
+        selected: z.boolean().optional(),
         status: z.string().max(100).nullable().optional(),
         durationMinutes: z
           .number()

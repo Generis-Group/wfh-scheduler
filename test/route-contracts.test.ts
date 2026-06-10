@@ -91,6 +91,12 @@ vi.mock("@/lib/services/reports", () => ({
   })),
 }));
 
+vi.mock("@/lib/services/ai-summary", () => ({
+  generateDailyReportSummaryWithAI: vi.fn(async () => ({
+    summary: "Summarized with AI.",
+  })),
+}));
+
 vi.mock("@/lib/services/activity", () => ({
   listActivities: vi.fn(async () => []),
 }));
@@ -757,6 +763,57 @@ describe("route contracts", () => {
 
     expect(response.status).toBe(200);
     expect(cache.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("requires owner mutation access when generating an AI summary", async () => {
+    const access = await import("@/lib/access");
+    const aiSummary = await import("@/lib/services/ai-summary");
+    const { POST } = await import("@/app/api/reports/[id]/summary/ai/route");
+    vi.mocked(access.assertCanMutateReport).mockClear();
+    vi.mocked(aiSummary.generateDailyReportSummaryWithAI).mockClear();
+
+    const response = await POST(
+      new Request("http://localhost/api/reports/report-1/summary/ai", {
+        method: "POST",
+      }),
+      { params: { id: "report-1" } },
+    );
+
+    expect(response.status).toBe(200);
+    expect(access.assertCanMutateReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user: expect.objectContaining({ id: "user-1" }),
+      }),
+      expect.objectContaining({ id: "report-1", userId: "user-1" }),
+    );
+    expect(aiSummary.generateDailyReportSummaryWithAI).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ id: "report-1", userId: "user-1" }),
+    );
+    await expect(response.json()).resolves.toEqual({
+      summary: "Summarized with AI.",
+    });
+  });
+
+  it("returns Gemini reconnect errors when generating an AI summary", async () => {
+    const aiSummary = await import("@/lib/services/ai-summary");
+    const { HttpError } = await import("@/lib/http");
+    const { POST } = await import("@/app/api/reports/[id]/summary/ai/route");
+    vi.mocked(aiSummary.generateDailyReportSummaryWithAI).mockRejectedValueOnce(
+      new HttpError(409, "Reconnect Google before using Gemini AI."),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/reports/report-1/summary/ai", {
+        method: "POST",
+      }),
+      { params: { id: "report-1" } },
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: "Reconnect Google before using Gemini AI.",
+    });
   });
 
   it("requires owner mutation access when submitting a report", async () => {

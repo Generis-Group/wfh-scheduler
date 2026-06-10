@@ -3,13 +3,18 @@ import type { calendar_v3 } from "googleapis";
 import type { NormalizedActivity } from "@/lib/normalizers/types";
 
 function attendeeResponse(event: calendar_v3.Schema$Event, userEmail?: string | null) {
-  const attendee = event.attendees?.find((item) => item.email?.toLowerCase() === userEmail?.toLowerCase());
+  const attendee = event.attendees?.find(
+    (item) =>
+      item.self ||
+      (userEmail &&
+        item.email?.toLowerCase() === userEmail.toLowerCase()),
+  );
 
   if (attendee?.responseStatus) {
     return attendee.responseStatus;
   }
 
-  return event.creator?.self ? "accepted" : undefined;
+  return undefined;
 }
 
 export function normalizeCalendarEvent(
@@ -29,7 +34,7 @@ export function normalizeCalendarEvent(
 
   const response = attendeeResponse(event, userEmail);
 
-  if (response === "declined") {
+  if (response !== "accepted") {
     return null;
   }
 

@@ -10,6 +10,7 @@ type SyncResult = {
   skippedCount: number;
   staleCount?: number;
   activities?: unknown[];
+  report?: unknown;
 };
 
 type SyncRunner = (

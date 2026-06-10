@@ -22,7 +22,7 @@ Docker is intentionally not used for this MVP.
    - `NEXTAUTH_SECRET`
    - `TOKEN_ENCRYPTION_KEY`
    - Atlassian and Google OAuth client values
-   - Gemini values: `GOOGLE_CLOUD_QUOTA_PROJECT` (or `GOOGLE_CLOUD_PROJECT`) with the Generative Language API enabled, optional `GEMINI_MODEL`
+   - Gemini values: `GOOGLE_CLOUD_QUOTA_PROJECT` (or `GOOGLE_CLOUD_PROJECT`) with the Gemini API enabled, optional `GEMINI_MODEL`
    - Resend email values: `RESEND_API_KEY`, optional `EMAIL_FROM`, `APP_BASE_URL`, and `CRON_SECRET`
 3. Install dependencies:
 

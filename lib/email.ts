@@ -2,6 +2,7 @@ import { getOptionalEnv } from "@/lib/env";
 import { HttpError } from "@/lib/http";
 
 export const DEFAULT_EMAIL_FROM = "Generis Reports <reports@generisgp.com>";
+const DEFAULT_APP_BASE_URL = "https://report.generisgp.com";
 
 export type EmailDelivery =
   | {
@@ -24,12 +25,60 @@ export type SendEmailInput = {
   text: string;
 };
 
+function isLocalEmailHost(hostname: string) {
+  const normalized = hostname.toLowerCase();
+
+  return (
+    normalized === "localhost" ||
+    normalized === "[::1]" ||
+    normalized === "::1" ||
+    normalized === "0.0.0.0" ||
+    normalized.startsWith("127.")
+  );
+}
+
+function normalizeEmailBaseUrl(value?: string | null) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const candidate = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+
+  try {
+    const url = new URL(candidate);
+
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      isLocalEmailHost(url.hostname)
+    ) {
+      return null;
+    }
+
+    url.hash = "";
+    url.search = "";
+
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
 export function appBaseUrl() {
   return (
-    getOptionalEnv("APP_BASE_URL") ??
-    getOptionalEnv("NEXTAUTH_URL") ??
-    "http://localhost:3000"
-  ).replace(/\/$/, "");
+    [
+      getOptionalEnv("APP_BASE_URL"),
+      getOptionalEnv("NEXTAUTH_URL"),
+      getOptionalEnv("VERCEL_PROJECT_PRODUCTION_URL"),
+      getOptionalEnv("VERCEL_URL"),
+      DEFAULT_APP_BASE_URL,
+    ]
+      .map(normalizeEmailBaseUrl)
+      .find(Boolean) ?? DEFAULT_APP_BASE_URL
+  );
 }
 
 export function appUrl(path = "/") {
