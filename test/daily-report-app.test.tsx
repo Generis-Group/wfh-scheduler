@@ -368,6 +368,74 @@ describe("DailyReportApp drafts", () => {
     ).toBe(false);
   });
 
+  it("clears pending removals when imported work items are re-imported before save", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, _init?: RequestInit) => {
+        const url = String(input);
+
+        if (url.includes("/api/sync/google-tasks")) {
+          return Response.json({
+            importedCount: 1,
+            skippedCount: 0,
+            staleCount: 0,
+            activities: [importedTask],
+            report: {
+              ...savedDraft,
+              activities: [importedTask],
+            },
+          });
+        }
+
+        return Response.json({ error: "Unexpected request." }, { status: 500 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp({
+      ...savedDraft,
+      activities: [importedTask],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "More actions for Imported task",
+      }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Imported task")).toBeNull();
+    });
+    expect(
+      (screen.getByRole("button", { name: "Save draft" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import Google Tasks" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Imported task")).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Save draft",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+    });
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input) === "/api/reports/report-1" && init?.method === "PUT",
+      ),
+    ).toBe(false);
+  });
+
   it("resets imported work items when the draft is deleted", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1166,7 +1234,7 @@ describe("DailyReportApp drafts", () => {
         name: "More actions for Draft rollout plan",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     expect(screen.queryByRole("menu")).toBeNull();
     window.dispatchEvent(new Event("scroll"));
     const titleInput = screen.getByRole("textbox", {
@@ -1469,14 +1537,14 @@ describe("DailyReportApp drafts", () => {
     );
   });
 
-  it("excludes work items and removes matching summary references from the report", async () => {
+  it("removes work items and matching summary references from the report", async () => {
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         Response.json({
           report: {
             ...savedDraft,
             summary: "",
-            activities: [{ ...manualGoogleTask, selected: false }],
+            activities: [],
           },
         }),
     );
@@ -1494,16 +1562,9 @@ describe("DailyReportApp drafts", () => {
         name: "More actions for Draft rollout plan",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove" }));
 
-    expect(screen.getByText("Draft rollout plan")).toBeTruthy();
-    expect(
-      (
-        screen.getByRole("checkbox", {
-          name: "Include Draft rollout plan",
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(false);
+    expect(screen.queryByText("Draft rollout plan")).toBeNull();
     expect(
       (screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement)
         .value,
@@ -1522,14 +1583,8 @@ describe("DailyReportApp drafts", () => {
       String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
     );
     expect(requestBody.summary).toBe("");
-    expect(requestBody.activityUpdates).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "task-manual",
-          selected: false,
-        }),
-      ]),
-    );
+    expect(requestBody.activityUpdates).toEqual([]);
+    expect(requestBody.deletedActivityIds).toEqual(["task-manual"]);
   });
 
   it("keeps summary reference removals made before the lazy editor mounts", async () => {
@@ -1540,7 +1595,7 @@ describe("DailyReportApp drafts", () => {
           report: {
             ...savedDraft,
             summary: "",
-            activities: [{ ...manualGoogleTask, selected: false }],
+            activities: [],
           },
         }),
     );
@@ -1559,7 +1614,7 @@ describe("DailyReportApp drafts", () => {
         name: "More actions for Draft rollout plan",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove" }));
 
     expect(screen.queryByRole("textbox", { name: "Summary" })).toBeNull();
 
@@ -1590,6 +1645,7 @@ describe("DailyReportApp drafts", () => {
       String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
     );
     expect(requestBody.summary).toBe("");
+    expect(requestBody.deletedActivityIds).toEqual(["task-manual"]);
   });
 
   it("blocks submitting an empty draft", async () => {

@@ -588,7 +588,6 @@ export async function updateReport(
           id: { in: input.deletedActivityIds },
           userId: report.userId,
           dailyReportId: report.id,
-          source: "MANUAL",
         },
       });
     }

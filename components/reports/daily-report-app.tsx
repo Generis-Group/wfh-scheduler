@@ -760,13 +760,6 @@ export function DailyReportApp({
   function removeActivity(activity: Activity) {
     removeSummaryReferencesForActivity(activity.id);
 
-    if (activity.source !== "MANUAL") {
-      setActivity(activity.id, { selected: false });
-      setOpenActivityMenu(null);
-      setRenamingActivity(null);
-      return;
-    }
-
     setActivities((items) => items.filter((item) => item.id !== activity.id));
     if (!isNewManualActivity(activity)) {
       setDeletedActivityIds((current) => [
@@ -1443,9 +1436,17 @@ export function DailyReportApp({
         syncProviderSources[provider],
         syncResult.activities ?? [],
       );
+      const syncedActivityIds = new Set(
+        (syncResult.activities ?? []).map((activity) => activity.id),
+      );
 
       activitiesRef.current = nextActivities;
       setActivities(nextActivities);
+      if (syncedActivityIds.size > 0) {
+        setDeletedActivityIds((current) =>
+          current.filter((id) => !syncedActivityIds.has(id)),
+        );
+      }
 
       if (syncResult.report) {
         applySyncedDraftReport(syncResult.report, nextActivities);
@@ -2274,7 +2275,8 @@ export function DailyReportApp({
           >
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+              role="menuitem"
+              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] transition-colors hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
               onClick={() => openActivitySource(menuActivity)}
             >
               <ExternalLink className="h-4 w-4" />
@@ -2282,7 +2284,8 @@ export function DailyReportApp({
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+              role="menuitem"
+              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] transition-colors hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
               onClick={() => startRenamingActivity(menuActivity)}
             >
               <Edit3 className="h-4 w-4" />
@@ -2290,7 +2293,8 @@ export function DailyReportApp({
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+              role="menuitem"
+              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] transition-colors hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
               onClick={() => copyActivityTitle(menuActivity)}
             >
               <Copy className="h-4 w-4" />
@@ -2298,7 +2302,8 @@ export function DailyReportApp({
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#dc2626] hover:bg-[#fef2f2] dark:hover:bg-red-400/10"
+              role="menuitem"
+              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#dc2626] transition-colors hover:bg-[#fef2f2] hover:text-[#b42318] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-300 dark:hover:bg-red-400/10 dark:hover:text-red-200"
               onClick={() => removeActivity(menuActivity)}
             >
               <Trash2 className="h-4 w-4" />
