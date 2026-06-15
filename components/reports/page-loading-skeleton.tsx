@@ -114,28 +114,35 @@ function DailySkeleton() {
       </LoadingCard>
       <div className="daily-report-layout grid gap-3 min-[1200px]:min-h-0 min-[1200px]:flex-1 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
         <LoadingCard className="daily-report-panel flex min-h-[520px] flex-col min-[1200px]:min-h-0">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="grid gap-3 min-[900px]:flex min-[900px]:items-start min-[900px]:justify-between">
             <div className="flex items-center gap-2">
               <LoadingBar className="h-6 w-24 rounded-[4px]" />
               <LoadingBar className="h-6 w-14 rounded-full" />
             </div>
-            <LoadingBar className="h-9 w-28 rounded-[7px]" />
+            <div className="grid min-w-0 grid-cols-2 gap-2 min-[900px]:flex min-[900px]:w-auto">
+              <LoadingBar className="h-9 min-w-0 rounded-[7px] min-[900px]:w-28" />
+              <LoadingBar className="h-9 min-w-0 rounded-[7px] min-[900px]:w-28" />
+            </div>
           </div>
           <LoadingBar className="mt-3 h-9 rounded-[7px]" />
           <div className="daily-work-items-list mt-3 min-h-[320px] space-y-2 overflow-hidden p-1 min-[1200px]:min-h-0 min-[1200px]:flex-1">
             {Array.from({ length: 5 }).map((_, index) => (
               <div
                 key={index}
-                className="grid min-h-[68px] grid-cols-[24px_34px_minmax(0,1fr)_58px_28px] items-center gap-2.5 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                className="flex min-w-0 flex-col gap-2 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[900px]:grid min-[900px]:min-h-[68px] min-[900px]:grid-cols-[24px_34px_minmax(0,1fr)_58px_28px] min-[900px]:items-center min-[900px]:gap-2.5"
               >
-                <LoadingBar className="h-4 w-4 rounded-[4px]" />
-                <LoadingBar className="h-8 w-8 rounded-[7px]" />
-                <div className="min-w-0">
-                  <LoadingBar className="h-4 w-full max-w-[360px] rounded-[4px]" />
-                  <LoadingBar className="mt-2 h-3 w-28 rounded-[4px]" />
+                <div className="flex min-w-0 items-start gap-2.5 min-[900px]:contents">
+                  <LoadingBar className="mt-1 h-4 w-4 shrink-0 rounded-[4px] min-[900px]:mt-0" />
+                  <LoadingBar className="h-8 w-8 shrink-0 rounded-[7px]" />
+                  <div className="min-w-0 flex-1 min-[900px]:flex-none">
+                    <LoadingBar className="h-4 w-full max-w-[360px] rounded-[4px]" />
+                    <LoadingBar className="mt-2 h-3 w-28 max-w-full rounded-[4px]" />
+                  </div>
                 </div>
-                <LoadingBar className="h-6 rounded-full" />
-                <LoadingBar className="h-7 w-7 rounded-[7px]" />
+                <div className="flex min-w-0 items-center justify-between gap-2 pl-[3.875rem] min-[900px]:contents min-[900px]:pl-0">
+                  <LoadingBar className="h-6 w-20 rounded-full" />
+                  <LoadingBar className="h-7 w-7 shrink-0 rounded-[7px]" />
+                </div>
               </div>
             ))}
           </div>

@@ -198,6 +198,16 @@ function buildSummaryPrompt(
     "- Add activity reference tokens inline only where they support the sentence.",
     "- Never include raw URLs, markdown, HTML, tables, code, or unknown tokens.",
     "",
+    "Blocker definition:",
+    "- A blocker means work is truly unable to proceed or is on hold because of missing approval, access, information, an external dependency, an outage, or an unresolved decision.",
+    "- Do not classify active work, code review, bug fixing, testing, investigation, follow-up, remaining tasks, or in-progress items as blockers unless the item explicitly says it is blocked, on hold, waiting, dependent, or unable to proceed.",
+    "- Only create a Blockers section when at least one selected work item explicitly indicates a true blocker. If none exist, omit Blockers entirely; do not write 'No blockers'.",
+    "",
+    "Completion wording:",
+    "- Use completed, resolved, finalized, delivered, deployed, or shipped only when the work item's status or text clearly supports completion.",
+    "- For in-progress, open, pending, review, testing, not done, or ambiguous work, use neutral wording such as worked on, continued, advanced, reviewed, investigated, drafted, or started.",
+    "- When a sentence combines items with mixed or unclear completion states, do not use a completion verb for the whole group.",
+    "",
     "Production update policy:",
     "- Routine production tasks are simple event/site content updates.",
     "- If there are 1-6 routine production updates, enumerate them.",
@@ -431,6 +441,65 @@ function inlineText(segments: StructuredInline[]) {
   return segments.some((segment) => segment.type === "text" && segment.text);
 }
 
+function inlineActivityReferences(
+  segments: StructuredInline[],
+  referencesByToken: Map<string, ActivityReference>,
+) {
+  return segments
+    .filter((segment) => segment.type === "activity")
+    .map((segment) => referencesByToken.get(segment.token))
+    .filter((reference): reference is ActivityReference => Boolean(reference));
+}
+
+function isBlockersSection(heading: string) {
+  const normalized = heading.trim().toLowerCase();
+
+  return normalized === "blocker" || normalized === "blockers";
+}
+
+function inlineHasActivityReference(
+  segments: StructuredInline[],
+  referencesByToken: Map<string, ActivityReference>,
+) {
+  return inlineActivityReferences(segments, referencesByToken).length > 0;
+}
+
+function normalizeReferencedBlockerBlock(
+  block: StructuredBlock,
+  referencesByToken: Map<string, ActivityReference>,
+) {
+  if (block.type === "paragraph" || block.type === "blockquote") {
+    return inlineHasActivityReference(block.segments, referencesByToken)
+      ? block
+      : null;
+  }
+
+  if (block.type === "bulletedList" || block.type === "numberedList") {
+    const items = block.items.filter((item) =>
+      inlineHasActivityReference(item.segments, referencesByToken),
+    );
+
+    return items.length > 0 ? { ...block, items } : null;
+  }
+
+  return null;
+}
+
+function normalizeBlockerReferences(
+  section: StructuredSection,
+  referencesByToken: Map<string, ActivityReference>,
+) {
+  if (!isBlockersSection(section.heading)) {
+    return section;
+  }
+
+  const blocks = section.blocks
+    .map((block) => normalizeReferencedBlockerBlock(block, referencesByToken))
+    .filter((block): block is StructuredBlock => Boolean(block));
+
+  return blocks.length > 0 ? { ...section, blocks } : null;
+}
+
 function normalizeBlock(
   value: unknown,
   validTokens: Set<string>,
@@ -496,6 +565,9 @@ function normalizeStructuredSummary(
   const parsed = parseJsonObject(responseText(response));
   const rawSections = Array.isArray(parsed?.sections) ? parsed.sections : [];
   const validTokens = new Set(references.map((reference) => reference.token));
+  const referencesByToken = new Map(
+    references.map((reference) => [reference.token, reference]),
+  );
   const sections = rawSections
     .flatMap((rawSection): StructuredSection[] => {
       if (
@@ -519,6 +591,8 @@ function normalizeStructuredSummary(
 
       return heading && blocks.length > 0 ? [{ heading, blocks }] : [];
     })
+    .map((section) => normalizeBlockerReferences(section, referencesByToken))
+    .filter((section): section is StructuredSection => Boolean(section))
     .slice(0, maxSections);
 
   return sections.length > 0 ? sections : null;
@@ -612,7 +686,8 @@ async function generateStructuredSummary(
         thinkingConfig: {
           thinkingBudget: 0,
         },
-        temperature: compact ? 0.1 : 0.2,
+        temperature: compact ? 0 : 0.1,
+        topP: 0.8,
       },
     });
     const sections = normalizeStructuredSummary(result, references);

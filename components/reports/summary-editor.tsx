@@ -645,11 +645,11 @@ export const summaryEditorExtensions = [
 
 function buttonTone(active: boolean, className = "", activeClassName = "") {
   return cn(
-    "reference-menu-button",
+    "inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#667085] transition-colors hover:bg-[#f3f6fb] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground",
     "disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[#64748b] dark:disabled:hover:bg-transparent dark:disabled:hover:text-muted-foreground",
     active &&
       (activeClassName ||
-        "bg-[#eef2ff] text-[#4338ca] ring-1 ring-[#c7d2fe] dark:bg-blue-400/15 dark:text-blue-100 dark:ring-blue-300/20"),
+        "bg-[#e8f1ff] text-[#1d4ed8] ring-1 ring-[#b9d2ff] dark:bg-blue-400/15 dark:text-blue-100 dark:ring-blue-300/20"),
     className,
   );
 }
@@ -908,15 +908,15 @@ const SummaryEditorComponent = forwardRef<
   }
 
   return (
-    <div className="summary-tiptap-panel mt-4 rounded-[10px] bg-[#f7f9fc] p-2 ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]">
-      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+    <div className="summary-tiptap-panel mt-3">
+      <div className="mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
         <SummaryToolbarButton
           active={toolbarState.heading}
           disabled={!editor || disabled}
           label="Heading"
           onClick={() => runCommand("heading")}
         >
-          <Heading2 className="h-4 w-4" />
+          <Heading2 className="h-3.5 w-3.5" />
         </SummaryToolbarButton>
         <SummaryToolbarButton
           active={toolbarState.bold}
@@ -924,7 +924,7 @@ const SummaryEditorComponent = forwardRef<
           label="Bold"
           onClick={() => runCommand("bold")}
         >
-          <Bold className="h-4 w-4" />
+          <Bold className="h-3.5 w-3.5" />
         </SummaryToolbarButton>
         <SummaryToolbarButton
           active={toolbarState.italic}
@@ -932,7 +932,7 @@ const SummaryEditorComponent = forwardRef<
           label="Italic"
           onClick={() => runCommand("italic")}
         >
-          <Italic className="h-4 w-4" />
+          <Italic className="h-3.5 w-3.5" />
         </SummaryToolbarButton>
         <SummaryToolbarButton
           active={toolbarState.bullet}
@@ -940,7 +940,7 @@ const SummaryEditorComponent = forwardRef<
           label="Bulleted list"
           onClick={() => runCommand("bulletList")}
         >
-          <List className="h-4 w-4" />
+          <List className="h-3.5 w-3.5" />
         </SummaryToolbarButton>
         <SummaryToolbarButton
           active={toolbarState.numbered}
@@ -948,7 +948,7 @@ const SummaryEditorComponent = forwardRef<
           label="Numbered list"
           onClick={() => runCommand("orderedList")}
         >
-          <ListOrdered className="h-4 w-4" />
+          <ListOrdered className="h-3.5 w-3.5" />
         </SummaryToolbarButton>
       </div>
       {editor ? (
@@ -966,7 +966,7 @@ const SummaryEditorComponent = forwardRef<
           />
           {disabled ? (
             <div
-              className="absolute inset-0 z-10 flex items-center justify-center rounded-[7px] bg-white dark:bg-[#0f1b2a]"
+              className="absolute inset-0 z-10 flex items-center justify-center rounded-[8px] bg-white dark:bg-[#0f1b2a]"
               role="status"
               aria-live="polite"
             >

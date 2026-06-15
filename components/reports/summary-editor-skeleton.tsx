@@ -2,9 +2,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function SummaryEditorToolbarSkeleton() {
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+    <div className="mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
       {Array.from({ length: 5 }).map((_, index) => (
-        <Skeleton key={index} className="h-8 w-8 rounded-[8px]" />
+        <Skeleton key={index} className="h-7 w-7 rounded-[7px]" />
       ))}
     </div>
   );
@@ -32,7 +32,7 @@ export function SummaryEditorBodySkeleton() {
 
 export function SummaryEditorPanelSkeleton() {
   return (
-    <div className="summary-tiptap-panel mt-4 rounded-[10px] bg-[#f7f9fc] p-2 ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]">
+    <div className="summary-tiptap-panel mt-3">
       <SummaryEditorToolbarSkeleton />
       <SummaryEditorBodySkeleton />
     </div>

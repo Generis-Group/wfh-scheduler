@@ -548,12 +548,12 @@
   .summary-tiptap-editor .ProseMirror {
     tab-size: 2;
     height: clamp(22rem, 52dvh, 30rem);
-    @apply w-full overflow-y-auto whitespace-pre-wrap rounded-[8px] bg-white px-3.5 py-3.5 text-sm leading-6 text-[#111827] shadow-none ring-1 ring-input focus:outline-none focus:ring-2 focus:ring-[#2563eb] dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-input;
+    @apply w-full overflow-y-auto whitespace-pre-wrap rounded-[8px] bg-white px-3 py-3 text-sm leading-6 text-[#111827] shadow-none ring-1 ring-input focus:outline-none focus:ring-2 focus:ring-[#2563eb] dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-input;
   }
 
   .summary-tiptap-skeleton-body {
     height: clamp(22rem, 52dvh, 30rem);
-    @apply w-full rounded-[8px] bg-white px-3.5 py-3.5 ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55];
+    @apply w-full rounded-[8px] bg-white px-3 py-3 ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55];
   }
 
   .summary-tiptap-editor .ProseMirror h2 {

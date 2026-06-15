@@ -122,8 +122,16 @@ describe("AI summary service", () => {
         config: expect.objectContaining({
           thinkingConfig: { thinkingBudget: 0 },
           responseMimeType: "application/json",
+          temperature: 0.1,
+          topP: 0.8,
         }),
       }),
+    );
+    expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
+      "Blocker definition:",
+    );
+    expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
+      "Completion wording:",
     );
     expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
       '"activityTokens":["ACTIVITY_1"]',
@@ -272,6 +280,176 @@ describe("AI summary service", () => {
     );
   });
 
+  it("prompts Gemini to use status-aware completion wording", async () => {
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          heading: "Project Work",
+          blocks: [
+            {
+              type: "paragraph",
+              text: "Continued the implementation work.",
+              activityTokens: ["ACTIVITY_1"],
+            },
+          ],
+        },
+      ]),
+    );
+
+    const result = await generateDailyReportSummaryWithAI("user-1", {
+      ...report,
+      activities: [
+        {
+          ...baseActivity,
+          id: "jira-progress",
+          source: "JIRA",
+          title: "IT-4105: Improve summary generation",
+          description: "Implementation is still in progress.",
+          status: "In Progress",
+        },
+      ],
+    });
+
+    expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
+      "For in-progress, open, pending, review, testing, not done, or ambiguous work",
+    );
+    expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
+      "status=In Progress",
+    );
+    expect(result.summary).toContain("Continued the implementation work.");
+  });
+
+  it("drops blocker text that has no activity reference", async () => {
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          heading: "Daily Work",
+          blocks: [
+            {
+              type: "paragraph",
+              text: "Continued the summary generation work.",
+              activityTokens: ["ACTIVITY_1"],
+            },
+          ],
+        },
+        {
+          heading: "Blockers",
+          blocks: [
+            {
+              type: "paragraph",
+              text: "Waiting on approval before the work can continue.",
+              activityTokens: [],
+            },
+          ],
+        },
+      ]),
+    );
+
+    const result = await generateDailyReportSummaryWithAI("user-1", {
+      ...report,
+      activities: [
+        {
+          ...baseActivity,
+          id: "jira-summary",
+          source: "JIRA",
+          title: "IT-4107: Improve summary generation",
+          description: "Continued the summary generation work.",
+          status: "In Progress",
+        },
+      ],
+    });
+
+    expect(result.summary).toContain("## Daily Work");
+    expect(result.summary).toContain("Continued the summary generation work.");
+    expect(result.summary).not.toContain("## Blockers");
+    expect(result.summary).not.toContain(
+      "Waiting on approval before the work can continue.",
+    );
+  });
+
+  it("keeps blocker sections with activity references", async () => {
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          heading: "Blockers",
+          blocks: [
+            {
+              type: "blockquote",
+              text: "Waiting on client approval before deployment can continue.",
+              activityTokens: ["ACTIVITY_1"],
+            },
+          ],
+        },
+      ]),
+    );
+
+    const result = await generateDailyReportSummaryWithAI("user-1", {
+      ...report,
+      activities: [
+        {
+          ...baseActivity,
+          id: "jira-blocked",
+          source: "JIRA",
+          title: "IT-5000: Deployment blocked by missing approval",
+          description:
+            "Waiting on client approval before deployment can continue.",
+          status: "Blocked",
+        },
+      ],
+    });
+
+    expect(result.summary).toContain("## Blockers");
+    expect(result.summary).toContain(
+      "> Waiting on client approval before deployment can continue.",
+    );
+    expect(result.summary).toContain(
+      "[IT-5000: Deployment blocked by missing approval](https://generis.local/activity/jira-blocked?source=JIRA)",
+    );
+  });
+
+  it("omits empty no-blocker sections from generated output", async () => {
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          heading: "Daily Work",
+          blocks: [
+            {
+              type: "paragraph",
+              text: "Completed planned summary improvements.",
+              activityTokens: ["ACTIVITY_1"],
+            },
+          ],
+        },
+        {
+          heading: "Blockers",
+          blocks: [
+            {
+              type: "paragraph",
+              text: "No blockers.",
+              activityTokens: [],
+            },
+          ],
+        },
+      ]),
+    );
+
+    const result = await generateDailyReportSummaryWithAI("user-1", {
+      ...report,
+      activities: [
+        {
+          ...baseActivity,
+          id: "task-summary",
+          source: "GOOGLE_TASKS",
+          title: "Improve generated summary",
+        },
+      ],
+    });
+
+    expect(result.summary).toContain("## Daily Work");
+    expect(result.summary).not.toContain("## Blockers");
+    expect(result.summary).not.toContain("No blockers");
+  });
+
   it("sanitizes unsupported formatting and unknown activity tokens", async () => {
     generateContentMock.mockResolvedValue(
       response([
@@ -350,6 +528,8 @@ describe("AI summary service", () => {
         config: expect.objectContaining({
           maxOutputTokens: 6000,
           thinkingConfig: { thinkingBudget: 0 },
+          temperature: 0.1,
+          topP: 0.8,
         }),
       }),
     );
@@ -359,6 +539,8 @@ describe("AI summary service", () => {
         config: expect.objectContaining({
           maxOutputTokens: 2400,
           thinkingConfig: { thinkingBudget: 0 },
+          temperature: 0,
+          topP: 0.8,
         }),
       }),
     );

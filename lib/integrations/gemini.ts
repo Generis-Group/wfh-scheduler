@@ -16,6 +16,7 @@ type GeminiGenerateContentConfig = {
     thinkingBudget?: number;
   };
   temperature?: number;
+  topP?: number;
 };
 
 type GeminiGenerateContentRequest = {

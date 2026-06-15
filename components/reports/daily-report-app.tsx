@@ -1928,7 +1928,7 @@ export function DailyReportApp({
 
         <div className="daily-report-layout grid gap-3 min-[1200px]:min-h-0 min-[1200px]:flex-1 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
           <ReportSurface className="daily-report-panel flex min-h-[520px] flex-col min-[1200px]:min-h-0">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="grid gap-3 min-[900px]:flex min-[900px]:items-start min-[900px]:justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
@@ -1936,20 +1936,20 @@ export function DailyReportApp({
                   </h2>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="grid min-w-0 grid-cols-2 gap-2 min-[900px]:flex min-[900px]:w-auto min-[900px]:flex-wrap min-[900px]:items-center">
                 <Button
                   variant="outline"
-                  className="h-9 rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55]"
+                  className="h-9 min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] min-[900px]:w-auto"
                   disabled={isBusy}
                   onClick={addManualActivity}
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add item
+                  <Plus className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="min-w-0 truncate">Add item</span>
                 </Button>
-                <div ref={importMenuRef} className="relative">
+                <div ref={importMenuRef} className="relative min-w-0">
                   <Button
                     variant="outline"
-                    className="h-9 rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55]"
+                    className="h-9 w-full min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] min-[900px]:w-auto"
                     disabled={isBusy}
                     onClick={() => {
                       setOpenActivityMenu(null);
@@ -1959,9 +1959,9 @@ export function DailyReportApp({
                     {isImporting ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
-                      <Download className="mr-2 h-4 w-4" />
+                      <Download className="mr-2 h-4 w-4 shrink-0" />
                     )}
-                    <span className="max-w-[190px] truncate">
+                    <span className="min-w-0 truncate min-[900px]:max-w-[190px]">
                       {importProgress
                         ? importProgress.message
                         : importingProvider
@@ -1969,12 +1969,15 @@ export function DailyReportApp({
                           : "Import"}
                     </span>
                     <ChevronDown
-                      className={cn("ml-2 h-4 w-4", isImporting && "opacity-0")}
+                      className={cn(
+                        "ml-2 h-4 w-4 shrink-0",
+                        isImporting && "opacity-0",
+                      )}
                       aria-hidden="true"
                     />
                   </Button>
                   {importMenuOpen ? (
-                    <div className="absolute right-0 top-12 z-30 w-64 rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+                    <div className="absolute right-0 top-12 z-30 w-[min(16rem,calc(100vw-2rem))] rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
                       <button
                         className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-semibold text-[#111827] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
                         disabled={!canSyncAnyIntegration}
@@ -2070,14 +2073,14 @@ export function DailyReportApp({
                     <article
                       key={activity.id}
                       className={cn(
-                        "flex min-w-0 flex-col gap-2 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] transition-[opacity,transform,box-shadow] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[720px]:grid min-[720px]:min-h-[68px] min-[720px]:grid-cols-[24px_34px_minmax(0,1fr)_auto_58px_28px] min-[720px]:items-center min-[720px]:gap-2.5",
+                        "flex min-w-0 flex-col gap-2 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] transition-[opacity,transform,box-shadow] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[900px]:grid min-[900px]:min-h-[68px] min-[900px]:grid-cols-[24px_34px_minmax(0,1fr)_auto_58px_28px] min-[900px]:items-center min-[900px]:gap-2.5",
                         activityDragPreviewId === activity.id &&
                           "scale-[0.995] opacity-55",
                       )}
                     >
-                      <div className="flex min-w-0 items-start gap-2.5 min-[720px]:contents">
+                      <div className="flex min-w-0 items-start gap-2.5 min-[900px]:contents">
                         <Checkbox
-                          className="mt-1 min-[720px]:mt-0"
+                          className="mt-1 min-[900px]:mt-0"
                           checked={activity.selected}
                           onChange={(event) => {
                             const selected = event.target.checked;
@@ -2102,11 +2105,11 @@ export function DailyReportApp({
                         >
                           <ReportActivitySourceIcon source={activity.source} />
                         </div>
-                        <div className="min-w-0 flex-1 min-[720px]:flex-none">
+                        <div className="min-w-0 flex-1 min-[900px]:flex-none">
                           <div
                             className={cn(
                               "break-words text-sm font-semibold text-[#111827] dark:text-foreground",
-                              !isRenamingActivity && "min-[720px]:truncate",
+                              !isRenamingActivity && "min-[900px]:truncate",
                             )}
                           >
                             {isRenamingActivity ? (
@@ -2159,14 +2162,14 @@ export function DailyReportApp({
                               activity.title || "Untitled activity"
                             )}
                           </div>
-                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#667085] dark:text-muted-foreground min-[720px]:flex-nowrap">
+                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#667085] dark:text-muted-foreground min-[900px]:flex-nowrap">
                             <span className="shrink-0">
                               {reportActivitySourceLabel(activity.source)}
                             </span>
                             {activity.description ? (
                               <>
                                 <span className="text-[#98a2b3]">-</span>
-                                <span className="min-w-0 break-words min-[720px]:truncate">
+                                <span className="min-w-0 break-words min-[900px]:truncate">
                                   {activity.description}
                                 </span>
                               </>
@@ -2174,7 +2177,7 @@ export function DailyReportApp({
                           </div>
                         </div>
                       </div>
-                      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 pl-[3.875rem] min-[720px]:contents min-[720px]:pl-0">
+                      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 pl-[3.875rem] min-[900px]:contents min-[900px]:pl-0">
                         {statusLabel ? (
                           <ReferenceBadge
                             tone={statusTone(activity.status)}
@@ -2184,7 +2187,7 @@ export function DailyReportApp({
                           </ReferenceBadge>
                         ) : (
                           <span
-                            className="hidden min-[720px]:block"
+                            className="hidden min-[900px]:block"
                             aria-hidden="true"
                           />
                         )}
