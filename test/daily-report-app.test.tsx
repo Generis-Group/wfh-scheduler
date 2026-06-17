@@ -479,7 +479,7 @@ describe("DailyReportApp drafts", () => {
       expect(screen.queryByText("Imported task")).toBeNull();
     });
     expect(
-      screen.getByText("No activities yet. Add a work item or import from Jira, Calendar, or Tasks."),
+      screen.getByText("No activities yet. Add a work item or import from Jira, Calendar, Tasks, or Gmail."),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Delete draft" })).toBeNull();
   });
@@ -499,7 +499,8 @@ describe("DailyReportApp drafts", () => {
 
       if (
         url.includes("/api/sync/google-calendar") ||
-        url.includes("/api/sync/google-tasks")
+        url.includes("/api/sync/google-tasks") ||
+        url.includes("/api/sync/gmail")
       ) {
         return Response.json({
           importedCount: 0,
@@ -537,6 +538,10 @@ describe("DailyReportApp drafts", () => {
         "/api/sync/google-tasks",
         expect.objectContaining({ method: "POST" }),
       );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/sync/gmail",
+        expect.objectContaining({ method: "POST" }),
+      );
     });
     expect(screen.getByText("Import complete: 1 work item found.")).toBeTruthy();
     expect(screen.getByText(linkedJiraTask.title)).toBeTruthy();
@@ -555,7 +560,8 @@ describe("DailyReportApp drafts", () => {
       if (
         url.includes("/api/sync/jira") ||
         url.includes("/api/sync/google-calendar") ||
-        url.includes("/api/sync/google-tasks")
+        url.includes("/api/sync/google-tasks") ||
+        url.includes("/api/sync/gmail")
       ) {
         return Response.json({
           importedCount: 0,
@@ -746,6 +752,13 @@ describe("DailyReportApp drafts", () => {
       (
         screen.getByRole("button", {
           name: "Import Google Tasks",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Import Gmail with AI",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);

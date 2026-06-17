@@ -42,6 +42,7 @@ enum ActivitySource {
   JIRA
   GOOGLE_CALENDAR
   GOOGLE_TASKS
+  GMAIL
   MANUAL
 }
 
@@ -49,6 +50,7 @@ enum SyncProvider {
   JIRA
   GOOGLE_CALENDAR
   GOOGLE_TASKS
+  GMAIL
 }
 
 enum SyncStatus {

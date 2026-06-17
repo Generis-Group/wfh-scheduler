@@ -11,5 +11,6 @@ export const GOOGLE_OAUTH_SCOPE = [
   "profile",
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/tasks.readonly",
+  "https://www.googleapis.com/auth/gmail.readonly",
   ...GEMINI_OAUTH_SCOPES
 ].join(" ");

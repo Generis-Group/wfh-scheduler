@@ -10,6 +10,7 @@ import {
   CalendarDays,
   CheckCircle2,
   FileText,
+  Mail,
   MessageSquare,
   PenLine,
   Search,
@@ -77,6 +78,10 @@ function activitySourceIconTone(source?: string | null) {
     return "bg-white text-[#2563eb] ring-1 ring-[#2563eb] dark:bg-[#0b1523]";
   }
 
+  if (source === "GMAIL") {
+    return "bg-white text-[#b42318] ring-1 ring-[#f4b9b0] dark:bg-[#0b1523] dark:text-[#fca5a5] dark:ring-red-300/25";
+  }
+
   if (source === "MANUAL") {
     return "bg-white text-[#2563eb] ring-1 ring-[#2563eb] dark:bg-[#0b1523]";
   }
@@ -95,6 +100,10 @@ function activitySourceIcon(source?: string | null) {
 
   if (source === "GOOGLE_TASKS") {
     return <CheckCircle2 aria-hidden="true" />;
+  }
+
+  if (source === "GMAIL") {
+    return <Mail aria-hidden="true" />;
   }
 
   if (source === "MANUAL") {
@@ -162,6 +171,10 @@ export function reportActivitySourceLabel(source?: string | null) {
 
   if (source === "GOOGLE_TASKS") {
     return "Google Tasks";
+  }
+
+  if (source === "GMAIL") {
+    return "Gmail";
   }
 
   if (source === "JIRA") {

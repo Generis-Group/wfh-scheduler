@@ -1,5 +1,5 @@
 import type { ActivityItem, SyncProvider } from "@prisma/client";
-import type { calendar_v3, tasks_v1 } from "googleapis";
+import type { calendar_v3, gmail_v1, tasks_v1 } from "googleapis";
 
 import {
   importedActivityMetadata,
@@ -25,6 +25,12 @@ import {
 import { prisma } from "@/lib/prisma";
 import { upsertImportedActivities } from "@/lib/services/activity";
 import { getCompanySettings } from "@/lib/services/company-settings";
+import {
+  dedupeGmailActivities,
+  extractGmailActivitiesWithAI,
+  gmailThreadEvidence,
+  type GmailThreadEvidence,
+} from "@/lib/services/gmail-ai-import";
 import { createReportRevision, getReportById } from "@/lib/services/reports";
 
 type JiraIssue = {
@@ -104,6 +110,11 @@ type GoogleTaskListParams = Omit<
   tasks_v1.Params$Resource$Tasks$List,
   "tasklist"
 >;
+type GoogleGmailService = gmail_v1.Gmail;
+type GmailThreadListParams = Omit<
+  gmail_v1.Params$Resource$Users$Threads$List,
+  "userId"
+>;
 type SyncResult = {
   importedCount: number;
   skippedCount: number;
@@ -144,6 +155,17 @@ export type GoogleTaskSuggestion = {
   due: string | null;
   updated: string | null;
   sourceUrl: string | null;
+};
+type GoogleApiError = {
+  message?: unknown;
+  response?: {
+    status?: unknown;
+    data?: {
+      error?: {
+        message?: unknown;
+      };
+    };
+  };
 };
 
 function isInRange(date: Date | null | undefined, start: Date, end: Date) {
@@ -360,6 +382,103 @@ async function listGoogleTasks(
   } while (pageToken);
 
   return items;
+}
+
+async function listGmailThreads(
+  gmail: GoogleGmailService,
+  params: GmailThreadListParams,
+  limit?: number,
+) {
+  const threads: gmail_v1.Schema$Thread[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const remaining =
+      typeof limit === "number" ? limit - threads.length : undefined;
+
+    if (typeof remaining === "number" && remaining <= 0) {
+      break;
+    }
+
+    const response = await gmail.users.threads.list({
+      userId: "me",
+      maxResults:
+        typeof remaining === "number" ? Math.min(100, remaining) : 100,
+      includeSpamTrash: false,
+      ...params,
+      pageToken,
+    });
+    threads.push(...(response.data.threads ?? []));
+    pageToken =
+      typeof limit === "number" && threads.length >= limit
+        ? undefined
+        : response.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  return threads;
+}
+
+async function getGmailThread(gmail: GoogleGmailService, threadId: string) {
+  const response = await gmail.users.threads.get({
+    userId: "me",
+    id: threadId,
+    format: "full",
+  });
+
+  return response.data;
+}
+
+function gmailSearchTimestamp(date: Date) {
+  return Math.floor(date.getTime() / 1000);
+}
+
+function googleApiErrorMessage(error: unknown) {
+  const googleError = error as GoogleApiError;
+  const apiMessage = googleError.response?.data?.error?.message;
+
+  if (typeof apiMessage === "string" && apiMessage.trim()) {
+    return apiMessage.trim();
+  }
+
+  return typeof googleError.message === "string" ? googleError.message : "";
+}
+
+function gmailImportError(error: unknown) {
+  if (error instanceof HttpError) {
+    return error;
+  }
+
+  const googleError = error as GoogleApiError;
+  const status =
+    typeof googleError.response?.status === "number"
+      ? googleError.response.status
+      : 0;
+  const detail = googleApiErrorMessage(error);
+  const message = error instanceof Error ? error.message : detail;
+
+  if (
+    /invalid input value for enum "(SyncProvider|ActivitySource)": "GMAIL"/i.test(
+      message,
+    )
+  ) {
+    return new HttpError(
+      409,
+      "Gmail import needs the latest database migration. Apply migration 20260617100000_add_gmail_activity_source, then try again.",
+    );
+  }
+
+  if (
+    status === 401 ||
+    status === 403 ||
+    /insufficient|scope|forbidden|blocked|permission|access/i.test(detail)
+  ) {
+    return new HttpError(
+      409,
+      "Reconnect Google and approve Gmail access. If this keeps failing, ask a Workspace admin to trust this app for Gmail access.",
+    );
+  }
+
+  return error;
 }
 
 async function listCompletedGoogleTasksForDate(
@@ -1135,4 +1254,102 @@ export async function syncGoogleTasks(
       activities,
     );
   });
+}
+
+export async function syncGmail(
+  userId: string,
+  dateString: string,
+  options?: SyncOptions,
+) {
+  try {
+    return await runSync("GMAIL", userId, dateString, options, async () => {
+      try {
+        const { start, end } = zonedDayRange(dateString, DEFAULT_TIMEZONE);
+        const reportDate = parseReportDate(dateString);
+        await emitSyncProgress(options, {
+          stage: "connecting",
+          message: "Connecting to Gmail...",
+        });
+        const services = await getGoogleServices(userId);
+        const query = [
+          "in:sent",
+          `after:${gmailSearchTimestamp(start)}`,
+          `before:${gmailSearchTimestamp(end)}`,
+          "-in:spam",
+          "-in:trash",
+        ].join(" ");
+
+        await emitSyncProgress(options, {
+          stage: "finding",
+          message: "Finding Gmail threads...",
+        });
+        const threadStubs = await listGmailThreads(services.gmail, { q: query });
+        const readableThreadStubs = threadStubs.filter((thread) => thread.id);
+        const threads = await mapWithConcurrency(
+          readableThreadStubs,
+          4,
+          async (thread, index) => {
+            await emitSyncProgress(options, {
+              stage: "finding",
+              message: `Reading Gmail thread ${index + 1} of ${readableThreadStubs.length}...`,
+              current: index + 1,
+              total: readableThreadStubs.length,
+            });
+
+            return getGmailThread(services.gmail, thread.id!);
+          },
+        );
+        const evidence = threads
+          .map((thread) => gmailThreadEvidence(thread, start, end))
+          .filter((thread): thread is GmailThreadEvidence => Boolean(thread));
+
+        await emitSyncProgress(options, {
+          stage: "finding",
+          message: `Classifying ${evidence.length} Gmail thread${evidence.length === 1 ? "" : "s"} with AI...`,
+          current: evidence.length,
+          total: evidence.length,
+        });
+        const extractedActivities = await extractGmailActivitiesWithAI(
+          userId,
+          dateString,
+          evidence,
+          start,
+          end,
+        );
+        const existingActivities = await prisma.activityItem.findMany({
+          where: {
+            userId,
+            reportDate,
+            OR: [{ staleAt: null }, { source: "GMAIL" }],
+          },
+          select: {
+            source: true,
+            sourceId: true,
+            sourceContainerId: true,
+            sourceUrl: true,
+            title: true,
+            description: true,
+            metadata: true,
+            staleAt: true,
+          },
+        });
+        const activities = dedupeGmailActivities(
+          extractedActivities,
+          existingActivities,
+          evidence,
+        );
+
+        await emitSyncProgress(options, {
+          stage: "saving",
+          message: `Saving ${activities.length} Gmail work item${activities.length === 1 ? "" : "s"}...`,
+        });
+
+        return upsertImportedActivities("GMAIL", userId, dateString, activities);
+      } catch (error) {
+        throw gmailImportError(error);
+      }
+    });
+  } catch (error) {
+    throw gmailImportError(error);
+  }
 }

@@ -120,6 +120,12 @@ vi.mock("@/lib/services/sync", () => ({
     staleCount: 0,
     activities: [],
   })),
+  syncGmail: vi.fn(async () => ({
+    importedCount: 0,
+    skippedCount: 0,
+    staleCount: 0,
+    activities: [],
+  })),
   searchIncompleteGoogleTasks: vi.fn(async () => []),
   addGoogleTaskReference: vi.fn(async () => ({
     id: "report-1",
@@ -380,6 +386,24 @@ describe("route contracts", () => {
     const { POST } = await import("@/app/api/sync/jira/route");
     const response = await POST(
       new Request("http://localhost/api/sync/jira", {
+        method: "POST",
+        body: JSON.stringify({ date: "2026-05-13" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      importedCount: 0,
+      skippedCount: 0,
+      staleCount: 0,
+      activities: [],
+    });
+  });
+
+  it("accepts Gmail sync requests", async () => {
+    const { POST } = await import("@/app/api/sync/gmail/route");
+    const response = await POST(
+      new Request("http://localhost/api/sync/gmail", {
         method: "POST",
         body: JSON.stringify({ date: "2026-05-13" }),
       }),

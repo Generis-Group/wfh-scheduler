@@ -1,0 +1,2 @@
+ALTER TYPE "ActivitySource" ADD VALUE 'GMAIL';
+ALTER TYPE "SyncProvider" ADD VALUE 'GMAIL';

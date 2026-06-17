@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { NormalizedActivity } from "@/lib/normalizers";
 
+vi.mock("server-only", () => ({}));
+
 const {
   mockAppSettingFindUnique,
+  mockActivityItemFindMany,
   mockActivityItemFindUnique,
   mockActivityItemUpsert,
   mockDailyReportFindUnique,
@@ -11,6 +14,8 @@ const {
   mockDailyReportUpsert,
   mockGetGoogleServices,
   mockGetJiraConnection,
+  mockExtractGmailActivitiesWithAI,
+  mockDedupeGmailActivities,
   mockReportRevisionCreate,
   mockSyncRunCreate,
   mockSyncRunUpdate,
@@ -19,6 +24,7 @@ const {
   mockUserIntegrationSettingsUpsert
 } = vi.hoisted(() => ({
   mockAppSettingFindUnique: vi.fn(),
+  mockActivityItemFindMany: vi.fn(),
   mockActivityItemFindUnique: vi.fn(),
   mockActivityItemUpsert: vi.fn(),
   mockDailyReportFindUnique: vi.fn(),
@@ -26,6 +32,8 @@ const {
   mockDailyReportUpsert: vi.fn(),
   mockGetGoogleServices: vi.fn(),
   mockGetJiraConnection: vi.fn(),
+  mockExtractGmailActivitiesWithAI: vi.fn(),
+  mockDedupeGmailActivities: vi.fn((activities) => activities),
   mockReportRevisionCreate: vi.fn(),
   mockSyncRunCreate: vi.fn(),
   mockSyncRunUpdate: vi.fn(),
@@ -46,12 +54,25 @@ vi.mock("@/lib/services/activity", () => ({
   upsertImportedActivities: mockUpsertImportedActivities
 }));
 
+vi.mock("@/lib/services/gmail-ai-import", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/gmail-ai-import")>(
+    "@/lib/services/gmail-ai-import"
+  );
+
+  return {
+    ...actual,
+    extractGmailActivitiesWithAI: mockExtractGmailActivitiesWithAI,
+    dedupeGmailActivities: mockDedupeGmailActivities
+  };
+});
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     appSetting: {
       findUnique: mockAppSettingFindUnique
     },
     activityItem: {
+      findMany: mockActivityItemFindMany,
       findUnique: mockActivityItemFindUnique,
       upsert: mockActivityItemUpsert
     },
@@ -82,6 +103,7 @@ describe("sync service pagination", () => {
     mockAppSettingFindUnique.mockResolvedValue(null);
     mockSyncRunCreate.mockResolvedValue({ id: "sync-run-1" });
     mockSyncRunUpdate.mockResolvedValue({});
+    mockActivityItemFindMany.mockResolvedValue([]);
     mockActivityItemFindUnique.mockResolvedValue(null);
     mockActivityItemUpsert.mockResolvedValue({});
     mockDailyReportFindUnique.mockResolvedValue(null);
@@ -91,6 +113,8 @@ describe("sync service pagination", () => {
       status: "DRAFT"
     });
     mockReportRevisionCreate.mockResolvedValue({});
+    mockExtractGmailActivitiesWithAI.mockResolvedValue([]);
+    mockDedupeGmailActivities.mockImplementation((activities) => activities);
     mockUpsertImportedActivities.mockResolvedValue({ importedCount: 1, skippedCount: 0, staleCount: 0 });
     mockUserFindUnique.mockResolvedValue({ email: "employee@generisgp.com" });
     mockUserIntegrationSettingsUpsert.mockResolvedValue({
@@ -1221,6 +1245,333 @@ describe("sync service pagination", () => {
           })
         })
       ])
+    );
+  });
+
+  it("imports Gmail AI work items from paginated sent threads", async () => {
+    const bodyData = Buffer.from("Drafted the client rollout follow-up.").toString("base64url");
+    const threadsList = vi.fn(async (params) => {
+      if (!params.pageToken) {
+        return {
+          data: {
+            threads: [{ id: "thread-1" }],
+            nextPageToken: "thread-page-2"
+          }
+        };
+      }
+
+      return {
+        data: {
+          threads: [{ id: "thread-2" }]
+        }
+      };
+    });
+    const threadsGet = vi.fn(async (params) => ({
+      data: {
+        id: params.id,
+        messages: [
+          {
+            id: `${params.id}-message-1`,
+            threadId: params.id,
+            internalDate: String(new Date("2026-05-14T14:00:00.000Z").getTime()),
+            payload: {
+              headers: [
+                { name: "Subject", value: "Client rollout" },
+                { name: "From", value: "Employee <employee@generisgp.com>" },
+                { name: "To", value: "Client <client@example.com>" }
+              ],
+              parts: [
+                {
+                  mimeType: "text/plain",
+                  body: { data: bodyData }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }));
+    const gmailActivity: NormalizedActivity = {
+      source: "GMAIL",
+      sourceId: "thread:thread-1:candidate:abc123",
+      sourceContainerId: "thread-1",
+      title: "Draft client rollout follow-up",
+      description: "Drafted the client rollout follow-up.",
+      selected: true,
+      metadata: {
+        importBatch: "gmail-ai-v1",
+        threadId: "thread-1",
+        messageIds: ["thread-1-message-1"]
+      }
+    };
+    mockExtractGmailActivitiesWithAI.mockResolvedValue([gmailActivity]);
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: {},
+      gmail: {
+        users: {
+          threads: {
+            list: threadsList,
+            get: threadsGet
+          }
+        }
+      },
+      tasks: {}
+    });
+
+    const { syncGmail } = await import("@/lib/services/sync");
+    await syncGmail("user-1", "2026-05-14");
+
+    expect(threadsList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pageToken: "thread-page-2",
+        q: expect.stringContaining("in:sent")
+      })
+    );
+    expect(threadsGet).toHaveBeenCalledTimes(2);
+    expect(mockExtractGmailActivitiesWithAI).toHaveBeenCalledWith(
+      "user-1",
+      "2026-05-14",
+      expect.arrayContaining([
+        expect.objectContaining({
+          threadId: "thread-1",
+          messages: expect.arrayContaining([
+            expect.objectContaining({ id: "thread-1-message-1" })
+          ])
+        })
+      ]),
+      expect.any(Date),
+      expect.any(Date)
+    );
+    expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
+      "GMAIL",
+      "user-1",
+      "2026-05-14",
+      [gmailActivity]
+    );
+  });
+
+  it("continues Gmail thread pagination beyond the first 50 sent threads", async () => {
+    const bodyData = Buffer.from("Drafted a client follow-up.").toString(
+      "base64url"
+    );
+    const firstPageThreads = Array.from({ length: 50 }, (_, index) => ({
+      id: `thread-${index + 1}`
+    }));
+    const threadsList = vi.fn(async (params) => {
+      if (!params.pageToken) {
+        return {
+          data: {
+            threads: firstPageThreads,
+            nextPageToken: "thread-page-2"
+          }
+        };
+      }
+
+      return {
+        data: {
+          threads: [{ id: "thread-51" }]
+        }
+      };
+    });
+    const threadsGet = vi.fn(async (params) => ({
+      data: {
+        id: params.id,
+        messages: [
+          {
+            id: `${params.id}-message-1`,
+            threadId: params.id,
+            internalDate: String(new Date("2026-05-14T14:00:00.000Z").getTime()),
+            payload: {
+              parts: [
+                {
+                  mimeType: "text/plain",
+                  body: { data: bodyData }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }));
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: {},
+      gmail: {
+        users: {
+          threads: {
+            list: threadsList,
+            get: threadsGet
+          }
+        }
+      },
+      tasks: {}
+    });
+
+    const { syncGmail } = await import("@/lib/services/sync");
+    await syncGmail("user-1", "2026-05-14");
+
+    expect(threadsList).toHaveBeenCalledTimes(2);
+    expect(threadsList).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        maxResults: 100,
+        pageToken: undefined
+      })
+    );
+    expect(threadsList).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        pageToken: "thread-page-2"
+      })
+    );
+    expect(threadsGet).toHaveBeenCalledTimes(51);
+  });
+
+  it("surfaces actionable Gmail permission failures", async () => {
+    const threadsList = vi.fn(async () => {
+      throw {
+        response: {
+          status: 403,
+          data: {
+            error: {
+              message: "Request had insufficient authentication scopes."
+            }
+          }
+        }
+      };
+    });
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: {},
+      gmail: {
+        users: {
+          threads: {
+            list: threadsList,
+            get: vi.fn()
+          }
+        }
+      },
+      tasks: {}
+    });
+
+    const { syncGmail } = await import("@/lib/services/sync");
+
+    await expect(syncGmail("user-1", "2026-05-14")).rejects.toThrow(
+      "Reconnect Google and approve Gmail access."
+    );
+    expect(mockSyncRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorMessage: expect.stringContaining("Reconnect Google")
+        })
+      })
+    );
+  });
+
+  it("surfaces missing Gmail migration failures before the sync run starts", async () => {
+    mockSyncRunCreate.mockRejectedValue(
+      new Error('invalid input value for enum "SyncProvider": "GMAIL"'),
+    );
+
+    const { syncGmail } = await import("@/lib/services/sync");
+
+    await expect(syncGmail("user-1", "2026-05-14")).rejects.toThrow(
+      "Gmail import needs the latest database migration.",
+    );
+    expect(mockSyncRunUpdate).not.toHaveBeenCalled();
+  });
+
+  it("stales Gmail imports when no sent threads match the day", async () => {
+    const threadsList = vi.fn(async () => ({ data: {} }));
+    const threadsGet = vi.fn();
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: {},
+      gmail: {
+        users: {
+          threads: {
+            list: threadsList,
+            get: threadsGet
+          }
+        }
+      },
+      tasks: {}
+    });
+
+    const { syncGmail } = await import("@/lib/services/sync");
+    await syncGmail("user-1", "2026-05-14");
+
+    expect(threadsGet).not.toHaveBeenCalled();
+    expect(mockExtractGmailActivitiesWithAI).toHaveBeenCalledWith(
+      "user-1",
+      "2026-05-14",
+      [],
+      expect.any(Date),
+      expect.any(Date)
+    );
+    expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
+      "GMAIL",
+      "user-1",
+      "2026-05-14",
+      []
+    );
+  });
+
+  it("records Gmail AI extraction failures on the sync run", async () => {
+    const bodyData = Buffer.from("Drafted a client follow-up.").toString(
+      "base64url"
+    );
+    const threadsList = vi.fn(async () => ({
+      data: {
+        threads: [{ id: "thread-1" }]
+      }
+    }));
+    const threadsGet = vi.fn(async () => ({
+      data: {
+        id: "thread-1",
+        messages: [
+          {
+            id: "message-1",
+            threadId: "thread-1",
+            internalDate: String(new Date("2026-05-14T14:00:00.000Z").getTime()),
+            payload: {
+              parts: [
+                {
+                  mimeType: "text/plain",
+                  body: { data: bodyData }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }));
+    mockExtractGmailActivitiesWithAI.mockRejectedValue(
+      new Error("Gemini unavailable")
+    );
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: {},
+      gmail: {
+        users: {
+          threads: {
+            list: threadsList,
+            get: threadsGet
+          }
+        }
+      },
+      tasks: {}
+    });
+
+    const { syncGmail } = await import("@/lib/services/sync");
+
+    await expect(syncGmail("user-1", "2026-05-14")).rejects.toThrow(
+      "Gemini unavailable"
+    );
+    expect(mockSyncRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorMessage: "Gemini unavailable"
+        })
+      })
     );
   });
 });

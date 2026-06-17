@@ -9,6 +9,7 @@ export type SummaryActivitySource =
   | "JIRA"
   | "GOOGLE_CALENDAR"
   | "GOOGLE_TASKS"
+  | "GMAIL"
   | "MANUAL"
   | "UNKNOWN";
 
@@ -35,6 +36,7 @@ const summaryActivitySources = new Set<SummaryActivitySource>([
   "JIRA",
   "GOOGLE_CALENDAR",
   "GOOGLE_TASKS",
+  "GMAIL",
   "MANUAL",
   "UNKNOWN",
 ]);
@@ -156,6 +158,13 @@ export function summaryActivityReferenceSource(
     lowerHref.includes("google.com/tasks")
   ) {
     return "GOOGLE_TASKS";
+  }
+
+  if (
+    lowerHref.includes("mail.google") ||
+    lowerHref.includes("google.com/mail")
+  ) {
+    return "GMAIL";
   }
 
   return "UNKNOWN";

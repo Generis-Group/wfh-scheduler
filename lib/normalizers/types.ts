@@ -11,5 +11,6 @@ export type NormalizedActivity = {
   startedAt?: Date | null;
   endedAt?: Date | null;
   durationMinutes?: number | null;
+  selected?: boolean;
   metadata?: Record<string, unknown>;
 };

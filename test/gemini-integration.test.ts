@@ -101,6 +101,9 @@ describe("Gemini integration", () => {
     for (const scope of GEMINI_OAUTH_SCOPES) {
       expect(GOOGLE_OAUTH_SCOPE).toContain(scope);
     }
+    expect(GOOGLE_OAUTH_SCOPE).toContain(
+      "https://www.googleapis.com/auth/gmail.readonly",
+    );
   });
 
   it("keeps the existing default Gemini model", () => {

@@ -109,7 +109,7 @@ function importedActivityData(
     endedAt: item.endedAt ?? null,
     durationMinutes: item.durationMinutes ?? null,
     metadata,
-    selected: existingActivity?.selected ?? true,
+    selected: existingActivity?.selected ?? item.selected ?? true,
     staleAt: null,
   };
 }

@@ -79,7 +79,12 @@ import {
 import type { SyncProgressEvent } from "@/lib/services/sync";
 import { cn } from "@/lib/utils";
 
-type ActivitySource = "JIRA" | "GOOGLE_CALENDAR" | "GOOGLE_TASKS" | "MANUAL";
+type ActivitySource =
+  | "JIRA"
+  | "GOOGLE_CALENDAR"
+  | "GOOGLE_TASKS"
+  | "GMAIL"
+  | "MANUAL";
 
 type Activity = {
   id: string;
@@ -124,6 +129,7 @@ const syncProviderLabels = {
   jira: "Jira",
   "google-calendar": "Calendar",
   "google-tasks": "Tasks",
+  gmail: "Gmail",
 } as const;
 
 const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
@@ -143,6 +149,7 @@ const syncProviderSources: Record<SyncProviderKey, ActivitySource> = {
   jira: "JIRA",
   "google-calendar": "GOOGLE_CALENDAR",
   "google-tasks": "GOOGLE_TASKS",
+  gmail: "GMAIL",
 };
 
 type ReportPayload = {
@@ -184,6 +191,8 @@ type ImportProgress = {
   provider: SyncProviderKey;
   message: string;
   stage?: SyncProgressEvent["stage"];
+  current?: number;
+  total?: number;
 };
 type SyncResponseBody = {
   importedCount: number;
@@ -456,6 +465,38 @@ function importAllResultMessage(outcomes: SyncOutcome[]) {
   }
 
   return "No work items found for this date.";
+}
+
+function importProgressPercent(progress: ImportProgress) {
+  if (progress.stage === "complete") {
+    return 100;
+  }
+
+  const hasCount =
+    typeof progress.current === "number" &&
+    typeof progress.total === "number" &&
+    progress.total > 0;
+  const countRatio = hasCount
+    ? Math.min(1, Math.max(0, progress.current! / progress.total!))
+    : 0;
+
+  if (progress.stage === "starting") {
+    return 8;
+  }
+
+  if (progress.stage === "connecting") {
+    return 18;
+  }
+
+  if (progress.stage === "finding") {
+    return Math.round(30 + countRatio * 42);
+  }
+
+  if (progress.stage === "saving") {
+    return 88;
+  }
+
+  return 12;
 }
 
 function draftPayloadSignature(reportDate: string, payload: ReportPayload) {
@@ -1402,6 +1443,8 @@ export function DailyReportApp({
                 provider,
                 stage: progress.stage,
                 message: progress.message,
+                current: progress.current,
+                total: progress.total,
               });
               return;
             }
@@ -1484,7 +1527,7 @@ export function DailyReportApp({
     const providers: SyncProviderKey[] = [
       ...(canSyncJira ? (["jira"] as const) : []),
       ...(canSyncGoogle
-        ? (["google-calendar", "google-tasks"] as const)
+        ? (["google-calendar", "google-tasks", "gmail"] as const)
         : []),
     ];
 
@@ -1680,6 +1723,9 @@ export function DailyReportApp({
   const isDeleting = busyAction === "delete";
   const isSummarizing = busyAction === "summarize";
   const isImporting = importingProvider !== null;
+  const importProgressValue = importProgress
+    ? importProgressPercent(importProgress)
+    : 0;
   const isPublishedReport = report.status === "SUBMITTED";
   const submitButtonText = isPublishedReport
     ? "Resubmit update"
@@ -1976,6 +2022,21 @@ export function DailyReportApp({
                       aria-hidden="true"
                     />
                   </Button>
+                  {importProgress ? (
+                    <div
+                      className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e6eaf2] dark:bg-[#22334d]"
+                      role="progressbar"
+                      aria-label={`${syncProviderLabels[importProgress.provider]} import progress`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={importProgressValue}
+                    >
+                      <div
+                        className="h-full rounded-full bg-[linear-gradient(90deg,#7c3aed,#2563eb,#06b6d4)] transition-[width] duration-300 ease-out"
+                        style={{ width: `${importProgressValue}%` }}
+                      />
+                    </div>
+                  ) : null}
                   {importMenuOpen ? (
                     <div className="absolute right-0 top-12 z-30 w-[min(16rem,calc(100vw-2rem))] rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
                       <button
@@ -2039,6 +2100,29 @@ export function DailyReportApp({
                       >
                         Import Google Tasks
                       </button>
+                      <button
+                        className="group flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                        disabled={!canSyncGoogle}
+                        aria-label="Import Gmail with AI"
+                        title={
+                          canSyncGoogle
+                            ? undefined
+                            : "Connect Google before importing."
+                        }
+                        onClick={() => {
+                          setImportMenuOpen(false);
+                          sync("gmail");
+                        }}
+                      >
+                        <GeminiLogo className="mr-2 h-4 w-4 shrink-0 transition-transform duration-150 group-hover:scale-110 group-hover:rotate-12" />
+                        <span className="min-w-0 truncate">Import Gmail</span>
+                        <span
+                          aria-hidden="true"
+                          className="ml-auto inline-flex h-5 shrink-0 items-center rounded-full bg-[linear-gradient(135deg,#eef2ff,#ecfeff)] px-2 text-[11px] font-semibold uppercase tracking-normal text-[#2563eb] shadow-[0_0_0_1px_rgba(37,99,235,0.16),0_6px_18px_rgba(37,99,235,0.12)] transition-shadow group-hover:shadow-[0_0_0_1px_rgba(37,99,235,0.28),0_8px_24px_rgba(37,99,235,0.2)] dark:bg-[linear-gradient(135deg,rgba(124,58,237,0.24),rgba(6,182,212,0.16))] dark:text-[#93c5fd]"
+                        >
+                          AI
+                        </span>
+                      </button>
                     </div>
                   ) : null}
                 </div>
@@ -2057,7 +2141,7 @@ export function DailyReportApp({
               {activities.length === 0 ? (
                 <EmptyReferenceState>
                   No activities yet. Add a work item or import from Jira,
-                  Calendar, or Tasks.
+                  Calendar, Tasks, or Gmail.
                 </EmptyReferenceState>
               ) : filteredActivities.length === 0 ? (
                 <EmptyReferenceState>

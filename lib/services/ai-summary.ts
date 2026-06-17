@@ -87,6 +87,10 @@ function sourceLabel(source: string) {
     return "Google Tasks";
   }
 
+  if (source === "GMAIL") {
+    return "Gmail";
+  }
+
   if (source === "JIRA") {
     return "Jira";
   }
