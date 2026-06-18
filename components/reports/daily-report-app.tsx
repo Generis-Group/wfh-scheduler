@@ -2030,12 +2030,23 @@ export function DailyReportApp({
                   <Trash2 className="mr-2 h-4 w-4 shrink-0" />
                   <span className="min-w-0 truncate">Clear</span>
                 </Button>
-                <div ref={importMenuRef} className="relative min-w-0">
+                <div
+                  ref={importMenuRef}
+                  className="relative min-w-0 min-[900px]:w-[176px]"
+                >
                   <Button
                     variant="outline"
-                    className="h-9 w-full min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] min-[900px]:w-auto"
-                    disabled={isBusy}
+                    className={cn(
+                      "relative h-9 w-full min-w-0 justify-center overflow-hidden rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-white dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] dark:disabled:text-[#64748b] dark:disabled:hover:bg-[#0f1b2a]",
+                      importProgress ? "pb-[10px] pt-2" : "py-2",
+                    )}
+                    disabled={isBusy && !isImporting}
+                    aria-disabled={isBusy}
                     onClick={() => {
+                      if (isBusy) {
+                        return;
+                      }
+
                       setOpenActivityMenu(null);
                       setImportMenuOpen((open) => !open);
                     }}
@@ -2045,7 +2056,7 @@ export function DailyReportApp({
                     ) : (
                       <Download className="mr-2 h-4 w-4 shrink-0" />
                     )}
-                    <span className="min-w-0 truncate min-[900px]:max-w-[190px]">
+                    <span className="min-w-0 truncate">
                       {importProgress
                         ? importProgress.message
                         : importingProvider
@@ -2059,22 +2070,22 @@ export function DailyReportApp({
                       )}
                       aria-hidden="true"
                     />
+                    {importProgress ? (
+                      <span
+                        className="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-[#e6eaf2] dark:bg-[#22334d]"
+                        role="progressbar"
+                        aria-label={`${syncProviderLabels[importProgress.provider]} import progress`}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={importProgressValue}
+                      >
+                        <span
+                          className="block h-full rounded-r-full bg-[linear-gradient(90deg,#7c3aed,#2563eb,#06b6d4)] transition-[width] duration-300 ease-out"
+                          style={{ width: `${importProgressValue}%` }}
+                        />
+                      </span>
+                    ) : null}
                   </Button>
-                  {importProgress ? (
-                    <div
-                      className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e6eaf2] dark:bg-[#22334d]"
-                      role="progressbar"
-                      aria-label={`${syncProviderLabels[importProgress.provider]} import progress`}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={importProgressValue}
-                    >
-                      <div
-                        className="h-full rounded-full bg-[linear-gradient(90deg,#7c3aed,#2563eb,#06b6d4)] transition-[width] duration-300 ease-out"
-                        style={{ width: `${importProgressValue}%` }}
-                      />
-                    </div>
-                  ) : null}
                   {importMenuOpen ? (
                     <div className="absolute right-0 top-12 z-30 w-[min(16rem,calc(100vw-2rem))] rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
                       <button

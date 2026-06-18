@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowLeft,
+  Building2,
   CalendarRange,
   ChevronDown,
   Clock3,
@@ -13,6 +15,7 @@ import {
   EyeOff,
   FileText,
   History,
+  Home,
   ListChecks,
   Loader2,
   Lock,
@@ -199,6 +202,21 @@ type Metrics = {
   sourceMix: Array<{ source: string; count: number }>;
 };
 
+type WorkLocationKey =
+  | "OFFICE"
+  | "WFH"
+  | "HYBRID"
+  | "PTO"
+  | "OUT_OF_OFFICE"
+  | "UNKNOWN";
+
+type WorkLocationBreakdownData = {
+  totalSubmitted: number;
+  missing: number;
+  draft: number;
+  counts: Record<WorkLocationKey, number>;
+};
+
 function toDate(value?: string | Date | null) {
   if (!value) {
     return null;
@@ -332,6 +350,87 @@ function editedAfterDate(report: DashboardReport | null, date: string) {
       );
     }),
   );
+}
+
+const workLocationLabels: Record<WorkLocationKey, string> = {
+  OFFICE: "Office",
+  WFH: "WFH",
+  HYBRID: "Hybrid",
+  PTO: "PTO",
+  OUT_OF_OFFICE: "Out of office",
+  UNKNOWN: "Unspecified",
+};
+
+const workLocationKeys = Object.keys(
+  workLocationLabels,
+) as WorkLocationKey[];
+const wfhWarningPercent = 50;
+const wfhCriticalPercent = 70;
+
+function normalizedWorkLocation(value?: string | null): WorkLocationKey {
+  return workLocationKeys.includes(value as WorkLocationKey)
+    ? (value as WorkLocationKey)
+    : "UNKNOWN";
+}
+
+function workLocationLabel(value?: string | null) {
+  return workLocationLabels[normalizedWorkLocation(value)];
+}
+
+function percentage(count: number, total: number) {
+  if (total <= 0) {
+    return 0;
+  }
+
+  return Math.round((count / total) * 100);
+}
+
+function workLocationBreakdown(rows: Row[]): WorkLocationBreakdownData {
+  const counts = Object.fromEntries(
+    workLocationKeys.map((location) => [location, 0]),
+  ) as Record<WorkLocationKey, number>;
+  let totalSubmitted = 0;
+  let missing = 0;
+  let draft = 0;
+
+  for (const row of rows) {
+    if (!row.report) {
+      missing += 1;
+      continue;
+    }
+
+    if (row.report.status !== "SUBMITTED") {
+      draft += 1;
+      continue;
+    }
+
+    totalSubmitted += 1;
+    counts[normalizedWorkLocation(row.report.workLocation)] += 1;
+  }
+
+  return {
+    totalSubmitted,
+    missing,
+    draft,
+    counts,
+  };
+}
+
+function wfhWarning(breakdown: WorkLocationBreakdownData) {
+  const percent = percentage(
+    breakdown.counts.WFH,
+    breakdown.totalSubmitted,
+  );
+
+  if (breakdown.totalSubmitted === 0 || percent < wfhWarningPercent) {
+    return null;
+  }
+
+  return {
+    percent,
+    label: percent >= wfhCriticalPercent ? "High WFH" : "WFH watch",
+    tone: percent >= wfhCriticalPercent ? "red" : "yellow",
+  } as const;
 }
 
 function includedActivities(report: DashboardReport | null) {
@@ -545,7 +644,7 @@ function flagSortLabel(row: Row, date: string) {
 }
 
 function locationSortLabel(row: Row) {
-  return row.report ? titleCase(row.report.workLocation) : "";
+  return row.report ? workLocationLabel(row.report.workLocation) : "";
 }
 
 function compareEmployeeRows(
@@ -915,6 +1014,10 @@ export function ReviewerDashboard({
         compareEmployeeRows(first, second, date, sortState),
       );
   }, [date, departmentFilter, items, search, sortState, statusFilter]);
+  const locationBreakdown = useMemo(
+    () => workLocationBreakdown(filteredItems),
+    [filteredItems],
+  );
   const employeePageCount = Math.max(
     1,
     Math.ceil(filteredItems.length / employeePageSize),
@@ -1135,7 +1238,7 @@ export function ReviewerDashboard({
       status: reportStatus(row, date),
       workLocation:
         canReviewReport(row) && row.report
-          ? titleCase(row.report.workLocation)
+          ? workLocationLabel(row.report.workLocation)
           : "",
       submittedAt: formatTimestamp(row.report?.submittedAt),
       lastEdited: canReviewReport(row)
@@ -1797,6 +1900,7 @@ export function ReviewerDashboard({
                 </Button>
               </div>
             </div>
+            <WorkLocationBreakdown breakdown={locationBreakdown} />
           </ReportSurface>
 
           <ReportSurface
@@ -2087,7 +2191,7 @@ export function ReviewerDashboard({
                           </td>
                           <td className="hidden px-2 py-2.5 text-xs min-[980px]:table-cell">
                             {canReview && row.report
-                              ? titleCase(row.report.workLocation)
+                              ? workLocationLabel(row.report.workLocation)
                               : "-"}
                           </td>
                           <td className="hidden px-2 py-2.5 text-xs min-[700px]:table-cell">
@@ -2313,6 +2417,172 @@ function setLocalReadReceipt(
       },
     };
   });
+}
+
+type LocationMetricTone =
+  | "blue"
+  | "green"
+  | "purple"
+  | "yellow"
+  | "red"
+  | "neutral";
+
+function LocationMetric({
+  icon,
+  label,
+  count,
+  total,
+  tone,
+}: {
+  icon: ReactNode;
+  label: string;
+  count: number;
+  total: number;
+  tone: LocationMetricTone;
+}) {
+  const percent = percentage(count, total);
+  const toneClass = {
+    blue: "bg-[#f4f8ff] text-[#1d4ed8] ring-[#dbe7f5] dark:bg-blue-400/10 dark:text-blue-100 dark:ring-blue-300/15",
+    green:
+      "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-300/15",
+    purple:
+      "bg-[#f8f3ff] text-[#7c3aed] ring-[#eadcff] dark:bg-purple-400/10 dark:text-purple-100 dark:ring-purple-300/15",
+    yellow:
+      "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-300/20",
+    red: "bg-[#fff5f5] text-[#dc2626] ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15",
+    neutral:
+      "bg-[#f8fafc] text-[#475467] ring-[#e5eaf2] dark:bg-white/[0.04] dark:text-muted-foreground dark:ring-[#263a55]",
+  }[tone];
+
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 items-center justify-between gap-3 rounded-[8px] px-3 py-2.5 ring-1",
+        toneClass,
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/70 [&_svg]:h-4 [&_svg]:w-4 dark:bg-white/10"
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-semibold">{label}</p>
+          <p className="text-[11px] font-medium opacity-80">
+            {total > 0 ? `${percent}%` : "No submitted"}
+          </p>
+        </div>
+      </div>
+      <div className="shrink-0 text-xl font-semibold leading-none">{count}</div>
+    </div>
+  );
+}
+
+function WorkLocationBreakdown({
+  breakdown,
+}: {
+  breakdown: WorkLocationBreakdownData;
+}) {
+  const warning = wfhWarning(breakdown);
+  const wfhTone: LocationMetricTone =
+    warning?.tone === "red"
+      ? "red"
+      : warning?.tone === "yellow"
+        ? "yellow"
+        : "green";
+  const submittedLabel =
+    breakdown.totalSubmitted === 1
+      ? "1 submitted report"
+      : `${breakdown.totalSubmitted} submitted reports`;
+  const excludedLabels = [
+    breakdown.draft
+      ? `${breakdown.draft} draft${breakdown.draft === 1 ? "" : "s"}`
+      : null,
+    breakdown.missing
+      ? `${breakdown.missing} missing`
+      : null,
+  ].filter(Boolean);
+  const secondaryLocations = (
+    ["PTO", "OUT_OF_OFFICE", "UNKNOWN"] as WorkLocationKey[]
+  ).filter((location) => breakdown.counts[location] > 0);
+
+  return (
+    <section
+      aria-label="Work location breakdown"
+      className="mt-3 border-t border-[#e5eaf2] pt-3 dark:border-[#263a55]"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-[#101828] dark:text-foreground">
+            Work location breakdown
+          </h3>
+          <p className="mt-0.5 text-xs text-[#64748b] dark:text-muted-foreground">
+            {submittedLabel} in the current view
+          </p>
+        </div>
+        {warning ? (
+          <span
+            className={cn(
+              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold ring-1",
+              warning.tone === "red"
+                ? "bg-[#fff5f5] text-[#dc2626] ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15"
+                : "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-300/20",
+            )}
+          >
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            {warning.label}
+            <span className="font-bold">{warning.percent}% WFH</span>
+          </span>
+        ) : (
+          <span className="inline-flex h-8 shrink-0 items-center rounded-full bg-[#f8fafc] px-3 text-xs font-semibold text-[#64748b] ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:text-muted-foreground dark:ring-[#263a55]">
+            No WFH warning
+          </span>
+        )}
+      </div>
+      <div className="mt-3 grid gap-2 min-[640px]:grid-cols-3">
+        <LocationMetric
+          icon={<Building2 />}
+          label={workLocationLabels.OFFICE}
+          count={breakdown.counts.OFFICE}
+          total={breakdown.totalSubmitted}
+          tone="blue"
+        />
+        <LocationMetric
+          icon={<Home />}
+          label={workLocationLabels.WFH}
+          count={breakdown.counts.WFH}
+          total={breakdown.totalSubmitted}
+          tone={wfhTone}
+        />
+        <LocationMetric
+          icon={<MapPin />}
+          label={workLocationLabels.HYBRID}
+          count={breakdown.counts.HYBRID}
+          total={breakdown.totalSubmitted}
+          tone="purple"
+        />
+      </div>
+      {secondaryLocations.length > 0 || excludedLabels.length > 0 ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#64748b] dark:text-muted-foreground">
+          {secondaryLocations.map((location) => (
+            <span
+              key={location}
+              className="inline-flex h-7 items-center rounded-full bg-[#f8fafc] px-2.5 font-semibold ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
+            >
+              {workLocationLabels[location]}: {breakdown.counts[location]}
+            </span>
+          ))}
+          {excludedLabels.length > 0 ? (
+            <span className="font-medium">
+              Not counted: {excludedLabels.join(", ")}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 function CompactMetric({
@@ -2573,7 +2843,7 @@ function WeeklyReportDayCard({
           <WeeklyDayMeta
             icon={<MapPin />}
             label="Location"
-            value={report ? titleCase(report.workLocation) : "-"}
+            value={report ? workLocationLabel(report.workLocation) : "-"}
           />
           <WeeklyDayMeta
             icon={<Clock3 />}
@@ -3014,7 +3284,7 @@ function ReportReviewPage({
         { label: "Department", value: userDepartmentLabel(row.user) },
         {
           label: "Location",
-          value: report ? titleCase(report.workLocation) : "-",
+          value: report ? workLocationLabel(report.workLocation) : "-",
         },
         { label: "Submitted", value: formatTimestamp(report?.submittedAt) },
         { label: "Last updated", value: formatTimestamp(report?.updatedAt) },

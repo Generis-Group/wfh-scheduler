@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -60,6 +61,70 @@ afterEach(() => {
 });
 
 describe("ReviewerDashboard weekly reports", () => {
+  it("shows a filtered work location breakdown with WFH warnings", () => {
+    const wfhReport = {
+      ...submittedReport,
+      id: "report-wfh-1",
+      workLocation: "WFH",
+    };
+    const officeReport = {
+      ...submittedReport,
+      id: "report-office",
+      workLocation: "OFFICE",
+    };
+    const draftReport = {
+      ...submittedReport,
+      id: "report-draft",
+      status: "DRAFT" as const,
+      workLocation: "OFFICE",
+      submittedAt: null,
+    };
+
+    render(
+      <ReviewerDashboard
+        rows={[
+          { user: employee, report: wfhReport },
+          {
+            user: { ...employee, id: "employee-2", name: "Bri WFH" },
+            report: { ...wfhReport, id: "report-wfh-2" },
+          },
+          {
+            user: { ...employee, id: "employee-3", name: "Cam WFH" },
+            report: { ...wfhReport, id: "report-wfh-3" },
+          },
+          {
+            user: { ...employee, id: "employee-4", name: "Dev Office" },
+            report: officeReport,
+          },
+          {
+            user: { ...employee, id: "employee-5", name: "Eli Draft" },
+            report: draftReport,
+          },
+          {
+            user: { ...employee, id: "employee-6", name: "Fin Missing" },
+            report: null,
+          },
+        ]}
+        metrics={{ ...metrics, users: 6, submitted: 4 }}
+        date="2026-05-13"
+        reviewerId="reviewer-1"
+      />,
+    );
+
+    const breakdown = screen.getByLabelText("Work location breakdown");
+
+    expect(
+      within(breakdown).getByText("4 submitted reports in the current view"),
+    ).toBeTruthy();
+    expect(within(breakdown).getByText("High WFH")).toBeTruthy();
+    expect(within(breakdown).getByText("75% WFH")).toBeTruthy();
+    expect(within(breakdown).getByText("Office")).toBeTruthy();
+    expect(within(breakdown).getByText("25%")).toBeTruthy();
+    expect(
+      within(breakdown).getByText("Not counted: 1 draft, 1 missing"),
+    ).toBeTruthy();
+  });
+
   it("uses one consistent action button layout for submitted and missing rows", () => {
     vi.stubGlobal(
       "fetch",
