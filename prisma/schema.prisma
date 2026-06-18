@@ -160,6 +160,18 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+model PendingSignup {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String   @db.Text
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
 model UserIntegrationSettings {
   id                String   @id @default(cuid())
   userId            String   @unique

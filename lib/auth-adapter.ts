@@ -1,7 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import type { Adapter, AdapterAccount } from "next-auth/adapters";
+import type {
+  Adapter,
+  AdapterAccount,
+  AdapterUser,
+} from "next-auth/adapters";
 
+import { isGenerisEmail, normalizeEmail } from "@/lib/auth-domain";
 import { encryptSecret } from "@/lib/crypto";
 
 function encryptAccountTokens(account: AdapterAccount): AdapterAccount {
@@ -18,6 +23,26 @@ export function encryptedPrismaAdapter(prisma: PrismaClient): Adapter {
 
   return {
     ...adapter,
+    async createUser(user: Omit<AdapterUser, "id">) {
+      const email = normalizeEmail(user.email);
+
+      if (!email || !isGenerisEmail(email)) {
+        throw new Error("Only Generis email addresses can create accounts.");
+      }
+
+      return prisma.user.create({
+        data: {
+          name: user.name,
+          email,
+          emailVerified: user.emailVerified ?? new Date(),
+          image: user.image,
+          role: "EMPLOYEE",
+          roles: ["EMPLOYEE"],
+          status: "ACTIVE",
+          mustChangePassword: false
+        }
+      });
+    },
     async linkAccount(account: AdapterAccount) {
       if (!adapter.linkAccount) {
         return null;

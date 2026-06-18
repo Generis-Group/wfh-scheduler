@@ -73,3 +73,93 @@ export async function sendTemporaryPasswordEmail({
     text,
   });
 }
+
+export async function sendSignupVerificationEmail({
+  user,
+  verificationUrl,
+}: {
+  user: AccountEmailUser;
+  verificationUrl: string;
+}) {
+  if (!user.email) {
+    return {
+      status: "SKIPPED" as const,
+      reason: "User does not have an email address.",
+    };
+  }
+
+  const email = user.email;
+  const name = user.name?.trim() || email;
+  const text = [
+    `Hi ${name},`,
+    "",
+    "Verify your Generis Reports account to finish signing up.",
+    "",
+    verificationUrl,
+    "",
+    "If you did not request this account, you can ignore this email.",
+  ].join("\n");
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.5;">
+      <h1 style="font-size: 20px; margin: 0 0 12px;">Generis Reports</h1>
+      <p style="margin: 0 0 14px;">Hi ${escapeHtml(name)},</p>
+      <p style="margin: 0 0 18px;">Verify your Generis Reports account to finish signing up.</p>
+      <p style="margin: 0 0 20px;">
+        <a href="${escapeAttribute(verificationUrl)}" style="display: inline-block; background: #2563eb; color: #ffffff; padding: 10px 14px; border-radius: 6px; text-decoration: none; font-weight: 600;">Verify account</a>
+      </p>
+      <p style="margin: 0; color: #64748b; font-size: 13px;">If you did not request this account, you can ignore this email.</p>
+    </div>
+  `;
+
+  return trySendEmail({
+    to: email,
+    subject: "Verify your Generis Reports account",
+    html,
+    text,
+  });
+}
+
+export async function sendPasswordResetEmail({
+  user,
+  resetUrl,
+}: {
+  user: AccountEmailUser;
+  resetUrl: string;
+}) {
+  if (!user.email) {
+    return {
+      status: "SKIPPED" as const,
+      reason: "User does not have an email address.",
+    };
+  }
+
+  const email = user.email;
+  const name = user.name?.trim() || email;
+  const text = [
+    `Hi ${name},`,
+    "",
+    "Reset your Generis Reports password using this link:",
+    "",
+    resetUrl,
+    "",
+    "If you did not request this reset, you can ignore this email.",
+  ].join("\n");
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.5;">
+      <h1 style="font-size: 20px; margin: 0 0 12px;">Generis Reports</h1>
+      <p style="margin: 0 0 14px;">Hi ${escapeHtml(name)},</p>
+      <p style="margin: 0 0 18px;">Reset your Generis Reports password using this link.</p>
+      <p style="margin: 0 0 20px;">
+        <a href="${escapeAttribute(resetUrl)}" style="display: inline-block; background: #2563eb; color: #ffffff; padding: 10px 14px; border-radius: 6px; text-decoration: none; font-weight: 600;">Reset password</a>
+      </p>
+      <p style="margin: 0; color: #64748b; font-size: 13px;">If you did not request this reset, you can ignore this email.</p>
+    </div>
+  `;
+
+  return trySendEmail({
+    to: email,
+    subject: "Reset your Generis Reports password",
+    html,
+    text,
+  });
+}

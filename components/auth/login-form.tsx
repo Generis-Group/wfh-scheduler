@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { LogIn } from "lucide-react";
+import { KeyRound, LogIn, Mail, UserPlus } from "lucide-react";
 import { signIn } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
@@ -24,15 +24,24 @@ const oauthButtonClassName =
 
 export function LoginForm({
   oauthConfig,
+  notice,
 }: {
   oauthConfig: OAuthProviderConfig;
+  notice?: string | null;
 }) {
+  const [mode, setMode] = useState<"signin" | "signup" | "reset">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [newAccountPassword, setNewAccountPassword] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
+  const feedback = error ?? (noticeDismissed ? null : notice) ?? null;
+
+  async function submitSignIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
     setError(null);
@@ -60,64 +69,257 @@ export function LoginForm({
     window.location.href = result?.url ?? "/";
   }
 
+  async function submitSignup(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+
+    if (!isGenerisEmail(email)) {
+      setError(generisEmailMessage());
+      setIsSubmitting(false);
+      return;
+    }
+
+    const response = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        name: name.trim() || undefined,
+        password: newAccountPassword,
+      }),
+    });
+
+    setIsSubmitting(false);
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      setError(body?.error ?? "Unable to start signup.");
+      return;
+    }
+
+    setMode("signin");
+    setPassword("");
+    setNewAccountPassword("");
+    setError("Check your email to verify your account.");
+  }
+
+  async function submitResetRequest(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+
+    if (!isGenerisEmail(resetEmail)) {
+      setError(generisEmailMessage());
+      setIsSubmitting(false);
+      return;
+    }
+
+    const response = await fetch("/api/auth/password-reset/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: resetEmail }),
+    });
+
+    setIsSubmitting(false);
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      setError(body?.error ?? "Unable to send reset email.");
+      return;
+    }
+
+    setMode("signin");
+    setError("If an active account exists, a reset link has been sent.");
+  }
+
+  const title =
+    mode === "signup"
+      ? "Create account"
+      : mode === "reset"
+        ? "Reset password"
+        : "Welcome back";
+  const description =
+    mode === "signup"
+      ? "Use your @generisgp.com email. Your account is created after email verification."
+      : mode === "reset"
+        ? "Enter your Generis email and we will send a reset link."
+        : "Sign in with your @generisgp.com account to review activity and submit reports.";
+
   return (
     <>
       <Card className="w-full max-w-md shadow-[var(--surface-shadow-strong)]">
         <CardHeader className="space-y-2 px-5 pt-5 text-center">
           <CardTitle className="text-[26px] font-semibold tracking-normal text-[#111827] dark:text-foreground">
-            Welcome back
+            {title}
           </CardTitle>
-          <CardDescription>
-            Sign in with your @generisgp.com account to review activity and
-            submit reports.
-          </CardDescription>
+          <CardDescription>{description}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 px-5 pb-5">
-          <form className="space-y-4" onSubmit={submit}>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                placeholder="name@generisgp.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </div>
-            <Button className="w-full" disabled={isSubmitting}>
-              <LogIn className="mr-2 h-4 w-4" />
-              {isSubmitting ? "Signing in..." : "Sign in"}
-            </Button>
-          </form>
-          <div className="space-y-2">
-            <OAuthSignInButton
-              disabled={!oauthConfig.google}
-              icon={<GoogleLogo className="h-[18px] w-[18px] shrink-0" />}
-              label="Sign in with Google"
-              provider="google"
-              unavailableLabel="Google OAuth is not configured"
-            />
-            <OAuthSignInButton
-              disabled={!oauthConfig.atlassian}
-              icon={<AtlassianLogo className="h-[18px] w-[18px] shrink-0" />}
-              label="Sign in with Atlassian"
-              provider="atlassian"
-              unavailableLabel="Atlassian OAuth is not configured"
-            />
-          </div>
+          {mode === "signin" ? (
+            <>
+              <form className="space-y-4" onSubmit={submitSignIn}>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="name@generisgp.com"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    required
+                  />
+                </div>
+                <Button className="w-full" disabled={isSubmitting}>
+                  <LogIn className="mr-2 h-4 w-4" />
+                  {isSubmitting ? "Signing in..." : "Sign in"}
+                </Button>
+              </form>
+              <div className="space-y-2">
+                <OAuthSignInButton
+                  disabled={!oauthConfig.google}
+                  icon={<GoogleLogo className="h-[18px] w-[18px] shrink-0" />}
+                  label="Sign in with Google"
+                  provider="google"
+                  unavailableLabel="Google OAuth is not configured"
+                />
+                <OAuthSignInButton
+                  disabled={!oauthConfig.atlassian}
+                  icon={
+                    <AtlassianLogo className="h-[18px] w-[18px] shrink-0" />
+                  }
+                  label="Sign in with Atlassian"
+                  provider="atlassian"
+                  unavailableLabel="Atlassian OAuth is not configured"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => {
+                    setError(null);
+                    setMode("signup");
+                  }}
+                >
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Sign up
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => {
+                    setError(null);
+                    setResetEmail(email);
+                    setMode("reset");
+                  }}
+                >
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  Forgot password
+                </Button>
+              </div>
+            </>
+          ) : null}
+          {mode === "signup" ? (
+            <form className="space-y-4" onSubmit={submitSignup}>
+              <div className="space-y-2">
+                <Label htmlFor="signupName">Name</Label>
+                <Input
+                  id="signupName"
+                  type="text"
+                  autoComplete="name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="signupEmail">Email</Label>
+                <Input
+                  id="signupEmail"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="name@generisgp.com"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="signupPassword">Password</Label>
+                <Input
+                  id="signupPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  value={newAccountPassword}
+                  onChange={(event) =>
+                    setNewAccountPassword(event.target.value)
+                  }
+                  required
+                />
+              </div>
+              <Button className="w-full" disabled={isSubmitting}>
+                <Mail className="mr-2 h-4 w-4" />
+                {isSubmitting ? "Sending verification..." : "Verify email"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setError(null);
+                  setMode("signin");
+                }}
+              >
+                Back to sign in
+              </Button>
+            </form>
+          ) : null}
+          {mode === "reset" ? (
+            <form className="space-y-4" onSubmit={submitResetRequest}>
+              <div className="space-y-2">
+                <Label htmlFor="resetEmail">Email</Label>
+                <Input
+                  id="resetEmail"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="name@generisgp.com"
+                  value={resetEmail}
+                  onChange={(event) => setResetEmail(event.target.value)}
+                  required
+                />
+              </div>
+              <Button className="w-full" disabled={isSubmitting}>
+                <Mail className="mr-2 h-4 w-4" />
+                {isSubmitting ? "Sending..." : "Send reset link"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setError(null);
+                  setMode("signin");
+                }}
+              >
+                Back to sign in
+              </Button>
+            </form>
+          ) : null}
           <p className="rounded-[8px] bg-[#f6f8fb] px-3 py-2 text-xs font-medium text-[#667085] dark:bg-white/[0.035] dark:text-muted-foreground">
             Only @generisgp.com accounts can sign in.
           </p>
@@ -128,7 +330,13 @@ export function LoginForm({
           ) : null}
         </CardContent>
       </Card>
-      <FixedToast message={error} onDismiss={() => setError(null)} />
+      <FixedToast
+        message={feedback}
+        onDismiss={() => {
+          setError(null);
+          setNoticeDismissed(true);
+        }}
+      />
     </>
   );
 }

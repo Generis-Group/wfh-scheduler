@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import type { UserStatus } from "@prisma/client";
 import type { NextAuthOptions } from "next-auth";
 import { getServerSession } from "next-auth";
 import AtlassianProvider from "next-auth/providers/atlassian";
@@ -32,6 +33,45 @@ function profileEmail(profile: unknown) {
   const email = (profile as { email?: unknown }).email;
 
   return typeof email === "string" ? normalizeEmail(email) : "";
+}
+
+function profileEmailVerified(provider: string | undefined, profile: unknown) {
+  if (!profile || typeof profile !== "object") {
+    return false;
+  }
+
+  const explicitVerification = (profile as { email_verified?: unknown })
+    .email_verified;
+
+  if (explicitVerification !== undefined) {
+    return explicitVerification === true || explicitVerification === "true";
+  }
+
+  return provider === "atlassian" && Boolean(profileEmail(profile));
+}
+
+async function activateOAuthUser(user: {
+  id: string;
+  status: UserStatus;
+  emailVerified?: Date | null;
+  mustChangePassword?: boolean | null;
+}) {
+  if (
+    user.status !== "INVITED" &&
+    user.emailVerified &&
+    !user.mustChangePassword
+  ) {
+    return;
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      status: user.status === "INVITED" ? "ACTIVE" : user.status,
+      emailVerified: user.emailVerified ?? new Date(),
+      mustChangePassword: false
+    }
+  });
 }
 
 export const authOptions: NextAuthOptions = {
@@ -130,6 +170,10 @@ export const authOptions: NextAuthOptions = {
         return false;
       }
 
+      if (!profileEmailVerified(account?.provider, profile)) {
+        return false;
+      }
+
       if (account?.provider && account.providerAccountId) {
         const linkedAccount = await prisma.account.findUnique({
           where: {
@@ -140,24 +184,56 @@ export const authOptions: NextAuthOptions = {
           },
           select: {
             user: {
-              select: { email: true, status: true }
+              select: {
+                id: true,
+                email: true,
+                status: true,
+                emailVerified: true,
+                mustChangePassword: true
+              }
             }
           }
         });
 
         if (linkedAccount) {
           const linkedEmail = normalizeEmail(linkedAccount.user.email);
+          const canSignIn =
+            linkedAccount.user.status !== "DISABLED" &&
+            linkedEmail === oauthEmail &&
+            isGenerisEmail(linkedEmail);
 
-          return linkedAccount.user.status !== "DISABLED" && linkedEmail === oauthEmail && isGenerisEmail(linkedEmail);
+          if (canSignIn) {
+            await activateOAuthUser(linkedAccount.user);
+          }
+
+          return canSignIn;
         }
       }
 
       const invitedUser = await prisma.user.findUnique({
         where: { email: oauthEmail },
-        select: { email: true, status: true }
+        select: {
+          id: true,
+          email: true,
+          status: true,
+          emailVerified: true,
+          mustChangePassword: true
+        }
       });
 
-      return Boolean(invitedUser && invitedUser.status !== "DISABLED" && normalizeEmail(invitedUser.email) === oauthEmail);
+      if (!invitedUser) {
+        return true;
+      }
+
+      const canSignIn =
+        invitedUser.status !== "DISABLED" &&
+        normalizeEmail(invitedUser.email) === oauthEmail;
+
+      if (canSignIn) {
+        await activateOAuthUser(invitedUser);
+      }
+
+      return canSignIn;
     },
     async jwt({ token, user }) {
       const userId = user?.id ?? token.userId;

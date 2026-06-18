@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Profile } from "next-auth";
 
-const { accountFindUnique, userFindUnique } = vi.hoisted(() => ({
+const { accountFindUnique, userFindUnique, userUpdate } = vi.hoisted(() => ({
   accountFindUnique: vi.fn(),
-  userFindUnique: vi.fn()
+  userFindUnique: vi.fn(),
+  userUpdate: vi.fn()
 }));
 
 vi.mock("@/lib/auth-adapter", () => ({
@@ -24,7 +26,8 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: accountFindUnique
     },
     user: {
-      findUnique: userFindUnique
+      findUnique: userFindUnique,
+      update: userUpdate
     }
   }
 }));
@@ -34,17 +37,26 @@ import { authOptions } from "@/lib/auth";
 async function runOAuthSignIn({
   profileEmail,
   provider = "google",
-  userEmail = "employee@generisgp.com"
+  userEmail = "employee@generisgp.com",
+  emailVerified = true,
 }: {
   profileEmail?: string;
   provider?: "google" | "atlassian";
   userEmail?: string | null;
+  emailVerified?: boolean;
 }) {
   const callback = authOptions.callbacks?.signIn;
 
   if (!callback) {
     throw new Error("Missing signIn callback.");
   }
+
+  const profile =
+    profileEmail === undefined
+      ? undefined
+      : ((provider === "google"
+          ? { email: profileEmail, email_verified: emailVerified }
+          : { email: profileEmail }) as unknown as Profile);
 
   return callback({
     account: {
@@ -61,7 +73,7 @@ async function runOAuthSignIn({
       status: "ACTIVE",
       mustChangePassword: false
     },
-    profile: profileEmail === undefined ? undefined : { email: profileEmail }
+    profile
   });
 }
 
@@ -69,22 +81,44 @@ beforeEach(() => {
   vi.clearAllMocks();
   accountFindUnique.mockResolvedValue(null);
   userFindUnique.mockResolvedValue(null);
+  userUpdate.mockResolvedValue({});
 });
 
 describe("auth OAuth sign-in", () => {
   it("allows an admin-created Generis user whose provider email matches", async () => {
-    userFindUnique.mockResolvedValue({ email: "employee@generisgp.com", status: "ACTIVE" });
+    userFindUnique.mockResolvedValue({
+      id: "user-1",
+      email: "employee@generisgp.com",
+      status: "ACTIVE",
+      emailVerified: new Date("2026-01-01T00:00:00.000Z"),
+      mustChangePassword: false
+    });
 
     await expect(runOAuthSignIn({ profileEmail: "Employee@GenerisGP.com" })).resolves.toBe(true);
 
     expect(userFindUnique).toHaveBeenCalledWith({
       where: { email: "employee@generisgp.com" },
-      select: { email: true, status: true }
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        emailVerified: true,
+        mustChangePassword: true
+      }
     });
   });
 
-  it("blocks OAuth sign-in when the admin has not created the user", async () => {
-    await expect(runOAuthSignIn({ profileEmail: "employee@generisgp.com" })).resolves.toBe(false);
+  it("allows a verified Generis OAuth user when the admin has not created the user", async () => {
+    await expect(runOAuthSignIn({ profileEmail: "employee@generisgp.com" })).resolves.toBe(true);
+  });
+
+  it("allows a Generis Atlassian OAuth user when the admin has not created the user", async () => {
+    await expect(
+      runOAuthSignIn({
+        profileEmail: "employee@generisgp.com",
+        provider: "atlassian",
+      }),
+    ).resolves.toBe(true);
   });
 
   it("blocks OAuth sign-in for non-Generis provider emails before account lookup", async () => {
@@ -101,9 +135,27 @@ describe("auth OAuth sign-in", () => {
     expect(userFindUnique).not.toHaveBeenCalled();
   });
 
+  it("blocks new Google OAuth sign-in when the provider email is not verified", async () => {
+    await expect(
+      runOAuthSignIn({
+        profileEmail: "employee@generisgp.com",
+        emailVerified: false
+      }),
+    ).resolves.toBe(false);
+
+    expect(accountFindUnique).not.toHaveBeenCalled();
+    expect(userFindUnique).not.toHaveBeenCalled();
+  });
+
   it("allows a linked OAuth account only when the provider email matches the app user", async () => {
     accountFindUnique.mockResolvedValue({
-      user: { email: "employee@generisgp.com", status: "ACTIVE" }
+      user: {
+        id: "user-1",
+        email: "employee@generisgp.com",
+        status: "ACTIVE",
+        emailVerified: new Date("2026-01-01T00:00:00.000Z"),
+        mustChangePassword: false
+      }
     });
 
     await expect(runOAuthSignIn({ profileEmail: "employee@generisgp.com" })).resolves.toBe(true);
@@ -111,7 +163,13 @@ describe("auth OAuth sign-in", () => {
 
   it("blocks a linked OAuth account when the provider email differs from the app user", async () => {
     accountFindUnique.mockResolvedValue({
-      user: { email: "employee@generisgp.com", status: "ACTIVE" }
+      user: {
+        id: "user-1",
+        email: "employee@generisgp.com",
+        status: "ACTIVE",
+        emailVerified: new Date("2026-01-01T00:00:00.000Z"),
+        mustChangePassword: false
+      }
     });
 
     await expect(runOAuthSignIn({ profileEmail: "other@generisgp.com" })).resolves.toBe(false);
@@ -121,9 +179,36 @@ describe("auth OAuth sign-in", () => {
 
   it("blocks a linked OAuth account for disabled app users", async () => {
     accountFindUnique.mockResolvedValue({
-      user: { email: "employee@generisgp.com", status: "DISABLED" }
+      user: {
+        id: "user-1",
+        email: "employee@generisgp.com",
+        status: "DISABLED",
+        emailVerified: new Date("2026-01-01T00:00:00.000Z"),
+        mustChangePassword: false
+      }
     });
 
     await expect(runOAuthSignIn({ profileEmail: "employee@generisgp.com", provider: "atlassian" })).resolves.toBe(false);
+  });
+
+  it("activates an invited app user after verified OAuth sign-in", async () => {
+    userFindUnique.mockResolvedValue({
+      id: "user-1",
+      email: "employee@generisgp.com",
+      status: "INVITED",
+      emailVerified: null,
+      mustChangePassword: true
+    });
+
+    await expect(runOAuthSignIn({ profileEmail: "employee@generisgp.com" })).resolves.toBe(true);
+
+    expect(userUpdate).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: {
+        status: "ACTIVE",
+        emailVerified: expect.any(Date),
+        mustChangePassword: false
+      }
+    });
   });
 });

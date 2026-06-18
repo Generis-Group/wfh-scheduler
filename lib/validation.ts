@@ -106,6 +106,22 @@ export const resetPasswordSchema = z.object({
   temporaryPassword: z.string().min(8).optional(),
 });
 
+export const signupSchema = z.object({
+  email: z.string().email().refine(isGenerisEmail, generisEmailMessage()),
+  name: z.string().min(1).max(200).optional(),
+  password: z.string().min(8).max(200),
+});
+
+export const passwordResetRequestSchema = z.object({
+  email: z.string().email().refine(isGenerisEmail, generisEmailMessage()),
+});
+
+export const passwordResetConfirmSchema = z.object({
+  email: z.string().email().refine(isGenerisEmail, generisEmailMessage()),
+  token: z.string().min(24).max(300),
+  password: z.string().min(8).max(200),
+});
+
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(8).max(200),

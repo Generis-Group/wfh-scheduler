@@ -7,7 +7,27 @@ import { auth } from "@/lib/auth";
 import { getOAuthProviderConfig } from "@/lib/oauth-config";
 import generisLogo from "@/images/Generis_logo.png";
 
-export default async function LoginPage() {
+function loginNotice(searchParams?: Record<string, string | string[] | undefined>) {
+  if (searchParams?.verified === "1") {
+    return "Email verified. You can sign in now.";
+  }
+
+  if (searchParams?.reset === "1") {
+    return "Password updated. You can sign in now.";
+  }
+
+  if (searchParams?.signupError) {
+    return "That verification link is invalid or expired.";
+  }
+
+  return null;
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const session = await auth();
 
   if (session?.user?.status === "DISABLED") {
@@ -38,7 +58,10 @@ export default async function LoginPage() {
             <ThemeToggle />
           </div>
         </div>
-        <LoginForm oauthConfig={getOAuthProviderConfig()} />
+        <LoginForm
+          oauthConfig={getOAuthProviderConfig()}
+          notice={loginNotice(searchParams)}
+        />
       </div>
     </main>
   );
