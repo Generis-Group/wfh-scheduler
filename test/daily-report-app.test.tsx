@@ -1600,6 +1600,56 @@ describe("DailyReportApp drafts", () => {
     expect(requestBody.deletedActivityIds).toEqual(["task-manual"]);
   });
 
+  it("clears all work items and matching summary references from the report", async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({
+          report: {
+            ...savedDraft,
+            summary: "",
+            activities: [],
+          },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp({
+      ...savedDraft,
+      summary:
+        "[Draft rollout plan](https://generis.local/activity/task-manual?source=GOOGLE_TASKS)\n[IT-3027: Improve website loading speed and performance](https://generis.local/activity/jira-linked?source=JIRA)",
+      activities: [manualGoogleTask, linkedJiraTask],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear work items" }));
+
+    expect(screen.queryByText("Draft rollout plan")).toBeNull();
+    expect(screen.queryByText(linkedJiraTask.title)).toBeNull();
+    expect(
+      (screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement)
+        .value,
+    ).toBe("");
+    expect(screen.getByText("Work items cleared.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/reports/report-1",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
+
+    const requestBody = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    );
+    expect(requestBody.activityUpdates).toEqual([]);
+    expect(requestBody.manualActivities).toEqual([]);
+    expect(requestBody.deletedActivityIds).toEqual(
+      expect.arrayContaining(["task-manual", "jira-linked"]),
+    );
+    expect(requestBody.deletedActivityIds).toHaveLength(2);
+  });
+
   it("keeps summary reference removals made before the lazy editor mounts", async () => {
     mockLazySummaryEditorMounted.current = false;
     const fetchMock = vi.fn(

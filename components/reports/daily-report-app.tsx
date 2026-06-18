@@ -733,12 +733,12 @@ export function DailyReportApp({
     [],
   );
 
-  function removeSummaryReferencesForActivity(activityId: string) {
+  function removeSummaryReferencesForActivities(activityIds: string[]) {
     const snapshot = summaryEditorRef.current?.getSnapshot() ??
       pendingSummarySnapshotRef.current ?? { summary };
     const nextSummary = removeSummaryActivityReferences(
       snapshot.summary,
-      activityId,
+      activityIds,
     );
 
     if (nextSummary === snapshot.summary) {
@@ -748,6 +748,10 @@ export function DailyReportApp({
     const nextSnapshot = { summary: nextSummary };
     setSummaryEditorSnapshot(nextSnapshot);
     handleSummaryChange(nextSnapshot);
+  }
+
+  function removeSummaryReferencesForActivity(activityId: string) {
+    removeSummaryReferencesForActivities([activityId]);
   }
 
   const canSaveDraftSnapshot = useCallback((snapshot: AutoDraftSnapshot) => {
@@ -809,6 +813,30 @@ export function DailyReportApp({
     }
     setOpenActivityMenu(null);
     setRenamingActivity(null);
+  }
+
+  function clearActivities() {
+    if (isBusy || activities.length === 0) {
+      return;
+    }
+
+    const activityIds = activities.map((activity) => activity.id);
+    const deletedIds = activities
+      .filter((activity) => !isNewManualActivity(activity))
+      .map((activity) => activity.id);
+
+    removeSummaryReferencesForActivities(activityIds);
+    setActivities([]);
+    if (deletedIds.length > 0) {
+      setDeletedActivityIds((current) => [
+        ...new Set([...current, ...deletedIds]),
+      ]);
+    }
+    setActivitySearch("");
+    setOpenActivityMenu(null);
+    setImportMenuOpen(false);
+    setRenamingActivity(null);
+    setMessage("Work items cleared.");
   }
 
   function addManualActivity() {
@@ -1982,7 +2010,7 @@ export function DailyReportApp({
                   </h2>
                 </div>
               </div>
-              <div className="grid min-w-0 grid-cols-2 gap-2 min-[900px]:flex min-[900px]:w-auto min-[900px]:flex-wrap min-[900px]:items-center">
+              <div className="grid min-w-0 grid-cols-3 gap-2 min-[900px]:flex min-[900px]:w-auto min-[900px]:flex-wrap min-[900px]:items-center">
                 <Button
                   variant="outline"
                   className="h-9 min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] min-[900px]:w-auto"
@@ -1991,6 +2019,16 @@ export function DailyReportApp({
                 >
                   <Plus className="mr-2 h-4 w-4 shrink-0" />
                   <span className="min-w-0 truncate">Add item</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-9 min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-white dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] dark:disabled:text-[#64748b] dark:disabled:hover:bg-[#0f1b2a] min-[900px]:w-auto"
+                  disabled={isBusy || activities.length === 0}
+                  aria-label="Clear work items"
+                  onClick={clearActivities}
+                >
+                  <Trash2 className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="min-w-0 truncate">Clear</span>
                 </Button>
                 <div ref={importMenuRef} className="relative min-w-0">
                   <Button
