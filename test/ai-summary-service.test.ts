@@ -134,6 +134,12 @@ describe("AI summary service", () => {
       "Completion wording:",
     );
     expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
+      "Terminology grounding:",
+    );
+    expect(generateContentMock.mock.calls[0]?.[0].contents).not.toContain(
+      "Major project/workstream sections such as On-Demand Program Work",
+    );
+    expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
       '"activityTokens":["ACTIVITY_1"]',
     );
     expect(generateContentMock.mock.calls[0]?.[0].config).not.toHaveProperty(
@@ -149,6 +155,43 @@ describe("AI summary service", () => {
     );
     expect(result.summary).toContain(
       "1. Reviewed the daily work log flow. [Discuss Daily Work Log](https://generis.local/activity/calendar-1?source=GOOGLE_CALENDAR)",
+    );
+  });
+
+  it("grounds unsupported section heading qualifiers to referenced work item text", async () => {
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          heading: "On-Demand Program Work",
+          blocks: [
+            {
+              type: "paragraph",
+              text: "Logged program creation work.",
+              activityTokens: ["ACTIVITY_1"],
+            },
+          ],
+        },
+      ]),
+    );
+
+    const result = await generateDailyReportSummaryWithAI("user-1", {
+      ...report,
+      activities: [
+        {
+          ...baseActivity,
+          id: "jira-program",
+          source: "JIRA",
+          title: "IT-4231: Create Program",
+          description: "Logged 3 hours on this item.",
+          durationMinutes: 180,
+        },
+      ],
+    });
+
+    expect(result.summary).toContain("## Program Work");
+    expect(result.summary).not.toContain("On-Demand Program Work");
+    expect(result.summary).toContain(
+      "Logged program creation work. [IT-4231: Create Program](https://generis.local/activity/jira-program?source=JIRA)",
     );
   });
 
@@ -474,7 +517,8 @@ describe("AI summary service", () => {
 
     const result = await generateDailyReportSummaryWithAI("user-1", report);
 
-    expect(result.summary).toContain("## Unsafe Heading");
+    expect(result.summary).toContain("## Production Updates");
+    expect(result.summary).not.toContain("## Unsafe Heading");
     expect(result.summary).toContain("Reviewed external link markup code table.");
     expect(result.summary).toContain(
       "[AES26 production update](https://generis.local/activity/task-1?source=GOOGLE_TASKS)",

@@ -212,6 +212,12 @@ function buildSummaryPrompt(
     "- For in-progress, open, pending, review, testing, not done, or ambiguous work, use neutral wording such as worked on, continued, advanced, reviewed, investigated, drafted, or started.",
     "- When a sentence combines items with mixed or unclear completion states, do not use a completion verb for the whole group.",
     "",
+    "Terminology grounding:",
+    "- Do not invent product, program, event, client, or workstream names.",
+    "- Use specific names and qualifiers only when they appear in the selected work item title, description, or note.",
+    "- If an item says Create Program, do not rename it On-Demand Program or another more specific category.",
+    "- Section headings should be generic unless a specific workstream name appears in the selected work items.",
+    "",
     "Production update policy:",
     "- Routine production tasks are simple event/site content updates.",
     "- If there are 1-6 routine production updates, enumerate them.",
@@ -221,7 +227,7 @@ function buildSummaryPrompt(
     "",
     "Preferred section order when applicable:",
     "1. Production Updates",
-    "2. Major project/workstream sections such as On-Demand Program Work",
+    "2. Major project/workstream sections named directly from selected work item wording",
     "3. Meetings and Follow-Up",
     "4. Blockers, only when actual blockers exist",
     "",
@@ -461,6 +467,158 @@ function isBlockersSection(heading: string) {
   return normalized === "blocker" || normalized === "blockers";
 }
 
+const genericHeadingWords = new Set([
+  "activity",
+  "activities",
+  "agenda",
+  "blocker",
+  "blockers",
+  "calendar",
+  "content",
+  "coordination",
+  "daily",
+  "development",
+  "follow",
+  "followup",
+  "implementation",
+  "item",
+  "items",
+  "meeting",
+  "meetings",
+  "planning",
+  "production",
+  "program",
+  "programs",
+  "project",
+  "projects",
+  "review",
+  "reviews",
+  "session",
+  "sessions",
+  "speaker",
+  "speakers",
+  "support",
+  "task",
+  "tasks",
+  "up",
+  "update",
+  "updates",
+  "work",
+  "workflow",
+  "workstream",
+]);
+
+function comparableWords(value?: string | null) {
+  return Array.from(
+    new Set(
+      (value ?? "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .split(" ")
+        .filter((word) => word.length > 2),
+    ),
+  );
+}
+
+function headingReferenceText(references: ActivityReference[]) {
+  return references
+    .map((reference) =>
+      [
+        reference.activity.title,
+        reference.activity.description,
+        reference.activity.employeeNote,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    )
+    .join(" ");
+}
+
+function blockReferences(
+  block: StructuredBlock,
+  referencesByToken: Map<string, ActivityReference>,
+) {
+  if (block.type === "paragraph" || block.type === "blockquote") {
+    return inlineActivityReferences(block.segments, referencesByToken);
+  }
+
+  if (block.type === "bulletedList" || block.type === "numberedList") {
+    return block.items.flatMap((item) =>
+      inlineActivityReferences(item.segments, referencesByToken),
+    );
+  }
+
+  return [];
+}
+
+function sectionReferences(
+  blocks: StructuredBlock[],
+  referencesByToken: Map<string, ActivityReference>,
+) {
+  const seen = new Set<string>();
+  const references: ActivityReference[] = [];
+
+  for (const reference of blocks.flatMap((block) =>
+    blockReferences(block, referencesByToken),
+  )) {
+    if (seen.has(reference.token)) {
+      continue;
+    }
+
+    seen.add(reference.token);
+    references.push(reference);
+  }
+
+  return references;
+}
+
+function fallbackHeadingForReferences(references: ActivityReference[]) {
+  const referenceText = headingReferenceText(references).toLowerCase();
+
+  if (referenceText.includes("production")) {
+    return "Production Updates";
+  }
+
+  if (referenceText.includes("program")) {
+    return "Program Work";
+  }
+
+  if (
+    referenceText.includes("meeting") ||
+    referenceText.includes("follow-up") ||
+    referenceText.includes("follow up")
+  ) {
+    return "Meetings and Follow-Up";
+  }
+
+  return "Project Work";
+}
+
+function groundedHeading(
+  heading: string,
+  blocks: StructuredBlock[],
+  referencesByToken: Map<string, ActivityReference>,
+) {
+  if (isBlockersSection(heading)) {
+    return heading;
+  }
+
+  const references = sectionReferences(blocks, referencesByToken);
+
+  if (references.length === 0) {
+    return heading;
+  }
+
+  const allowedWords = new Set(comparableWords(headingReferenceText(references)));
+  const unsupportedSpecificWord = comparableWords(heading).some(
+    (word) => !genericHeadingWords.has(word) && !allowedWords.has(word),
+  );
+
+  return unsupportedSpecificWord
+    ? fallbackHeadingForReferences(references)
+    : heading;
+}
+
 function inlineHasActivityReference(
   segments: StructuredInline[],
   referencesByToken: Map<string, ActivityReference>,
@@ -592,8 +750,13 @@ function normalizeStructuredSummary(
         .map((block) => normalizeBlock(block, validTokens))
         .filter((block): block is StructuredBlock => Boolean(block))
         .slice(0, maxBlocksPerSection);
+      const safeHeading = heading
+        ? groundedHeading(heading, blocks, referencesByToken)
+        : "";
 
-      return heading && blocks.length > 0 ? [{ heading, blocks }] : [];
+      return safeHeading && blocks.length > 0
+        ? [{ heading: safeHeading, blocks }]
+        : [];
     })
     .map((section) => normalizeBlockerReferences(section, referencesByToken))
     .filter((section): section is StructuredSection => Boolean(section))
