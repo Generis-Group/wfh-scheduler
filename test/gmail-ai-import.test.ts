@@ -160,6 +160,13 @@ describe("Gmail AI import helpers", () => {
           confidence: 0.95,
           reason: "follow_up",
         },
+        {
+          threadId: "thread-1",
+          messageIds: ["message-1"],
+          title: "Task completed",
+          confidence: 0.95,
+          reason: "work_performed",
+        },
       ]),
     );
 

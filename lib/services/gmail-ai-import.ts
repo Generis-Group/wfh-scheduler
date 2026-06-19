@@ -5,6 +5,7 @@ import type { gmail_v1 } from "googleapis";
 import { HttpError } from "@/lib/http";
 import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
 import type { NormalizedActivity } from "@/lib/normalizers";
+import { isDescriptiveImportedActivityTitle } from "@/lib/services/ai-import-quality";
 
 type GenerateContentResponse = {
   text?: unknown;
@@ -421,7 +422,7 @@ function normalizeExtractionItems(
 
     const title = cleanText(item.title, maxExtractedTitleLength);
 
-    if (!title) {
+    if (!title || !isDescriptiveImportedActivityTitle(title)) {
       continue;
     }
 
@@ -486,6 +487,7 @@ function buildExtractionPrompt(dateString: string, threads: GmailThreadEvidence[
     "",
     "Report-worthy items include actual work performed, deliverables, meaningful follow-ups, decisions, client/internal coordination with an outcome, or true blockers.",
     "Exclude newsletters, FYIs, automated mail, calendar notifications, small acknowledgements, pure scheduling chatter, personal content, and vague items.",
+    'Titles must be concise and describe the specific task or deliverable. Do not use generic titles like "Task completed", "Work update", or "Status update".',
     "Use confidence 0 to 1. Use 0.75+ only when the email clearly shows reportable work.",
     "The reason must be one of: work_performed, deliverable, follow_up, decision, coordination, blocker.",
     "Do not quote email text. Do not include raw URLs, raw email addresses, markdown, HTML, or unknown message ids.",
@@ -723,6 +725,10 @@ function activityFromItem(
   const title = generatedFieldWithoutBodyLeak(item.title, thread.messages);
 
   if (!title) {
+    return null;
+  }
+
+  if (!isDescriptiveImportedActivityTitle(title)) {
     return null;
   }
 

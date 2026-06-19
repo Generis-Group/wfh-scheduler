@@ -75,6 +75,13 @@ describe("Google Chat AI import helpers", () => {
           thread: { name: "spaces/AAA/threads/thread-1" },
         },
         {
+          name: "spaces/AAA/messages/msg-bot",
+          createTime: "2026-05-14T14:07:00.000Z",
+          text: "Created a task with a full issue status card.",
+          sender: { name: "users/app", type: "BOT" },
+          thread: { name: "spaces/AAA/threads/thread-1" },
+        },
+        {
           name: "spaces/AAA/messages/msg-3",
           createTime: "2026-05-14T14:15:00.000Z",
           text: "Coworker-only work should stay out.",
@@ -192,6 +199,13 @@ describe("Google Chat AI import helpers", () => {
           conversationId: "spaces/AAA/threads/thread-2",
           messageIds: ["spaces/AAA/messages/msg-3"],
           title: "Coworker-only task",
+          confidence: 0.9,
+          reason: "work_performed",
+        },
+        {
+          conversationId: "spaces/AAA/threads/thread-1",
+          messageIds: ["spaces/AAA/messages/msg-1"],
+          title: "Task completed",
           confidence: 0.9,
           reason: "work_performed",
         },

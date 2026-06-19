@@ -5,6 +5,7 @@ import type { chat_v1 } from "googleapis";
 import { HttpError } from "@/lib/http";
 import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
 import type { NormalizedActivity } from "@/lib/normalizers";
+import { isDescriptiveImportedActivityTitle } from "@/lib/services/ai-import-quality";
 
 type GenerateContentResponse = {
   text?: unknown;
@@ -181,6 +182,12 @@ function normalizedSenderName(value?: string | null) {
   return normalized?.startsWith("users/") ? normalized : null;
 }
 
+function isAutomatedMessage(message: chat_v1.Schema$Message) {
+  const senderType = message.sender?.type?.trim().toUpperCase();
+
+  return Boolean(senderType && senderType !== "HUMAN");
+}
+
 function messageEvidence(
   space: chat_v1.Schema$Space,
   message: chat_v1.Schema$Message,
@@ -189,6 +196,10 @@ function messageEvidence(
   currentUserNames: Set<string>,
 ): GoogleChatMessageEvidence | null {
   if (!space.name || !message.name || message.deleteTime) {
+    return null;
+  }
+
+  if (isAutomatedMessage(message)) {
     return null;
   }
 
@@ -454,7 +465,7 @@ function normalizeExtractionItems(
 
     const title = cleanText(item.title, maxExtractedTitleLength);
 
-    if (!title) {
+    if (!title || !isDescriptiveImportedActivityTitle(title)) {
       continue;
     }
 
@@ -527,6 +538,7 @@ function buildExtractionPrompt(
     "Exclude small acknowledgements, FYIs, automated app noise, personal content, pure scheduling chatter, vague status chatter, and messages that only mention a task without evidence of work.",
     "Extract work only for messages marked author=current_user. Other-user messages are context only.",
     "Every item must reference at least one current_user message id.",
+    'Titles must be concise and describe the specific task or deliverable. Do not use generic titles like "Task completed", "Work update", or "Status update".',
     "Do not infer that a user created, completed, or blocked a task unless the Chat messages explicitly say so.",
     "Use confidence 0 to 1. Use 0.75+ only when the messages clearly show reportable work.",
     "The reason must be one of: work_performed, deliverable, follow_up, decision, coordination, blocker.",
@@ -731,6 +743,10 @@ function activityFromItem(
   );
 
   if (!title) {
+    return null;
+  }
+
+  if (!isDescriptiveImportedActivityTitle(title)) {
     return null;
   }
 
