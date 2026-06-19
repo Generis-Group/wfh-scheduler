@@ -82,6 +82,10 @@ function activitySourceIconTone(source?: string | null) {
     return "bg-white text-[#b42318] ring-1 ring-[#f4b9b0] dark:bg-[#0b1523] dark:text-[#fca5a5] dark:ring-red-300/25";
   }
 
+  if (source === "GOOGLE_CHAT") {
+    return "bg-white text-[#0f9d58] ring-1 ring-[#b7e4cf] dark:bg-[#0b1523] dark:text-[#86efac] dark:ring-emerald-300/25";
+  }
+
   if (source === "MANUAL") {
     return "bg-white text-[#2563eb] ring-1 ring-[#2563eb] dark:bg-[#0b1523]";
   }
@@ -104,6 +108,10 @@ function activitySourceIcon(source?: string | null) {
 
   if (source === "GMAIL") {
     return <Mail aria-hidden="true" />;
+  }
+
+  if (source === "GOOGLE_CHAT") {
+    return <MessageSquare aria-hidden="true" />;
   }
 
   if (source === "MANUAL") {
@@ -177,6 +185,10 @@ export function reportActivitySourceLabel(source?: string | null) {
     return "Gmail";
   }
 
+  if (source === "GOOGLE_CHAT") {
+    return "Google Chat";
+  }
+
   if (source === "JIRA") {
     return "Jira";
   }
@@ -215,16 +227,9 @@ export function ReportPageHeader({
   actionsClassName,
 }: ReportPageHeaderProps) {
   return (
-    <div
-      className={cn(
-        "reference-page-header",
-        className,
-      )}
-    >
+    <div className={cn("reference-page-header", className)}>
       <div>
-        <h1 className="reference-title">
-          {title}
-        </h1>
+        <h1 className="reference-title">{title}</h1>
         {description ? (
           <p className="mt-0.5 text-xs leading-5 text-[#667085] dark:text-muted-foreground">
             {description}
@@ -304,11 +309,7 @@ export function ReportSurface({
 }: ReportSurfaceProps) {
   return (
     <Component
-      className={cn(
-        "reference-card",
-        padded && "p-3",
-        className,
-      )}
+      className={cn("reference-card", padded && "p-3", className)}
       {...props}
     />
   );

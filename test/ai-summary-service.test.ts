@@ -195,6 +195,64 @@ describe("AI summary service", () => {
     );
   });
 
+  it("merges duplicate generic headings after heading grounding", async () => {
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          heading: "Daily Product Work",
+          blocks: [
+            {
+              type: "bulletedList",
+              items: [
+                {
+                  text: "Added a clear button to erase work items.",
+                  activityTokens: ["ACTIVITY_1"],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          heading: "Project Execution",
+          blocks: [
+            {
+              type: "paragraph",
+              text: "Continued the reviewer location breakdown.",
+              activityTokens: ["ACTIVITY_2"],
+            },
+          ],
+        },
+      ]),
+    );
+
+    const result = await generateDailyReportSummaryWithAI("user-1", {
+      ...report,
+      activities: [
+        {
+          ...baseActivity,
+          id: "jira-clear",
+          source: "JIRA",
+          title: "IT-4298: Add clear button to erase work items",
+        },
+        {
+          ...baseActivity,
+          id: "jira-location",
+          source: "JIRA",
+          title: "IT-4300: Build reviewer work location breakdown",
+          status: "In Progress",
+        },
+      ],
+    });
+
+    expect(result.summary.match(/^## Project Work$/gm)).toHaveLength(1);
+    expect(result.summary).toContain(
+      "Added a clear button to erase work items.",
+    );
+    expect(result.summary).toContain(
+      "Continued the reviewer location breakdown.",
+    );
+  });
+
   it("preserves inline activity token placement from text fields", async () => {
     generateContentMock.mockResolvedValue(
       response([
@@ -305,7 +363,8 @@ describe("AI summary service", () => {
           id: "task-program",
           source: "GOOGLE_TASKS",
           title: "Create a new on-demand program",
-          description: "Create the program, import sessions, and configure assets.",
+          description:
+            "Create the program, import sessions, and configure assets.",
         },
       ],
     });
@@ -519,7 +578,9 @@ describe("AI summary service", () => {
 
     expect(result.summary).toContain("## Production Updates");
     expect(result.summary).not.toContain("## Unsafe Heading");
-    expect(result.summary).toContain("Reviewed external link markup code table.");
+    expect(result.summary).toContain(
+      "Reviewed external link markup code table.",
+    );
     expect(result.summary).toContain(
       "[AES26 production update](https://generis.local/activity/task-1?source=GOOGLE_TASKS)",
     );

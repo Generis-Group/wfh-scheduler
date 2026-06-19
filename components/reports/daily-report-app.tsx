@@ -84,6 +84,7 @@ type ActivitySource =
   | "GOOGLE_CALENDAR"
   | "GOOGLE_TASKS"
   | "GMAIL"
+  | "GOOGLE_CHAT"
   | "MANUAL";
 
 type Activity = {
@@ -130,6 +131,7 @@ const syncProviderLabels = {
   "google-calendar": "Calendar",
   "google-tasks": "Tasks",
   gmail: "Gmail",
+  "google-chat": "Google Chat",
 } as const;
 
 const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
@@ -150,6 +152,7 @@ const syncProviderSources: Record<SyncProviderKey, ActivitySource> = {
   "google-calendar": "GOOGLE_CALENDAR",
   "google-tasks": "GOOGLE_TASKS",
   gmail: "GMAIL",
+  "google-chat": "GOOGLE_CHAT",
 };
 
 type ReportPayload = {
@@ -1223,7 +1226,8 @@ export function DailyReportApp({
 
       const data = await response.json();
       const nextReport = data.report as Report;
-      const replaceLocalState = latestDraftRef.current?.signature === savedSignature;
+      const replaceLocalState =
+        latestDraftRef.current?.signature === savedSignature;
 
       applySavedReport(nextReport, replaceLocalState, savedSignature);
       markServerDataStale();
@@ -1555,7 +1559,7 @@ export function DailyReportApp({
     const providers: SyncProviderKey[] = [
       ...(canSyncJira ? (["jira"] as const) : []),
       ...(canSyncGoogle
-        ? (["google-calendar", "google-tasks", "gmail"] as const)
+        ? (["google-calendar", "google-tasks", "gmail", "google-chat"] as const)
         : []),
     ];
 
@@ -1583,7 +1587,9 @@ export function DailyReportApp({
 
     if (
       snapshot.payload.summary.trim() &&
-      !window.confirm("Replace the current summary with an AI-generated summary?")
+      !window.confirm(
+        "Replace the current summary with an AI-generated summary?",
+      )
     ) {
       return;
     }
@@ -1762,10 +1768,7 @@ export function DailyReportApp({
     ? "Resubmitting..."
     : "Submitting...";
   const dateNavigationPending = pendingDateControl !== null;
-  const isBusy =
-    busyAction !== null ||
-    isImporting ||
-    dateNavigationPending;
+  const isBusy = busyAction !== null || isImporting || dateNavigationPending;
   const maxReportDate = todayDateString();
   const selectedActivities = useMemo(
     () => activities.filter((activity) => activity.selected),
@@ -1936,10 +1939,7 @@ export function DailyReportApp({
               }
             />
 
-            <div
-              ref={locationMenuRef}
-              className="relative w-full sm:w-[220px]"
-            >
+            <div ref={locationMenuRef} className="relative w-full sm:w-[220px]">
               <button
                 type="button"
                 role="combobox"
@@ -2172,6 +2172,31 @@ export function DailyReportApp({
                           AI
                         </span>
                       </button>
+                      <button
+                        className="group flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                        disabled={!canSyncGoogle}
+                        aria-label="Import Google Chat with AI"
+                        title={
+                          canSyncGoogle
+                            ? undefined
+                            : "Connect Google before importing."
+                        }
+                        onClick={() => {
+                          setImportMenuOpen(false);
+                          sync("google-chat");
+                        }}
+                      >
+                        <GeminiLogo className="mr-2 h-4 w-4 shrink-0 transition-transform duration-150 group-hover:scale-110 group-hover:rotate-12" />
+                        <span className="min-w-0 truncate">
+                          Import Google Chat
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className="ml-auto inline-flex h-5 shrink-0 items-center rounded-full bg-[linear-gradient(135deg,#eef2ff,#ecfeff)] px-2 text-[11px] font-semibold uppercase tracking-normal text-[#2563eb] shadow-[0_0_0_1px_rgba(37,99,235,0.16),0_6px_18px_rgba(37,99,235,0.12)] transition-shadow group-hover:shadow-[0_0_0_1px_rgba(37,99,235,0.28),0_8px_24px_rgba(37,99,235,0.2)] dark:bg-[linear-gradient(135deg,rgba(124,58,237,0.24),rgba(6,182,212,0.16))] dark:text-[#93c5fd]"
+                        >
+                          AI
+                        </span>
+                      </button>
                     </div>
                   ) : null}
                 </div>
@@ -2190,7 +2215,7 @@ export function DailyReportApp({
               {activities.length === 0 ? (
                 <EmptyReferenceState>
                   No activities yet. Add a work item or import from Jira,
-                  Calendar, Tasks, or Gmail.
+                  Calendar, Tasks, Gmail, or Chat.
                 </EmptyReferenceState>
               ) : filteredActivities.length === 0 ? (
                 <EmptyReferenceState>
@@ -2260,7 +2285,9 @@ export function DailyReportApp({
                                     event.currentTarget.value,
                                   )
                                 }
-                                onFocus={(event) => event.currentTarget.select()}
+                                onFocus={(event) =>
+                                  event.currentTarget.select()
+                                }
                                 onKeyDown={(event) => {
                                   if (event.key === "Escape") {
                                     event.preventDefault();

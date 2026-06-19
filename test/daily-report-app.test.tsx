@@ -438,28 +438,30 @@ describe("DailyReportApp drafts", () => {
 
   it("resets imported work items when the draft is deleted", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
 
-      if (url.includes("/api/sync/google-tasks")) {
-        return Response.json({
-          importedCount: 1,
-          skippedCount: 0,
-          staleCount: 0,
-          activities: [importedTask],
-          report: {
-            ...savedDraft,
+        if (url.includes("/api/sync/google-tasks")) {
+          return Response.json({
+            importedCount: 1,
+            skippedCount: 0,
+            staleCount: 0,
             activities: [importedTask],
-          },
-        });
-      }
+            report: {
+              ...savedDraft,
+              activities: [importedTask],
+            },
+          });
+        }
 
-      if (url === "/api/reports/report-1" && init?.method === "DELETE") {
-        return Response.json({ ok: true });
-      }
+        if (url === "/api/reports/report-1" && init?.method === "DELETE") {
+          return Response.json({ ok: true });
+        }
 
-      return Response.json({ error: "Unexpected request." }, { status: 500 });
-    });
+        return Response.json({ error: "Unexpected request." }, { status: 500 });
+      },
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     renderDailyReportApp();
@@ -479,7 +481,9 @@ describe("DailyReportApp drafts", () => {
       expect(screen.queryByText("Imported task")).toBeNull();
     });
     expect(
-      screen.getByText("No activities yet. Add a work item or import from Jira, Calendar, Tasks, or Gmail."),
+      screen.getByText(
+        "No activities yet. Add a work item or import from Jira, Calendar, Tasks, Gmail, or Chat.",
+      ),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Delete draft" })).toBeNull();
   });
@@ -500,7 +504,8 @@ describe("DailyReportApp drafts", () => {
       if (
         url.includes("/api/sync/google-calendar") ||
         url.includes("/api/sync/google-tasks") ||
-        url.includes("/api/sync/gmail")
+        url.includes("/api/sync/gmail") ||
+        url.includes("/api/sync/google-chat")
       ) {
         return Response.json({
           importedCount: 0,
@@ -542,8 +547,14 @@ describe("DailyReportApp drafts", () => {
         "/api/sync/gmail",
         expect.objectContaining({ method: "POST" }),
       );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/sync/google-chat",
+        expect.objectContaining({ method: "POST" }),
+      );
     });
-    expect(screen.getByText("Import complete: 1 work item found.")).toBeTruthy();
+    expect(
+      screen.getByText("Import complete: 1 work item found."),
+    ).toBeTruthy();
     expect(screen.getByText(linkedJiraTask.title)).toBeTruthy();
     expect(
       screen.queryByText("No calendar work items found for this date."),
@@ -561,7 +572,8 @@ describe("DailyReportApp drafts", () => {
         url.includes("/api/sync/jira") ||
         url.includes("/api/sync/google-calendar") ||
         url.includes("/api/sync/google-tasks") ||
-        url.includes("/api/sync/gmail")
+        url.includes("/api/sync/gmail") ||
+        url.includes("/api/sync/google-chat")
       ) {
         return Response.json({
           importedCount: 0,
@@ -587,7 +599,9 @@ describe("DailyReportApp drafts", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import all" }));
 
     await waitFor(() => {
-      expect(screen.getByText("No work items found for this date.")).toBeTruthy();
+      expect(
+        screen.getByText("No work items found for this date."),
+      ).toBeTruthy();
     });
     expect(
       screen.queryByText("No jira work items found for this date."),
@@ -643,8 +657,11 @@ describe("DailyReportApp drafts", () => {
 
     await waitFor(() => {
       expect(
-        (screen.getByRole("textbox", { name: "Summary" }) as HTMLTextAreaElement)
-          .value,
+        (
+          screen.getByRole("textbox", {
+            name: "Summary",
+          }) as HTMLTextAreaElement
+        ).value,
       ).toBe(aiSummary);
     });
     expect(
@@ -759,6 +776,13 @@ describe("DailyReportApp drafts", () => {
       (
         screen.getByRole("button", {
           name: "Import Gmail with AI",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Import Google Chat with AI",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -1314,8 +1338,7 @@ describe("DailyReportApp drafts", () => {
                       status: manualActivity.status ?? "noted",
                       sourceUrl: null,
                       startedAt: null,
-                      durationMinutes:
-                        manualActivity.durationMinutes ?? null,
+                      durationMinutes: manualActivity.durationMinutes ?? null,
                       selected: manualActivity.selected,
                       employeeNote: manualActivity.employeeNote,
                     },
@@ -1411,39 +1434,34 @@ describe("DailyReportApp drafts", () => {
       selected: true,
       employeeNote: null,
     });
-    const fetchMock = vi.fn(
-      (input: RequestInfo | URL, init?: RequestInit) => {
-        if (
-          String(input) === "/api/reports/report-1" &&
-          init?.method === "PUT"
-        ) {
-          const body = JSON.parse(String(init.body)) as {
-            summary?: string;
-            manualActivities?: Array<{ id: string }>;
-          };
-          const manualActivityInput = body.manualActivities?.[0];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/reports/report-1" && init?.method === "PUT") {
+        const body = JSON.parse(String(init.body)) as {
+          summary?: string;
+          manualActivities?: Array<{ id: string }>;
+        };
+        const manualActivityInput = body.manualActivities?.[0];
 
-          if (manualActivityInput) {
-            manualActivityId = manualActivityInput.id;
-            return firstSave.promise;
-          }
-
-          return Promise.resolve(
-            Response.json({
-              report: {
-                ...savedDraft,
-                summary: body.summary ?? "",
-                activities: [manualActivity()],
-              },
-            }),
-          );
+        if (manualActivityInput) {
+          manualActivityId = manualActivityInput.id;
+          return firstSave.promise;
         }
 
         return Promise.resolve(
-          Response.json({ error: "Unexpected request." }, { status: 500 }),
+          Response.json({
+            report: {
+              ...savedDraft,
+              summary: body.summary ?? "",
+              activities: [manualActivity()],
+            },
+          }),
         );
-      },
-    );
+      }
+
+      return Promise.resolve(
+        Response.json({ error: "Unexpected request." }, { status: 500 }),
+      );
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     renderDailyReportApp(savedDraft);
@@ -1894,7 +1912,9 @@ describe("DailyReportApp drafts", () => {
       ),
     ).toBe(false);
     expect(await screen.findByText("Resubmitted for review.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Resubmit update" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Resubmit update" }),
+    ).toBeTruthy();
   });
 
   it("deletes a draft without immediately recreating it", async () => {

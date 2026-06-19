@@ -10,6 +10,7 @@ export type SummaryActivitySource =
   | "GOOGLE_CALENDAR"
   | "GOOGLE_TASKS"
   | "GMAIL"
+  | "GOOGLE_CHAT"
   | "MANUAL"
   | "UNKNOWN";
 
@@ -37,6 +38,7 @@ const summaryActivitySources = new Set<SummaryActivitySource>([
   "GOOGLE_CALENDAR",
   "GOOGLE_TASKS",
   "GMAIL",
+  "GOOGLE_CHAT",
   "MANUAL",
   "UNKNOWN",
 ]);
@@ -64,9 +66,13 @@ export function normalizeSummaryLinkHref(value?: string | null) {
 export function normalizeSummaryActivitySource(
   value?: string | null,
 ): SummaryActivitySource {
-  const normalized = value?.trim().toUpperCase().replace(/[-\s]+/g, "_");
+  const normalized = value
+    ?.trim()
+    .toUpperCase()
+    .replace(/[-\s]+/g, "_");
 
-  return normalized && summaryActivitySources.has(normalized as SummaryActivitySource)
+  return normalized &&
+    summaryActivitySources.has(normalized as SummaryActivitySource)
     ? (normalized as SummaryActivitySource)
     : "UNKNOWN";
 }
@@ -95,7 +101,7 @@ export function isSummaryActivityReferenceHref(value?: string | null) {
 
   return Boolean(
     trimmed?.startsWith(summaryActivityReferenceHrefPrefix) &&
-      trimmed.length > summaryActivityReferenceHrefPrefix.length,
+    trimmed.length > summaryActivityReferenceHrefPrefix.length,
   );
 }
 
@@ -126,7 +132,9 @@ export function summaryActivityReferenceSource(
   if (isSummaryActivityReferenceHref(trimmedHref)) {
     try {
       const url = new URL(trimmedHref!);
-      const source = normalizeSummaryActivitySource(url.searchParams.get("source"));
+      const source = normalizeSummaryActivitySource(
+        url.searchParams.get("source"),
+      );
 
       if (source !== "UNKNOWN") {
         return source;
@@ -165,6 +173,13 @@ export function summaryActivityReferenceSource(
     lowerHref.includes("google.com/mail")
   ) {
     return "GMAIL";
+  }
+
+  if (
+    lowerHref.includes("chat.google") ||
+    lowerHref.includes("google.com/chat")
+  ) {
+    return "GOOGLE_CHAT";
   }
 
   return "UNKNOWN";
@@ -206,7 +221,10 @@ export function summaryActivityReferenceMarkdown(
     : label;
 }
 
-export function summaryLinkAt(value: string, index: number): SummaryLinkMatch | null {
+export function summaryLinkAt(
+  value: string,
+  index: number,
+): SummaryLinkMatch | null {
   const match = value.slice(index).match(/^\[([^\]\n]+)\]\(([^)\n]+)\)/);
 
   if (!match) {
@@ -223,7 +241,7 @@ export function summaryLinkAt(value: string, index: number): SummaryLinkMatch | 
     label: match[1],
     href: reference.href,
     external: reference.external,
-    length: match[0].length
+    length: match[0].length,
   };
 }
 
@@ -312,12 +330,15 @@ function stripBlockMarkers(value: string) {
       line
         .replace(/^##\s+/, "")
         .replace(/^>\s?/, "")
-        .replace(/^\s*(-|\d+\.)\s+/, "")
+        .replace(/^\s*(-|\d+\.)\s+/, ""),
     )
     .join(" ");
 }
 
-export function summaryPlainText(value?: string | null, emptyText = "No summary entered.") {
+export function summaryPlainText(
+  value?: string | null,
+  emptyText = "No summary entered.",
+) {
   const text = stripInlineFormatMarkers(stripBlockMarkers(value ?? ""))
     .replace(/\s+/g, " ")
     .trim();
@@ -340,7 +361,7 @@ function activityReferenceMetaFromMap(
 ) {
   const activityId = summaryActivityReferenceIdFromHref(href);
 
-  return activityId ? activityReferences?.[activityId] ?? null : null;
+  return activityId ? (activityReferences?.[activityId] ?? null) : null;
 }
 
 function activityReferenceLabelFromMeta(
@@ -415,7 +436,10 @@ function renderInlineSummaryHtml(
     const nextBold = text.indexOf("**", index);
     const nextItalic = text.indexOf("_", index);
     const nextLink = nextSummaryLinkIndex(text, index);
-    let nextMarker = [nextLink, nextBold, nextItalic].filter((position) => position !== -1).sort((left, right) => left - right)[0] ?? text.length;
+    let nextMarker =
+      [nextLink, nextBold, nextItalic]
+        .filter((position) => position !== -1)
+        .sort((left, right) => left - right)[0] ?? text.length;
 
     if (nextMarker === index) {
       nextMarker = index + 1;
@@ -429,7 +453,9 @@ function renderInlineSummaryHtml(
 }
 
 function markdownListLevel(whitespace: string) {
-  const columns = whitespace.split("").reduce((total, character) => total + (character === "\t" ? 2 : 1), 0);
+  const columns = whitespace
+    .split("")
+    .reduce((total, character) => total + (character === "\t" ? 2 : 1), 0);
   return Math.floor(columns / 2);
 }
 
@@ -441,7 +467,7 @@ function renderMarkdownList(
   activityReferences?: SummaryActivityReferenceMap,
 ) {
   const tagName = ordered ? "ol" : "ul";
-  const start = ordered ? lines[startIndex].number ?? 1 : null;
+  const start = ordered ? (lines[startIndex].number ?? 1) : null;
   let html =
     ordered && start !== 1
       ? `<${tagName} start="${escapeHtml(String(start))}">`
@@ -451,14 +477,15 @@ function renderMarkdownList(
   while (index < lines.length) {
     const line = lines[index];
 
-    if (line.level < level || line.level !== level || line.ordered !== ordered) {
+    if (
+      line.level < level ||
+      line.level !== level ||
+      line.ordered !== ordered
+    ) {
       break;
     }
 
-    html += `<li>${renderInlineSummaryHtml(
-      line.content,
-      activityReferences,
-    )}`;
+    html += `<li>${renderInlineSummaryHtml(line.content, activityReferences)}`;
     index += 1;
 
     while (index < lines.length && lines[index].level > level) {
@@ -556,10 +583,7 @@ export function markdownToSummaryHtml(
     const heading = line.match(/^##\s+(.*)$/);
     if (heading) {
       html.push(
-        `<h2>${renderInlineSummaryHtml(
-          heading[1],
-          activityReferences,
-        )}</h2>`,
+        `<h2>${renderInlineSummaryHtml(heading[1], activityReferences)}</h2>`,
       );
       index += 1;
       continue;
@@ -574,10 +598,7 @@ export function markdownToSummaryHtml(
           break;
         }
         quoteLines.push(
-          renderInlineSummaryHtml(
-            nextQuote[1],
-            activityReferences,
-          ),
+          renderInlineSummaryHtml(nextQuote[1], activityReferences),
         );
         index += 1;
       }
@@ -587,10 +608,7 @@ export function markdownToSummaryHtml(
 
     html.push(
       line
-        ? `<p>${renderInlineSummaryHtml(
-            line,
-            activityReferences,
-          )}</p>`
+        ? `<p>${renderInlineSummaryHtml(line, activityReferences)}</p>`
         : "<p></p>",
     );
     index += 1;

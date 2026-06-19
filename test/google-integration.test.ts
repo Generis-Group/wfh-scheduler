@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   calendarMock,
+  chatMock,
   gmailMock,
   getProviderAccountMock,
   oauthClient,
@@ -15,6 +16,7 @@ const {
 
   return {
     calendarMock: vi.fn(() => ({ service: "calendar" })),
+    chatMock: vi.fn(() => ({ service: "chat" })),
     gmailMock: vi.fn(() => ({ service: "gmail" })),
     getProviderAccountMock: vi.fn(),
     oauthClient,
@@ -31,6 +33,7 @@ vi.mock("googleapis", () => ({
       OAuth2: OAuth2Mock,
     },
     calendar: calendarMock,
+    chat: chatMock,
     gmail: gmailMock,
     tasks: tasksMock,
   },
@@ -62,7 +65,7 @@ beforeEach(() => {
 });
 
 describe("Google integration", () => {
-  it("exposes Gmail alongside Calendar and Tasks services", async () => {
+  it("exposes Chat and Gmail alongside Calendar and Tasks services", async () => {
     const services = await getGoogleServices("user-1");
 
     expect(OAuth2Mock).toHaveBeenCalledWith(
@@ -79,6 +82,10 @@ describe("Google integration", () => {
       version: "v3",
       auth: oauthClient,
     });
+    expect(chatMock).toHaveBeenCalledWith({
+      version: "v1",
+      auth: oauthClient,
+    });
     expect(gmailMock).toHaveBeenCalledWith({
       version: "v1",
       auth: oauthClient,
@@ -89,6 +96,7 @@ describe("Google integration", () => {
     });
     expect(services).toEqual({
       calendar: { service: "calendar" },
+      chat: { service: "chat" },
       gmail: { service: "gmail" },
       tasks: { service: "tasks" },
     });

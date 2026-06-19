@@ -16,12 +16,14 @@ const {
   mockGetJiraConnection,
   mockExtractGmailActivitiesWithAI,
   mockDedupeGmailActivities,
+  mockExtractGoogleChatActivitiesWithAI,
+  mockDedupeGoogleChatActivities,
   mockReportRevisionCreate,
   mockSyncRunCreate,
   mockSyncRunUpdate,
   mockUpsertImportedActivities,
   mockUserFindUnique,
-  mockUserIntegrationSettingsUpsert
+  mockUserIntegrationSettingsUpsert,
 } = vi.hoisted(() => ({
   mockAppSettingFindUnique: vi.fn(),
   mockActivityItemFindMany: vi.fn(),
@@ -34,67 +36,81 @@ const {
   mockGetJiraConnection: vi.fn(),
   mockExtractGmailActivitiesWithAI: vi.fn(),
   mockDedupeGmailActivities: vi.fn((activities) => activities),
+  mockExtractGoogleChatActivitiesWithAI: vi.fn(),
+  mockDedupeGoogleChatActivities: vi.fn((activities) => activities),
   mockReportRevisionCreate: vi.fn(),
   mockSyncRunCreate: vi.fn(),
   mockSyncRunUpdate: vi.fn(),
   mockUpsertImportedActivities: vi.fn(),
   mockUserFindUnique: vi.fn(),
-  mockUserIntegrationSettingsUpsert: vi.fn()
+  mockUserIntegrationSettingsUpsert: vi.fn(),
 }));
 
 vi.mock("@/lib/integrations/google", () => ({
-  getGoogleServices: mockGetGoogleServices
+  getGoogleServices: mockGetGoogleServices,
 }));
 
 vi.mock("@/lib/integrations/jira", () => ({
-  getJiraConnection: mockGetJiraConnection
+  getJiraConnection: mockGetJiraConnection,
 }));
 
 vi.mock("@/lib/services/activity", () => ({
-  upsertImportedActivities: mockUpsertImportedActivities
+  upsertImportedActivities: mockUpsertImportedActivities,
 }));
 
 vi.mock("@/lib/services/gmail-ai-import", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/services/gmail-ai-import")>(
-    "@/lib/services/gmail-ai-import"
-  );
+  const actual = await vi.importActual<
+    typeof import("@/lib/services/gmail-ai-import")
+  >("@/lib/services/gmail-ai-import");
 
   return {
     ...actual,
     extractGmailActivitiesWithAI: mockExtractGmailActivitiesWithAI,
-    dedupeGmailActivities: mockDedupeGmailActivities
+    dedupeGmailActivities: mockDedupeGmailActivities,
+  };
+});
+
+vi.mock("@/lib/services/google-chat-ai-import", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/services/google-chat-ai-import")
+  >("@/lib/services/google-chat-ai-import");
+
+  return {
+    ...actual,
+    extractGoogleChatActivitiesWithAI: mockExtractGoogleChatActivitiesWithAI,
+    dedupeGoogleChatActivities: mockDedupeGoogleChatActivities,
   };
 });
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     appSetting: {
-      findUnique: mockAppSettingFindUnique
+      findUnique: mockAppSettingFindUnique,
     },
     activityItem: {
       findMany: mockActivityItemFindMany,
       findUnique: mockActivityItemFindUnique,
-      upsert: mockActivityItemUpsert
+      upsert: mockActivityItemUpsert,
     },
     dailyReport: {
       findUnique: mockDailyReportFindUnique,
       update: mockDailyReportUpdate,
-      upsert: mockDailyReportUpsert
+      upsert: mockDailyReportUpsert,
     },
     reportRevision: {
-      create: mockReportRevisionCreate
+      create: mockReportRevisionCreate,
     },
     syncRun: {
       create: mockSyncRunCreate,
-      update: mockSyncRunUpdate
+      update: mockSyncRunUpdate,
     },
     user: {
-      findUnique: mockUserFindUnique
+      findUnique: mockUserFindUnique,
     },
     userIntegrationSettings: {
-      upsert: mockUserIntegrationSettingsUpsert
-    }
-  }
+      upsert: mockUserIntegrationSettingsUpsert,
+    },
+  },
 }));
 
 describe("sync service pagination", () => {
@@ -110,18 +126,26 @@ describe("sync service pagination", () => {
     mockDailyReportUpdate.mockResolvedValue({});
     mockDailyReportUpsert.mockResolvedValue({
       id: "report-1",
-      status: "DRAFT"
+      status: "DRAFT",
     });
     mockReportRevisionCreate.mockResolvedValue({});
     mockExtractGmailActivitiesWithAI.mockResolvedValue([]);
     mockDedupeGmailActivities.mockImplementation((activities) => activities);
-    mockUpsertImportedActivities.mockResolvedValue({ importedCount: 1, skippedCount: 0, staleCount: 0 });
+    mockExtractGoogleChatActivitiesWithAI.mockResolvedValue([]);
+    mockDedupeGoogleChatActivities.mockImplementation(
+      (activities) => activities,
+    );
+    mockUpsertImportedActivities.mockResolvedValue({
+      importedCount: 1,
+      skippedCount: 0,
+      staleCount: 0,
+    });
     mockUserFindUnique.mockResolvedValue({ email: "employee@generisgp.com" });
     mockUserIntegrationSettingsUpsert.mockResolvedValue({
       jiraCloudId: "cloud-1",
       jiraAccountId: "jira-user-1",
       googleCalendarId: "primary",
-      googleTaskListIds: []
+      googleTaskListIds: [],
     });
   });
 
@@ -134,18 +158,55 @@ describe("sync service pagination", () => {
       if (path === "/rest/api/3/search/jql") {
         const body = JSON.parse(String(init?.body ?? "{}"));
         if (String(body.jql).includes("worklogDate")) {
-          return { issues: [{ id: "10003", key: "GEN-3", fields: { summary: "Worklog only", updated: "2026-05-13T15:00:00.000Z" } }] };
+          return {
+            issues: [
+              {
+                id: "10003",
+                key: "GEN-3",
+                fields: {
+                  summary: "Worklog only",
+                  updated: "2026-05-13T15:00:00.000Z",
+                },
+              },
+            ],
+          };
         }
 
         return body.nextPageToken
-          ? { issues: [{ id: "10002", key: "GEN-2", fields: { summary: "Second", updated: "2026-05-14T15:00:00.000Z", assignee: { accountId: "jira-user-1" } } }] }
+          ? {
+              issues: [
+                {
+                  id: "10002",
+                  key: "GEN-2",
+                  fields: {
+                    summary: "Second",
+                    updated: "2026-05-14T15:00:00.000Z",
+                    assignee: { accountId: "jira-user-1" },
+                  },
+                },
+              ],
+            }
           : {
-              issues: [{ id: "10001", key: "GEN-1", fields: { summary: "First", updated: "2026-05-14T14:00:00.000Z", assignee: { accountId: "jira-user-1" } } }],
-              nextPageToken: "search-page-2"
+              issues: [
+                {
+                  id: "10001",
+                  key: "GEN-1",
+                  fields: {
+                    summary: "First",
+                    updated: "2026-05-14T14:00:00.000Z",
+                    assignee: { accountId: "jira-user-1" },
+                  },
+                },
+              ],
+              nextPageToken: "search-page-2",
             };
       }
 
-      if (path.includes("/worklog") && path.includes("GEN-1") && path.includes("startAt=0")) {
+      if (
+        path.includes("/worklog") &&
+        path.includes("GEN-1") &&
+        path.includes("startAt=0")
+      ) {
         return {
           startAt: 0,
           maxResults: 1,
@@ -155,13 +216,17 @@ describe("sync service pagination", () => {
               id: "w1",
               started: "2026-05-14T13:00:00.000Z",
               timeSpentSeconds: 1800,
-              author: { accountId: "jira-user-1" }
-            }
-          ]
+              author: { accountId: "jira-user-1" },
+            },
+          ],
         };
       }
 
-      if (path.includes("/worklog") && path.includes("GEN-1") && path.includes("startAt=1")) {
+      if (
+        path.includes("/worklog") &&
+        path.includes("GEN-1") &&
+        path.includes("startAt=1")
+      ) {
         return {
           startAt: 1,
           maxResults: 1,
@@ -171,13 +236,17 @@ describe("sync service pagination", () => {
               id: "w2",
               started: "2026-05-14T14:00:00.000Z",
               timeSpentSeconds: 2700,
-              author: { accountId: "jira-user-1" }
-            }
-          ]
+              author: { accountId: "jira-user-1" },
+            },
+          ],
         };
       }
 
-      if (path.includes("/changelog") && path.includes("GEN-1") && path.includes("startAt=0")) {
+      if (
+        path.includes("/changelog") &&
+        path.includes("GEN-1") &&
+        path.includes("startAt=0")
+      ) {
         return {
           startAt: 0,
           maxResults: 1,
@@ -187,13 +256,19 @@ describe("sync service pagination", () => {
               id: "c1",
               created: "2026-05-14T15:00:00.000Z",
               author: { accountId: "jira-user-1" },
-              items: [{ field: "status", fromString: "To Do", toString: "Done" }]
-            }
-          ]
+              items: [
+                { field: "status", fromString: "To Do", toString: "Done" },
+              ],
+            },
+          ],
         };
       }
 
-      if (path.includes("/changelog") && path.includes("GEN-1") && path.includes("startAt=1")) {
+      if (
+        path.includes("/changelog") &&
+        path.includes("GEN-1") &&
+        path.includes("startAt=1")
+      ) {
         return {
           startAt: 1,
           maxResults: 1,
@@ -203,13 +278,17 @@ describe("sync service pagination", () => {
               id: "c2",
               created: "2026-05-14T16:00:00.000Z",
               author: { accountId: "jira-user-1" },
-              items: [{ field: "assignee", fromString: "A", toString: "B" }]
-            }
-          ]
+              items: [{ field: "assignee", fromString: "A", toString: "B" }],
+            },
+          ],
         };
       }
 
-      if (path.includes("/comment") && path.includes("GEN-1") && path.includes("startAt=0")) {
+      if (
+        path.includes("/comment") &&
+        path.includes("GEN-1") &&
+        path.includes("startAt=0")
+      ) {
         return {
           startAt: 0,
           maxResults: 1,
@@ -219,13 +298,17 @@ describe("sync service pagination", () => {
               id: "m1",
               created: "2026-05-14T17:00:00.000Z",
               author: { accountId: "jira-user-1" },
-              body: "Done"
-            }
-          ]
+              body: "Done",
+            },
+          ],
         };
       }
 
-      if (path.includes("/comment") && path.includes("GEN-1") && path.includes("startAt=1")) {
+      if (
+        path.includes("/comment") &&
+        path.includes("GEN-1") &&
+        path.includes("startAt=1")
+      ) {
         return {
           startAt: 1,
           maxResults: 1,
@@ -235,17 +318,24 @@ describe("sync service pagination", () => {
               id: "m2",
               created: "2026-05-14T18:00:00.000Z",
               author: { accountId: "jira-user-1" },
-              body: "Second current-user comment"
-            }
-          ]
+              body: "Second current-user comment",
+            },
+          ],
         };
       }
 
-      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+      return {
+        startAt: 0,
+        maxResults: 100,
+        total: 0,
+        worklogs: [],
+        values: [],
+        comments: [],
+      };
     });
     mockGetJiraConnection.mockResolvedValue({
       resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
-      fetch: jiraFetch
+      fetch: jiraFetch,
     });
 
     const { syncJira } = await import("@/lib/services/sync");
@@ -253,31 +343,49 @@ describe("sync service pagination", () => {
 
     expect(jiraFetch).toHaveBeenCalledWith(
       "/rest/api/3/search/jql",
-      expect.objectContaining({ body: expect.stringContaining("search-page-2") })
+      expect.objectContaining({
+        body: expect.stringContaining("search-page-2"),
+      }),
     );
     expect(jiraFetch).toHaveBeenCalledWith(
       "/rest/api/3/search/jql",
-      expect.objectContaining({ body: expect.stringContaining('updatedBy(\\"jira-user-1\\", \\"2026-05-14\\", \\"2026-05-15\\")') })
+      expect.objectContaining({
+        body: expect.stringContaining(
+          'updatedBy(\\"jira-user-1\\", \\"2026-05-14\\", \\"2026-05-15\\")',
+        ),
+      }),
     );
     expect(jiraFetch).toHaveBeenCalledWith(
       "/rest/api/3/search/jql",
-      expect.objectContaining({ body: expect.stringContaining("worklogDate") })
+      expect.objectContaining({ body: expect.stringContaining("worklogDate") }),
     );
     expect(
       jiraFetch.mock.calls
         .filter(([path]) => path === "/rest/api/3/search/jql")
-        .map(([, init]) => String(init?.body ?? ""))
-    ).not.toEqual(expect.arrayContaining([expect.stringContaining("updated >=")]));
-    expect(jiraFetch).toHaveBeenCalledWith(expect.stringContaining("GEN-1/worklog"));
-    expect(jiraFetch).toHaveBeenCalledWith(expect.stringContaining("GEN-1/changelog?startAt=1"));
-    expect(jiraFetch).toHaveBeenCalledWith(expect.stringContaining("GEN-1/comment?startAt=1"));
-    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
-    expect(activities.map((activity) => activity.sourceId)).toEqual(["issue:10001"]);
+        .map(([, init]) => String(init?.body ?? "")),
+    ).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("updated >=")]),
+    );
+    expect(jiraFetch).toHaveBeenCalledWith(
+      expect.stringContaining("GEN-1/worklog"),
+    );
+    expect(jiraFetch).toHaveBeenCalledWith(
+      expect.stringContaining("GEN-1/changelog?startAt=1"),
+    );
+    expect(jiraFetch).toHaveBeenCalledWith(
+      expect.stringContaining("GEN-1/comment?startAt=1"),
+    );
+    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ??
+      []) as NormalizedActivity[];
+    expect(activities.map((activity) => activity.sourceId)).toEqual([
+      "issue:10001",
+    ]);
     expect(activities).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           sourceId: "issue:10001",
-          description: "Commented 2 times, Logged 1h 15m, Changed status, Updated assignee",
+          description:
+            "Commented 2 times, Logged 1h 15m, Changed status, Updated assignee",
           durationMinutes: 75,
           metadata: expect.objectContaining({
             kind: "issue-day",
@@ -285,13 +393,18 @@ describe("sync service pagination", () => {
             commentCount: 2,
             worklogCount: 2,
             changedFields: ["status", "assignee"],
-            statusTransitions: [{ from: "To Do", to: "Done" }]
-          })
-        })
-      ])
+            statusTransitions: [{ from: "To Do", to: "Done" }],
+          }),
+        }),
+      ]),
     );
     expect(activities.map((activity) => activity.sourceId)).not.toEqual(
-      expect.arrayContaining(["worklog:w1", "worklog:w2", "changelog:10001:c1", "comment:10001:m1"])
+      expect.arrayContaining([
+        "worklog:w1",
+        "worklog:w2",
+        "changelog:10001:c1",
+        "comment:10001:m1",
+      ]),
     );
   }, 20_000);
 
@@ -314,10 +427,10 @@ describe("sync service pagination", () => {
                   summary: "Worklogged issue",
                   updated: "2026-05-13T20:00:00.000Z",
                   assignee: { accountId: "someone-else" },
-                  reporter: { accountId: "someone-else" }
-                }
-              }
-            ]
+                  reporter: { accountId: "someone-else" },
+                },
+              },
+            ],
           };
         }
 
@@ -330,10 +443,10 @@ describe("sync service pagination", () => {
                 summary: "Commented issue",
                 updated: "2026-05-14T19:00:00.000Z",
                 assignee: { accountId: "someone-else" },
-                reporter: { accountId: "someone-else" }
-              }
-            }
-          ]
+                reporter: { accountId: "someone-else" },
+              },
+            },
+          ],
         };
       }
 
@@ -347,9 +460,9 @@ describe("sync service pagination", () => {
               id: "m4",
               created: "2026-05-14T19:00:00.000Z",
               author: { accountId: "jira-user-1" },
-              body: "Investigated this today"
-            }
-          ]
+              body: "Investigated this today",
+            },
+          ],
         };
       }
 
@@ -363,23 +476,31 @@ describe("sync service pagination", () => {
               id: "w5",
               started: "2026-05-14T20:00:00.000Z",
               timeSpentSeconds: 1800,
-              author: { accountId: "jira-user-1" }
-            }
-          ]
+              author: { accountId: "jira-user-1" },
+            },
+          ],
         };
       }
 
-      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+      return {
+        startAt: 0,
+        maxResults: 100,
+        total: 0,
+        worklogs: [],
+        values: [],
+        comments: [],
+      };
     });
     mockGetJiraConnection.mockResolvedValue({
       resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
-      fetch: jiraFetch
+      fetch: jiraFetch,
     });
 
     const { syncJira } = await import("@/lib/services/sync");
     await syncJira("user-1", "2026-05-14");
 
-    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
+    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ??
+      []) as NormalizedActivity[];
 
     expect(activities).toEqual(
       expect.arrayContaining([
@@ -388,8 +509,8 @@ describe("sync service pagination", () => {
           description: "Commented",
           metadata: expect.objectContaining({
             activityTypes: ["comment"],
-            commentCount: 1
-          })
+            commentCount: 1,
+          }),
         }),
         expect.objectContaining({
           sourceId: "issue:10005",
@@ -397,13 +518,13 @@ describe("sync service pagination", () => {
           durationMinutes: 30,
           metadata: expect.objectContaining({
             activityTypes: ["worklog"],
-            worklogCount: 1
-          })
-        })
-      ])
+            worklogCount: 1,
+          }),
+        }),
+      ]),
     );
     expect(activities.map((activity) => activity.sourceId)).not.toEqual(
-      expect.arrayContaining(["comment:10004:m4", "worklog:w5"])
+      expect.arrayContaining(["comment:10004:m4", "worklog:w5"]),
     );
   });
 
@@ -427,10 +548,10 @@ describe("sync service pagination", () => {
                     summary: "Edited comment issue",
                     updated: "2026-05-14T19:00:00.000Z",
                     assignee: { accountId: "someone-else" },
-                    reporter: { accountId: "someone-else" }
-                  }
-                }
-              ]
+                    reporter: { accountId: "someone-else" },
+                  },
+                },
+              ],
             };
       }
 
@@ -446,23 +567,31 @@ describe("sync service pagination", () => {
               updated: "2026-05-14T19:00:00.000Z",
               author: { accountId: "jira-user-1" },
               updateAuthor: { accountId: "jira-user-1" },
-              body: "Clarified the note today"
-            }
-          ]
+              body: "Clarified the note today",
+            },
+          ],
         };
       }
 
-      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+      return {
+        startAt: 0,
+        maxResults: 100,
+        total: 0,
+        worklogs: [],
+        values: [],
+        comments: [],
+      };
     });
     mockGetJiraConnection.mockResolvedValue({
       resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
-      fetch: jiraFetch
+      fetch: jiraFetch,
     });
 
     const { syncJira } = await import("@/lib/services/sync");
     await syncJira("user-1", "2026-05-14");
 
-    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
+    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ??
+      []) as NormalizedActivity[];
 
     expect(activities).toEqual([
       expect.objectContaining({
@@ -472,9 +601,9 @@ describe("sync service pagination", () => {
         endedAt: new Date("2026-05-14T19:00:00.000Z"),
         metadata: expect.objectContaining({
           activityTypes: ["comment"],
-          commentCount: 1
-        })
-      })
+          commentCount: 1,
+        }),
+      }),
     ]);
   });
 
@@ -498,10 +627,10 @@ describe("sync service pagination", () => {
                     summary: "Changed by user",
                     updated: "2026-05-14T19:00:00.000Z",
                     assignee: { accountId: "someone-else" },
-                    reporter: { accountId: "someone-else" }
-                  }
-                }
-              ]
+                    reporter: { accountId: "someone-else" },
+                  },
+                },
+              ],
             };
       }
 
@@ -515,23 +644,37 @@ describe("sync service pagination", () => {
               id: "c6",
               created: "2026-05-14T19:00:00.000Z",
               author: { accountId: "jira-user-1" },
-              items: [{ field: "status", fromString: "To Do", toString: "In Progress" }]
-            }
-          ]
+              items: [
+                {
+                  field: "status",
+                  fromString: "To Do",
+                  toString: "In Progress",
+                },
+              ],
+            },
+          ],
         };
       }
 
-      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+      return {
+        startAt: 0,
+        maxResults: 100,
+        total: 0,
+        worklogs: [],
+        values: [],
+        comments: [],
+      };
     });
     mockGetJiraConnection.mockResolvedValue({
       resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
-      fetch: jiraFetch
+      fetch: jiraFetch,
     });
 
     const { syncJira } = await import("@/lib/services/sync");
     await syncJira("user-1", "2026-05-14");
 
-    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
+    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ??
+      []) as NormalizedActivity[];
 
     expect(activities).toEqual([
       expect.objectContaining({
@@ -540,9 +683,9 @@ describe("sync service pagination", () => {
         metadata: expect.objectContaining({
           activityTypes: ["changelog"],
           changedFields: ["status"],
-          statusTransitions: [{ from: "To Do", to: "In Progress" }]
-        })
-      })
+          statusTransitions: [{ from: "To Do", to: "In Progress" }],
+        }),
+      }),
     ]);
   });
 
@@ -566,10 +709,10 @@ describe("sync service pagination", () => {
                     summary: "Release field updates",
                     updated: "2026-05-14T19:00:00.000Z",
                     assignee: { accountId: "someone-else" },
-                    reporter: { accountId: "someone-else" }
-                  }
-                }
-              ]
+                    reporter: { accountId: "someone-else" },
+                  },
+                },
+              ],
             };
       }
 
@@ -584,26 +727,46 @@ describe("sync service pagination", () => {
               created: "2026-05-14T19:00:00.000Z",
               author: { accountId: "jira-user-1" },
               items: [
-                { field: "status", fromString: "To Do", toString: "In Progress" },
-                { field: "Fix Version/s", fromString: null, toString: "Release 1" },
-                { field: "Component/s", fromString: null, toString: "Platform" }
-              ]
-            }
-          ]
+                {
+                  field: "status",
+                  fromString: "To Do",
+                  toString: "In Progress",
+                },
+                {
+                  field: "Fix Version/s",
+                  fromString: null,
+                  toString: "Release 1",
+                },
+                {
+                  field: "Component/s",
+                  fromString: null,
+                  toString: "Platform",
+                },
+              ],
+            },
+          ],
         };
       }
 
-      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+      return {
+        startAt: 0,
+        maxResults: 100,
+        total: 0,
+        worklogs: [],
+        values: [],
+        comments: [],
+      };
     });
     mockGetJiraConnection.mockResolvedValue({
       resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
-      fetch: jiraFetch
+      fetch: jiraFetch,
     });
 
     const { syncJira } = await import("@/lib/services/sync");
     await syncJira("user-1", "2026-05-14");
 
-    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
+    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ??
+      []) as NormalizedActivity[];
 
     expect(activities).toEqual([
       expect.objectContaining({
@@ -612,9 +775,9 @@ describe("sync service pagination", () => {
         metadata: expect.objectContaining({
           activityTypes: ["changelog"],
           changedFields: ["status", "Fix Version/s", "Component/s"],
-          statusTransitions: [{ from: "To Do", to: "In Progress" }]
-        })
-      })
+          statusTransitions: [{ from: "To Do", to: "In Progress" }],
+        }),
+      }),
     ]);
   });
 
@@ -638,10 +801,10 @@ describe("sync service pagination", () => {
                     summary: "Metadata-only update",
                     updated: "2026-05-14T19:00:00.000Z",
                     assignee: { accountId: "jira-user-1" },
-                    reporter: { accountId: "someone-else" }
-                  }
-                }
-              ]
+                    reporter: { accountId: "someone-else" },
+                  },
+                },
+              ],
             };
       }
 
@@ -658,18 +821,25 @@ describe("sync service pagination", () => {
               items: [
                 { field: "assignee", fromString: "A", toString: "Employee" },
                 { field: "priority", fromString: "Medium", toString: "High" },
-                { field: "labels", fromString: null, toString: "follow-up" }
-              ]
-            }
-          ]
+                { field: "labels", fromString: null, toString: "follow-up" },
+              ],
+            },
+          ],
         };
       }
 
-      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+      return {
+        startAt: 0,
+        maxResults: 100,
+        total: 0,
+        worklogs: [],
+        values: [],
+        comments: [],
+      };
     });
     mockGetJiraConnection.mockResolvedValue({
       resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
-      fetch: jiraFetch
+      fetch: jiraFetch,
     });
 
     const { syncJira } = await import("@/lib/services/sync");
@@ -699,33 +869,41 @@ describe("sync service pagination", () => {
                     created: "2026-05-14T13:00:00.000Z",
                     updated: "2026-05-14T13:00:00.000Z",
                     creator: { accountId: "jira-user-1" },
-                    reporter: { accountId: "jira-user-1" }
-                  }
-                }
-              ]
+                    reporter: { accountId: "jira-user-1" },
+                  },
+                },
+              ],
             };
       }
 
-      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+      return {
+        startAt: 0,
+        maxResults: 100,
+        total: 0,
+        worklogs: [],
+        values: [],
+        comments: [],
+      };
     });
     mockGetJiraConnection.mockResolvedValue({
       resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
-      fetch: jiraFetch
+      fetch: jiraFetch,
     });
 
     const { syncJira } = await import("@/lib/services/sync");
     await syncJira("user-1", "2026-05-14");
 
-    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ?? []) as NormalizedActivity[];
+    const activities = (mockUpsertImportedActivities.mock.calls.at(-1)?.[3] ??
+      []) as NormalizedActivity[];
 
     expect(activities).toEqual([
       expect.objectContaining({
         sourceId: "issue:10009",
         description: "Updated issue",
         metadata: expect.objectContaining({
-          activityTypes: ["issue"]
-        })
-      })
+          activityTypes: ["issue"],
+        }),
+      }),
     ]);
   });
 
@@ -749,10 +927,10 @@ describe("sync service pagination", () => {
                     summary: "Rank shuffled",
                     updated: "2026-05-14T19:00:00.000Z",
                     assignee: { accountId: "someone-else" },
-                    reporter: { accountId: "someone-else" }
-                  }
-                }
-              ]
+                    reporter: { accountId: "someone-else" },
+                  },
+                },
+              ],
             };
       }
 
@@ -766,17 +944,24 @@ describe("sync service pagination", () => {
               id: "c7",
               created: "2026-05-14T19:00:00.000Z",
               author: { accountId: "jira-user-1" },
-              items: [{ field: "Rank", fromString: "1", toString: "2" }]
-            }
-          ]
+              items: [{ field: "Rank", fromString: "1", toString: "2" }],
+            },
+          ],
         };
       }
 
-      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+      return {
+        startAt: 0,
+        maxResults: 100,
+        total: 0,
+        worklogs: [],
+        values: [],
+        comments: [],
+      };
     });
     mockGetJiraConnection.mockResolvedValue({
       resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
-      fetch: jiraFetch
+      fetch: jiraFetch,
     });
 
     const { syncJira } = await import("@/lib/services/sync");
@@ -805,10 +990,10 @@ describe("sync service pagination", () => {
                     summary: "Owned rank shuffle",
                     updated: "2026-05-14T19:00:00.000Z",
                     assignee: { accountId: "jira-user-1" },
-                    reporter: { accountId: "jira-user-1" }
-                  }
-                }
-              ]
+                    reporter: { accountId: "jira-user-1" },
+                  },
+                },
+              ],
             };
       }
 
@@ -822,17 +1007,24 @@ describe("sync service pagination", () => {
               id: "c8",
               created: "2026-05-14T19:00:00.000Z",
               author: { accountId: "jira-user-1" },
-              items: [{ field: "Rank", fromString: "1", toString: "2" }]
-            }
-          ]
+              items: [{ field: "Rank", fromString: "1", toString: "2" }],
+            },
+          ],
         };
       }
 
-      return { startAt: 0, maxResults: 100, total: 0, worklogs: [], values: [], comments: [] };
+      return {
+        startAt: 0,
+        maxResults: 100,
+        total: 0,
+        worklogs: [],
+        values: [],
+        comments: [],
+      };
     });
     mockGetJiraConnection.mockResolvedValue({
       resource: { id: "cloud-1", url: "https://generis.atlassian.net" },
-      fetch: jiraFetch
+      fetch: jiraFetch,
     });
 
     const { syncJira } = await import("@/lib/services/sync");
@@ -852,10 +1044,15 @@ describe("sync service pagination", () => {
                   summary: "Second",
                   start: { dateTime: "2026-05-14T10:00:00-04:00" },
                   end: { dateTime: "2026-05-14T10:30:00-04:00" },
-                  attendees: [{ email: "employee@generisgp.com", responseStatus: "accepted" }]
-                }
-              ]
-            }
+                  attendees: [
+                    {
+                      email: "employee@generisgp.com",
+                      responseStatus: "accepted",
+                    },
+                  ],
+                },
+              ],
+            },
           }
         : {
             data: {
@@ -865,30 +1062,37 @@ describe("sync service pagination", () => {
                   summary: "First",
                   start: { dateTime: "2026-05-14T09:00:00-04:00" },
                   end: { dateTime: "2026-05-14T09:30:00-04:00" },
-                  attendees: [{ email: "employee@generisgp.com", responseStatus: "accepted" }]
-                }
+                  attendees: [
+                    {
+                      email: "employee@generisgp.com",
+                      responseStatus: "accepted",
+                    },
+                  ],
+                },
               ],
-              nextPageToken: "event-page-2"
-            }
-          }
+              nextPageToken: "event-page-2",
+            },
+          },
     );
     mockGetGoogleServices.mockResolvedValue({
       calendar: { events: { list: eventsList } },
-      tasks: {}
+      tasks: {},
     });
 
     const { syncGoogleCalendar } = await import("@/lib/services/sync");
     await syncGoogleCalendar("user-1", "2026-05-14");
 
-    expect(eventsList).toHaveBeenCalledWith(expect.objectContaining({ pageToken: "event-page-2" }));
+    expect(eventsList).toHaveBeenCalledWith(
+      expect.objectContaining({ pageToken: "event-page-2" }),
+    );
     expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
       "GOOGLE_CALENDAR",
       "user-1",
       "2026-05-14",
       expect.arrayContaining([
         expect.objectContaining({ sourceId: "event-1" }),
-        expect.objectContaining({ sourceId: "event-2" })
-      ])
+        expect.objectContaining({ sourceId: "event-2" }),
+      ]),
     );
   });
 
@@ -902,8 +1106,8 @@ describe("sync service pagination", () => {
             start: { dateTime: "2026-05-14T09:00:00-04:00" },
             end: { dateTime: "2026-05-14T09:30:00-04:00" },
             attendees: [
-              { email: "employee@generisgp.com", responseStatus: "accepted" }
-            ]
+              { email: "employee@generisgp.com", responseStatus: "accepted" },
+            ],
           },
           {
             id: "needs-action-event",
@@ -911,8 +1115,11 @@ describe("sync service pagination", () => {
             start: { dateTime: "2026-05-14T10:00:00-04:00" },
             end: { dateTime: "2026-05-14T10:30:00-04:00" },
             attendees: [
-              { email: "employee@generisgp.com", responseStatus: "needsAction" }
-            ]
+              {
+                email: "employee@generisgp.com",
+                responseStatus: "needsAction",
+              },
+            ],
           },
           {
             id: "tentative-event",
@@ -920,8 +1127,8 @@ describe("sync service pagination", () => {
             start: { dateTime: "2026-05-14T11:00:00-04:00" },
             end: { dateTime: "2026-05-14T11:30:00-04:00" },
             attendees: [
-              { email: "employee@generisgp.com", responseStatus: "tentative" }
-            ]
+              { email: "employee@generisgp.com", responseStatus: "tentative" },
+            ],
           },
           {
             id: "declined-event",
@@ -929,22 +1136,22 @@ describe("sync service pagination", () => {
             start: { dateTime: "2026-05-14T12:00:00-04:00" },
             end: { dateTime: "2026-05-14T12:30:00-04:00" },
             attendees: [
-              { email: "employee@generisgp.com", responseStatus: "declined" }
-            ]
+              { email: "employee@generisgp.com", responseStatus: "declined" },
+            ],
           },
           {
             id: "self-created-event",
             summary: "Focus block",
             creator: { self: true },
             start: { dateTime: "2026-05-14T13:00:00-04:00" },
-            end: { dateTime: "2026-05-14T13:30:00-04:00" }
-          }
-        ]
-      }
+            end: { dateTime: "2026-05-14T13:30:00-04:00" },
+          },
+        ],
+      },
     }));
     mockGetGoogleServices.mockResolvedValue({
       calendar: { events: { list: eventsList } },
-      tasks: {}
+      tasks: {},
     });
 
     const { syncGoogleCalendar } = await import("@/lib/services/sync");
@@ -957,15 +1164,15 @@ describe("sync service pagination", () => {
       [
         expect.objectContaining({
           sourceId: "accepted-event",
-          status: "accepted"
-        })
-      ]
+          status: "accepted",
+        }),
+      ],
     );
   });
 
   it("records a revision when adding an unfinished Google Task to a submitted report", async () => {
     const tasklistsList = vi.fn(async () => ({
-      data: { items: [{ id: "list-1", title: "Primary tasks" }] }
+      data: { items: [{ id: "list-1", title: "Primary tasks" }] },
     }));
     const tasksGet = vi.fn(async () => ({
       data: {
@@ -974,8 +1181,8 @@ describe("sync service pagination", () => {
         status: "needsAction",
         updated: "2026-05-14T15:00:00.000Z",
         notes: "Please update the agenda PDF",
-        webViewLink: "https://tasks.google.com/task/1"
-      }
+        webViewLink: "https://tasks.google.com/task/1",
+      },
     }));
     const submittedReport = {
       id: "report-1",
@@ -985,31 +1192,36 @@ describe("sync service pagination", () => {
       summary: "Submitted summary",
       status: "SUBMITTED",
       submittedAt: new Date("2026-05-14T20:00:00.000Z"),
-      activities: [{ id: "activity-old", selected: true, employeeNote: null }]
+      activities: [{ id: "activity-old", selected: true, employeeNote: null }],
     };
 
     mockGetGoogleServices.mockResolvedValue({
       calendar: {},
       tasks: {
         tasklists: { list: tasklistsList },
-        tasks: { get: tasksGet }
-      }
+        tasks: { get: tasksGet },
+      },
     });
     mockUserIntegrationSettingsUpsert.mockResolvedValue({
       jiraCloudId: "cloud-1",
       jiraAccountId: "jira-user-1",
       googleCalendarId: "primary",
-      googleTaskListIds: ["list-1"]
+      googleTaskListIds: ["list-1"],
     });
     mockDailyReportUpsert.mockResolvedValue({
       id: "report-1",
       userId: "user-1",
       reportDate: new Date("2026-05-14T00:00:00.000Z"),
-      status: "SUBMITTED"
+      status: "SUBMITTED",
     });
     mockDailyReportFindUnique
       .mockResolvedValueOnce(submittedReport)
-      .mockResolvedValueOnce({ ...submittedReport, revisions: [], comments: [], readReceipts: [] });
+      .mockResolvedValueOnce({
+        ...submittedReport,
+        revisions: [],
+        comments: [],
+        readReceipts: [],
+      });
 
     const { addGoogleTaskReference } = await import("@/lib/services/sync");
     await addGoogleTaskReference("user-1", "2026-05-14", "list-1", "task-1");
@@ -1018,33 +1230,33 @@ describe("sync service pagination", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           reportId: "report-1",
-          editedById: "user-1"
-        })
-      })
+          editedById: "user-1",
+        }),
+      }),
     );
     expect(mockActivityItemUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
         update: expect.objectContaining({
           dailyReportId: "report-1",
           selected: true,
-          status: "in progress"
+          status: "in progress",
         }),
         create: expect.objectContaining({
           dailyReportId: "report-1",
           selected: true,
-          status: "in progress"
-        })
-      })
+          status: "in progress",
+        }),
+      }),
     );
     expect(mockDailyReportUpdate).toHaveBeenCalledWith({
       where: { id: "report-1" },
-      data: { updatedAt: expect.any(Date) }
+      data: { updatedAt: expect.any(Date) },
     });
   });
 
   it("preserves a local title override when manually adding the same unfinished Google Task", async () => {
     const tasklistsList = vi.fn(async () => ({
-      data: { items: [{ id: "list-1", title: "Primary tasks" }] }
+      data: { items: [{ id: "list-1", title: "Primary tasks" }] },
     }));
     const tasksGet = vi.fn(async () => ({
       data: {
@@ -1053,45 +1265,45 @@ describe("sync service pagination", () => {
         status: "needsAction",
         updated: "2026-05-14T15:00:00.000Z",
         notes: "Please update the agenda PDF",
-        webViewLink: "https://tasks.google.com/task/1"
-      }
+        webViewLink: "https://tasks.google.com/task/1",
+      },
     }));
 
     mockGetGoogleServices.mockResolvedValue({
       calendar: {},
       tasks: {
         tasklists: { list: tasklistsList },
-        tasks: { get: tasksGet }
-      }
+        tasks: { get: tasksGet },
+      },
     });
     mockUserIntegrationSettingsUpsert.mockResolvedValue({
       jiraCloudId: "cloud-1",
       jiraAccountId: "jira-user-1",
       googleCalendarId: "primary",
-      googleTaskListIds: ["list-1"]
+      googleTaskListIds: ["list-1"],
     });
     mockDailyReportUpsert.mockResolvedValue({
       id: "report-1",
       userId: "user-1",
       reportDate: new Date("2026-05-14T00:00:00.000Z"),
-      status: "DRAFT"
+      status: "DRAFT",
     });
     mockDailyReportFindUnique
       .mockResolvedValueOnce({
         id: "report-1",
-        status: "DRAFT"
+        status: "DRAFT",
       })
       .mockResolvedValueOnce({
         id: "report-1",
         status: "DRAFT",
-        activities: []
+        activities: [],
       });
     mockActivityItemFindUnique.mockResolvedValue({
       title: "Local rollout title",
       metadata: {
         generisLocalTitleOverride: true,
-        generisRemoteTitle: "Old remote title"
-      }
+        generisRemoteTitle: "Old remote title",
+      },
     });
 
     const { addGoogleTaskReference } = await import("@/lib/services/sync");
@@ -1104,14 +1316,14 @@ describe("sync service pagination", () => {
             userId: "user-1",
             reportDate: new Date("2026-05-14T00:00:00.000Z"),
             source: "GOOGLE_TASKS",
-            sourceId: "task-1"
-          }
+            sourceId: "task-1",
+          },
         },
         select: {
           title: true,
-          metadata: true
-        }
-      })
+          metadata: true,
+        },
+      }),
     );
     expect(mockActivityItemUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1120,18 +1332,18 @@ describe("sync service pagination", () => {
           metadata: expect.objectContaining({
             generisLocalTitleOverride: true,
             generisRemoteTitle: "Remote rollout plan",
-            manuallyAdded: true
-          })
+            manuallyAdded: true,
+          }),
         }),
         create: expect.objectContaining({
           title: "Local rollout title",
           metadata: expect.objectContaining({
             generisLocalTitleOverride: true,
             generisRemoteTitle: "Remote rollout plan",
-            manuallyAdded: true
-          })
-        })
-      })
+            manuallyAdded: true,
+          }),
+        }),
+      }),
     );
   });
 
@@ -1139,23 +1351,42 @@ describe("sync service pagination", () => {
     const tasklistsList = vi.fn(async (params) =>
       params.pageToken
         ? { data: { items: [] } }
-        : { data: { items: [{ id: "list-1", title: "Primary tasks" }], nextPageToken: "task-list-page-2" } }
+        : {
+            data: {
+              items: [{ id: "list-1", title: "Primary tasks" }],
+              nextPageToken: "task-list-page-2",
+            },
+          },
     );
     const tasksList = vi.fn(async (params) => {
       if (params.completedMin && !params.pageToken) {
         return {
           data: {
-            items: [{ id: "task-1", title: "First task", status: "completed", completed: "2026-05-14T14:00:00.000Z" }],
-            nextPageToken: "task-page-2"
-          }
+            items: [
+              {
+                id: "task-1",
+                title: "First task",
+                status: "completed",
+                completed: "2026-05-14T14:00:00.000Z",
+              },
+            ],
+            nextPageToken: "task-page-2",
+          },
         };
       }
 
       if (params.pageToken === "task-page-2") {
         return {
           data: {
-            items: [{ id: "task-2", title: "Second task", status: "completed", completed: "2026-05-14T15:00:00.000Z" }]
-          }
+            items: [
+              {
+                id: "task-2",
+                title: "Second task",
+                status: "completed",
+                completed: "2026-05-14T15:00:00.000Z",
+              },
+            ],
+          },
         };
       }
 
@@ -1165,22 +1396,32 @@ describe("sync service pagination", () => {
       calendar: {},
       tasks: {
         tasklists: { list: tasklistsList },
-        tasks: { list: tasksList }
-      }
+        tasks: { list: tasksList },
+      },
     });
 
     const { syncGoogleTasks } = await import("@/lib/services/sync");
     await syncGoogleTasks("user-1", "2026-05-14");
 
-    expect(tasklistsList).toHaveBeenCalledWith(expect.objectContaining({ pageToken: "task-list-page-2" }));
-    expect(tasksList).toHaveBeenCalledWith(expect.objectContaining({ pageToken: "task-page-2" }));
-    expect(tasksList).toHaveBeenCalledWith(expect.objectContaining({ showAssigned: true, showCompleted: true, showHidden: true }));
+    expect(tasklistsList).toHaveBeenCalledWith(
+      expect.objectContaining({ pageToken: "task-list-page-2" }),
+    );
+    expect(tasksList).toHaveBeenCalledWith(
+      expect.objectContaining({ pageToken: "task-page-2" }),
+    );
+    expect(tasksList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        showAssigned: true,
+        showCompleted: true,
+        showHidden: true,
+      }),
+    );
     expect(tasksList.mock.calls.map(([params]) => params)).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ dueMin: expect.any(String) }),
         expect.objectContaining({ updatedMin: expect.any(String) }),
-        expect.objectContaining({ showCompleted: false })
-      ])
+        expect.objectContaining({ showCompleted: false }),
+      ]),
     );
     expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
       "GOOGLE_TASKS",
@@ -1188,13 +1429,15 @@ describe("sync service pagination", () => {
       "2026-05-14",
       expect.arrayContaining([
         expect.objectContaining({ sourceId: "task-1", status: "completed" }),
-        expect.objectContaining({ sourceId: "task-2", status: "completed" })
-      ])
+        expect.objectContaining({ sourceId: "task-2", status: "completed" }),
+      ]),
     );
   });
 
   it("imports completed assigned Google Chat space tasks", async () => {
-    const tasklistsList = vi.fn(async () => ({ data: { items: [{ id: "assigned", title: "Assigned to me" }] } }));
+    const tasklistsList = vi.fn(async () => ({
+      data: { items: [{ id: "assigned", title: "Assigned to me" }] },
+    }));
     const tasksList = vi.fn(async (params) => {
       if (params.completedMin) {
         return {
@@ -1209,11 +1452,11 @@ describe("sync service pagination", () => {
                 assignmentInfo: {
                   surfaceType: "SPACE",
                   linkToTask: "https://chat.google.com/space/task",
-                  spaceInfo: { space: "spaces/AAAA" }
-                }
-              }
-            ]
-          }
+                  spaceInfo: { space: "spaces/AAAA" },
+                },
+              },
+            ],
+          },
         };
       }
 
@@ -1223,14 +1466,16 @@ describe("sync service pagination", () => {
       calendar: {},
       tasks: {
         tasklists: { list: tasklistsList },
-        tasks: { list: tasksList }
-      }
+        tasks: { list: tasksList },
+      },
     });
 
     const { syncGoogleTasks } = await import("@/lib/services/sync");
     await syncGoogleTasks("user-1", "2026-05-14");
 
-    expect(tasksList).toHaveBeenCalledWith(expect.objectContaining({ showAssigned: true, showHidden: true }));
+    expect(tasksList).toHaveBeenCalledWith(
+      expect.objectContaining({ showAssigned: true, showHidden: true }),
+    );
     expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
       "GOOGLE_TASKS",
       "user-1",
@@ -1241,29 +1486,31 @@ describe("sync service pagination", () => {
           sourceUrl: "https://chat.google.com/space/task",
           metadata: expect.objectContaining({
             assignmentSurface: "SPACE",
-            assignmentSpace: "spaces/AAAA"
-          })
-        })
-      ])
+            assignmentSpace: "spaces/AAAA",
+          }),
+        }),
+      ]),
     );
   });
 
   it("imports Gmail AI work items from paginated sent threads", async () => {
-    const bodyData = Buffer.from("Drafted the client rollout follow-up.").toString("base64url");
+    const bodyData = Buffer.from(
+      "Drafted the client rollout follow-up.",
+    ).toString("base64url");
     const threadsList = vi.fn(async (params) => {
       if (!params.pageToken) {
         return {
           data: {
             threads: [{ id: "thread-1" }],
-            nextPageToken: "thread-page-2"
-          }
+            nextPageToken: "thread-page-2",
+          },
         };
       }
 
       return {
         data: {
-          threads: [{ id: "thread-2" }]
-        }
+          threads: [{ id: "thread-2" }],
+        },
       };
     });
     const threadsGet = vi.fn(async (params) => ({
@@ -1273,23 +1520,25 @@ describe("sync service pagination", () => {
           {
             id: `${params.id}-message-1`,
             threadId: params.id,
-            internalDate: String(new Date("2026-05-14T14:00:00.000Z").getTime()),
+            internalDate: String(
+              new Date("2026-05-14T14:00:00.000Z").getTime(),
+            ),
             payload: {
               headers: [
                 { name: "Subject", value: "Client rollout" },
                 { name: "From", value: "Employee <employee@generisgp.com>" },
-                { name: "To", value: "Client <client@example.com>" }
+                { name: "To", value: "Client <client@example.com>" },
               ],
               parts: [
                 {
                   mimeType: "text/plain",
-                  body: { data: bodyData }
-                }
-              ]
-            }
-          }
-        ]
-      }
+                  body: { data: bodyData },
+                },
+              ],
+            },
+          },
+        ],
+      },
     }));
     const gmailActivity: NormalizedActivity = {
       source: "GMAIL",
@@ -1301,8 +1550,8 @@ describe("sync service pagination", () => {
       metadata: {
         importBatch: "gmail-ai-v1",
         threadId: "thread-1",
-        messageIds: ["thread-1-message-1"]
-      }
+        messageIds: ["thread-1-message-1"],
+      },
     };
     mockExtractGmailActivitiesWithAI.mockResolvedValue([gmailActivity]);
     mockGetGoogleServices.mockResolvedValue({
@@ -1311,11 +1560,11 @@ describe("sync service pagination", () => {
         users: {
           threads: {
             list: threadsList,
-            get: threadsGet
-          }
-        }
+            get: threadsGet,
+          },
+        },
       },
-      tasks: {}
+      tasks: {},
     });
 
     const { syncGmail } = await import("@/lib/services/sync");
@@ -1324,8 +1573,8 @@ describe("sync service pagination", () => {
     expect(threadsList).toHaveBeenCalledWith(
       expect.objectContaining({
         pageToken: "thread-page-2",
-        q: expect.stringContaining("in:sent")
-      })
+        q: expect.stringContaining("in:sent"),
+      }),
     );
     expect(threadsGet).toHaveBeenCalledTimes(2);
     expect(mockExtractGmailActivitiesWithAI).toHaveBeenCalledWith(
@@ -1335,42 +1584,42 @@ describe("sync service pagination", () => {
         expect.objectContaining({
           threadId: "thread-1",
           messages: expect.arrayContaining([
-            expect.objectContaining({ id: "thread-1-message-1" })
-          ])
-        })
+            expect.objectContaining({ id: "thread-1-message-1" }),
+          ]),
+        }),
       ]),
       expect.any(Date),
-      expect.any(Date)
+      expect.any(Date),
     );
     expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
       "GMAIL",
       "user-1",
       "2026-05-14",
-      [gmailActivity]
+      [gmailActivity],
     );
   });
 
   it("continues Gmail thread pagination beyond the first 50 sent threads", async () => {
     const bodyData = Buffer.from("Drafted a client follow-up.").toString(
-      "base64url"
+      "base64url",
     );
     const firstPageThreads = Array.from({ length: 50 }, (_, index) => ({
-      id: `thread-${index + 1}`
+      id: `thread-${index + 1}`,
     }));
     const threadsList = vi.fn(async (params) => {
       if (!params.pageToken) {
         return {
           data: {
             threads: firstPageThreads,
-            nextPageToken: "thread-page-2"
-          }
+            nextPageToken: "thread-page-2",
+          },
         };
       }
 
       return {
         data: {
-          threads: [{ id: "thread-51" }]
-        }
+          threads: [{ id: "thread-51" }],
+        },
       };
     });
     const threadsGet = vi.fn(async (params) => ({
@@ -1380,18 +1629,20 @@ describe("sync service pagination", () => {
           {
             id: `${params.id}-message-1`,
             threadId: params.id,
-            internalDate: String(new Date("2026-05-14T14:00:00.000Z").getTime()),
+            internalDate: String(
+              new Date("2026-05-14T14:00:00.000Z").getTime(),
+            ),
             payload: {
               parts: [
                 {
                   mimeType: "text/plain",
-                  body: { data: bodyData }
-                }
-              ]
-            }
-          }
-        ]
-      }
+                  body: { data: bodyData },
+                },
+              ],
+            },
+          },
+        ],
+      },
     }));
     mockGetGoogleServices.mockResolvedValue({
       calendar: {},
@@ -1399,11 +1650,11 @@ describe("sync service pagination", () => {
         users: {
           threads: {
             list: threadsList,
-            get: threadsGet
-          }
-        }
+            get: threadsGet,
+          },
+        },
       },
-      tasks: {}
+      tasks: {},
     });
 
     const { syncGmail } = await import("@/lib/services/sync");
@@ -1414,14 +1665,14 @@ describe("sync service pagination", () => {
       1,
       expect.objectContaining({
         maxResults: 100,
-        pageToken: undefined
-      })
+        pageToken: undefined,
+      }),
     );
     expect(threadsList).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        pageToken: "thread-page-2"
-      })
+        pageToken: "thread-page-2",
+      }),
     );
     expect(threadsGet).toHaveBeenCalledTimes(51);
   });
@@ -1433,10 +1684,10 @@ describe("sync service pagination", () => {
           status: 403,
           data: {
             error: {
-              message: "Request had insufficient authentication scopes."
-            }
-          }
-        }
+              message: "Request had insufficient authentication scopes.",
+            },
+          },
+        },
       };
     });
     mockGetGoogleServices.mockResolvedValue({
@@ -1445,25 +1696,25 @@ describe("sync service pagination", () => {
         users: {
           threads: {
             list: threadsList,
-            get: vi.fn()
-          }
-        }
+            get: vi.fn(),
+          },
+        },
       },
-      tasks: {}
+      tasks: {},
     });
 
     const { syncGmail } = await import("@/lib/services/sync");
 
     await expect(syncGmail("user-1", "2026-05-14")).rejects.toThrow(
-      "Reconnect Google and approve Gmail access."
+      "Reconnect Google and approve Gmail access.",
     );
     expect(mockSyncRunUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           status: "FAILED",
-          errorMessage: expect.stringContaining("Reconnect Google")
-        })
-      })
+          errorMessage: expect.stringContaining("Reconnect Google"),
+        }),
+      }),
     );
   });
 
@@ -1489,11 +1740,11 @@ describe("sync service pagination", () => {
         users: {
           threads: {
             list: threadsList,
-            get: threadsGet
-          }
-        }
+            get: threadsGet,
+          },
+        },
       },
-      tasks: {}
+      tasks: {},
     });
 
     const { syncGmail } = await import("@/lib/services/sync");
@@ -1505,24 +1756,24 @@ describe("sync service pagination", () => {
       "2026-05-14",
       [],
       expect.any(Date),
-      expect.any(Date)
+      expect.any(Date),
     );
     expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
       "GMAIL",
       "user-1",
       "2026-05-14",
-      []
+      [],
     );
   });
 
   it("records Gmail AI extraction failures on the sync run", async () => {
     const bodyData = Buffer.from("Drafted a client follow-up.").toString(
-      "base64url"
+      "base64url",
     );
     const threadsList = vi.fn(async () => ({
       data: {
-        threads: [{ id: "thread-1" }]
-      }
+        threads: [{ id: "thread-1" }],
+      },
     }));
     const threadsGet = vi.fn(async () => ({
       data: {
@@ -1531,21 +1782,23 @@ describe("sync service pagination", () => {
           {
             id: "message-1",
             threadId: "thread-1",
-            internalDate: String(new Date("2026-05-14T14:00:00.000Z").getTime()),
+            internalDate: String(
+              new Date("2026-05-14T14:00:00.000Z").getTime(),
+            ),
             payload: {
               parts: [
                 {
                   mimeType: "text/plain",
-                  body: { data: bodyData }
-                }
-              ]
-            }
-          }
-        ]
-      }
+                  body: { data: bodyData },
+                },
+              ],
+            },
+          },
+        ],
+      },
     }));
     mockExtractGmailActivitiesWithAI.mockRejectedValue(
-      new Error("Gemini unavailable")
+      new Error("Gemini unavailable"),
     );
     mockGetGoogleServices.mockResolvedValue({
       calendar: {},
@@ -1553,25 +1806,284 @@ describe("sync service pagination", () => {
         users: {
           threads: {
             list: threadsList,
-            get: threadsGet
-          }
-        }
+            get: threadsGet,
+          },
+        },
       },
-      tasks: {}
+      tasks: {},
     });
 
     const { syncGmail } = await import("@/lib/services/sync");
 
     await expect(syncGmail("user-1", "2026-05-14")).rejects.toThrow(
-      "Gemini unavailable"
+      "Gemini unavailable",
     );
     expect(mockSyncRunUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           status: "FAILED",
-          errorMessage: "Gemini unavailable"
-        })
-      })
+          errorMessage: "Gemini unavailable",
+        }),
+      }),
     );
+  });
+
+  it("imports Google Chat AI work items from paginated same-day messages", async () => {
+    const spacesList = vi.fn(async (params) => {
+      if (!params.pageToken) {
+        return {
+          data: {
+            spaces: [
+              {
+                name: "spaces/AAA",
+                displayName: "Product",
+                spaceUri: "https://chat.google.com/room/AAA",
+                lastActiveTime: "2026-05-14T15:00:00.000Z",
+              },
+            ],
+            nextPageToken: "space-page-2",
+          },
+        };
+      }
+
+      return {
+        data: {
+          spaces: [
+            {
+              name: "spaces/OLD",
+              displayName: "Old space",
+              lastActiveTime: "2026-05-13T15:00:00.000Z",
+            },
+          ],
+        },
+      };
+    });
+    const messagesList = vi.fn(async (params) => {
+      if (!params.pageToken) {
+        return {
+          data: {
+            messages: [
+              {
+                name: "spaces/AAA/messages/msg-1",
+                createTime: "2026-05-14T14:00:00.000Z",
+                text: "I finished the launch checklist and sent QA notes.",
+                sender: { name: "users/current", type: "HUMAN" },
+                thread: { name: "spaces/AAA/threads/thread-1" },
+              },
+            ],
+            nextPageToken: "message-page-2",
+          },
+        };
+      }
+
+      return {
+        data: {
+          messages: [
+            {
+              name: "spaces/AAA/messages/msg-2",
+              createTime: "2026-05-14T14:20:00.000Z",
+              text: "QA notes are attached and ready for review.",
+              sender: { name: "users/coworker", type: "HUMAN" },
+              thread: { name: "spaces/AAA/threads/thread-1" },
+            },
+          ],
+        },
+      };
+    });
+    const getSpaceReadState = vi.fn(async () => ({
+      data: {
+        name: "users/current/spaces/AAA/spaceReadState",
+      },
+    }));
+    const chatActivity: NormalizedActivity = {
+      source: "GOOGLE_CHAT",
+      sourceId: "chat:spaces/AAA/threads/thread-1:candidate:abc123",
+      sourceContainerId: "spaces/AAA/threads/thread-1",
+      title: "Send launch QA notes",
+      description: "Prepared QA notes for the launch review.",
+      selected: true,
+      metadata: {
+        importBatch: "google-chat-ai-v1",
+        conversationId: "spaces/AAA/threads/thread-1",
+        messageIds: ["spaces/AAA/messages/msg-1"],
+      },
+    };
+    mockExtractGoogleChatActivitiesWithAI.mockResolvedValue([chatActivity]);
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: {},
+      chat: {
+        users: {
+          spaces: {
+            getSpaceReadState,
+          },
+        },
+        spaces: {
+          list: spacesList,
+          messages: {
+            list: messagesList,
+          },
+        },
+      },
+      gmail: {},
+      tasks: {},
+    });
+
+    const { syncGoogleChat } = await import("@/lib/services/sync");
+    await syncGoogleChat("user-1", "2026-05-14");
+
+    expect(spacesList).toHaveBeenCalledWith(
+      expect.objectContaining({ pageToken: "space-page-2" }),
+    );
+    expect(getSpaceReadState).toHaveBeenCalledWith({
+      name: "users/me/spaces/AAA/spaceReadState",
+    });
+    expect(messagesList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parent: "spaces/AAA",
+        pageToken: "message-page-2",
+        showDeleted: false,
+        filter: expect.stringContaining("create_time"),
+      }),
+    );
+    expect(messagesList).not.toHaveBeenCalledWith(
+      expect.objectContaining({ parent: "spaces/OLD" }),
+    );
+    expect(mockExtractGoogleChatActivitiesWithAI).toHaveBeenCalledWith(
+      "user-1",
+      "2026-05-14",
+      expect.arrayContaining([
+        expect.objectContaining({
+          conversationId: "spaces/AAA/threads/thread-1",
+          messages: expect.arrayContaining([
+            expect.objectContaining({
+              id: "spaces/AAA/messages/msg-1",
+              isCurrentUser: true,
+            }),
+            expect.objectContaining({
+              id: "spaces/AAA/messages/msg-2",
+              isCurrentUser: false,
+            }),
+          ]),
+        }),
+      ]),
+      expect.any(Date),
+      expect.any(Date),
+    );
+    expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
+      "GOOGLE_CHAT",
+      "user-1",
+      "2026-05-14",
+      [chatActivity],
+    );
+  });
+
+  it("stales Google Chat imports when no same-day messages match", async () => {
+    const spacesList = vi.fn(async () => ({
+      data: {
+        spaces: [
+          {
+            name: "spaces/AAA",
+            displayName: "Product",
+            lastActiveTime: "2026-05-14T15:00:00.000Z",
+          },
+        ],
+      },
+    }));
+    const messagesList = vi.fn(async () => ({ data: {} }));
+    const getSpaceReadState = vi.fn(async () => ({
+      data: {
+        name: "users/current/spaces/AAA/spaceReadState",
+      },
+    }));
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: {},
+      chat: {
+        users: {
+          spaces: {
+            getSpaceReadState,
+          },
+        },
+        spaces: {
+          list: spacesList,
+          messages: {
+            list: messagesList,
+          },
+        },
+      },
+      gmail: {},
+      tasks: {},
+    });
+
+    const { syncGoogleChat } = await import("@/lib/services/sync");
+    await syncGoogleChat("user-1", "2026-05-14");
+
+    expect(mockExtractGoogleChatActivitiesWithAI).toHaveBeenCalledWith(
+      "user-1",
+      "2026-05-14",
+      [],
+      expect.any(Date),
+      expect.any(Date),
+    );
+    expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
+      "GOOGLE_CHAT",
+      "user-1",
+      "2026-05-14",
+      [],
+    );
+  });
+
+  it("surfaces actionable Google Chat permission failures", async () => {
+    const spacesList = vi.fn(async () => {
+      throw {
+        response: {
+          status: 403,
+          data: {
+            error: {
+              message: "Request had insufficient authentication scopes.",
+            },
+          },
+        },
+      };
+    });
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: {},
+      chat: {
+        spaces: {
+          list: spacesList,
+          messages: {
+            list: vi.fn(),
+          },
+        },
+      },
+      gmail: {},
+      tasks: {},
+    });
+
+    const { syncGoogleChat } = await import("@/lib/services/sync");
+
+    await expect(syncGoogleChat("user-1", "2026-05-14")).rejects.toThrow(
+      "Reconnect Google and approve Google Chat access.",
+    );
+    expect(mockSyncRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorMessage: expect.stringContaining("Google Chat"),
+        }),
+      }),
+    );
+  });
+
+  it("surfaces missing Google Chat migration failures before the sync run starts", async () => {
+    mockSyncRunCreate.mockRejectedValue(
+      new Error('invalid input value for enum "SyncProvider": "GOOGLE_CHAT"'),
+    );
+
+    const { syncGoogleChat } = await import("@/lib/services/sync");
+
+    await expect(syncGoogleChat("user-1", "2026-05-14")).rejects.toThrow(
+      "Google Chat import needs the latest database migration.",
+    );
+    expect(mockSyncRunUpdate).not.toHaveBeenCalled();
   });
 });

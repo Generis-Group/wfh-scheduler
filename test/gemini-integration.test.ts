@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { getGoogleClientMock } = vi.hoisted(() => ({
-  getGoogleClientMock: vi.fn()
+  getGoogleClientMock: vi.fn(),
 }));
 
 vi.mock("@/lib/integrations/google", () => ({
-  getGoogleClient: getGoogleClientMock
+  getGoogleClient: getGoogleClientMock,
 }));
 
 vi.mock("server-only", () => ({}));
@@ -16,7 +16,7 @@ import { GEMINI_OAUTH_SCOPES, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
 const originalEnv = {
   GEMINI_MODEL: process.env.GEMINI_MODEL,
   GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
-  GOOGLE_CLOUD_QUOTA_PROJECT: process.env.GOOGLE_CLOUD_QUOTA_PROJECT
+  GOOGLE_CLOUD_QUOTA_PROJECT: process.env.GOOGLE_CLOUD_QUOTA_PROJECT,
 };
 
 beforeEach(() => {
@@ -38,12 +38,12 @@ describe("Gemini integration", () => {
         candidates: [
           {
             content: {
-              parts: [{ text: "Generated " }, { text: "summary" }]
+              parts: [{ text: "Generated " }, { text: "summary" }],
             },
-            finishReason: "STOP"
-          }
-        ]
-      }
+            finishReason: "STOP",
+          },
+        ],
+      },
     }));
     const authClient = { request };
     getGoogleClientMock.mockResolvedValue(authClient);
@@ -53,7 +53,7 @@ describe("Gemini integration", () => {
     const result = await client.models.generateContent({
       model: "gemini-test",
       contents: "Write a summary.",
-      config: { maxOutputTokens: 200, temperature: 0.2 }
+      config: { maxOutputTokens: 200, temperature: 0.2 },
     });
 
     expect(getGoogleClientMock).toHaveBeenCalledWith("user-1");
@@ -62,16 +62,16 @@ describe("Gemini integration", () => {
       url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent",
       method: "POST",
       headers: {
-        "x-goog-user-project": "quota-project-1"
+        "x-goog-user-project": "quota-project-1",
       },
       data: {
         contents: [
           {
-            parts: [{ text: "Write a summary." }]
-          }
+            parts: [{ text: "Write a summary." }],
+          },
         ],
-        generationConfig: { maxOutputTokens: 200, temperature: 0.2 }
-      }
+        generationConfig: { maxOutputTokens: 200, temperature: 0.2 },
+      },
     });
     expect(result.text).toBe("Generated summary");
   });
@@ -93,7 +93,7 @@ describe("Gemini integration", () => {
     delete process.env.GOOGLE_CLOUD_PROJECT;
 
     await expect(getGeminiClient("user-1")).rejects.toThrow(
-      "GOOGLE_CLOUD_QUOTA_PROJECT or GOOGLE_CLOUD_PROJECT is required for Gemini OAuth requests."
+      "GOOGLE_CLOUD_QUOTA_PROJECT or GOOGLE_CLOUD_PROJECT is required for Gemini OAuth requests.",
     );
   });
 
@@ -103,6 +103,15 @@ describe("Gemini integration", () => {
     }
     expect(GOOGLE_OAUTH_SCOPE).toContain(
       "https://www.googleapis.com/auth/gmail.readonly",
+    );
+    expect(GOOGLE_OAUTH_SCOPE).toContain(
+      "https://www.googleapis.com/auth/chat.spaces.readonly",
+    );
+    expect(GOOGLE_OAUTH_SCOPE).toContain(
+      "https://www.googleapis.com/auth/chat.messages.readonly",
+    );
+    expect(GOOGLE_OAUTH_SCOPE).toContain(
+      "https://www.googleapis.com/auth/chat.users.readstate.readonly",
     );
   });
 

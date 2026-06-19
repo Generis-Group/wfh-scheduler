@@ -43,6 +43,7 @@ enum ActivitySource {
   GOOGLE_CALENDAR
   GOOGLE_TASKS
   GMAIL
+  GOOGLE_CHAT
   MANUAL
 }
 
@@ -51,6 +52,7 @@ enum SyncProvider {
   GOOGLE_CALENDAR
   GOOGLE_TASKS
   GMAIL
+  GOOGLE_CHAT
 }
 
 enum SyncStatus {

@@ -91,6 +91,10 @@ function sourceLabel(source: string) {
     return "Gmail";
   }
 
+  if (source === "GOOGLE_CHAT") {
+    return "Google Chat";
+  }
+
   if (source === "JIRA") {
     return "Jira";
   }
@@ -195,7 +199,8 @@ function buildSummaryPrompt(
     "For bulletedList and numberedList blocks, use items with text and activityTokens.",
     "",
     "Formatting intent:",
-    "- Use sections with clear headings.",
+    "- Use only one generic work section. Do not create multiple sections with the same generic heading such as Project Work.",
+    "- Split sections only when the selected work items clearly belong to distinct categories such as production updates, meetings/follow-up, true blockers, or a named workstream present in the items.",
     "- Prefer bullets outside of short narrative context.",
     "- Use paragraphs only for major work that needs a little explanation.",
     "- Use blockquotes only for actual blockers, risks, or follow-up notes.",
@@ -236,7 +241,9 @@ function buildSummaryPrompt(
     "",
     `Report date: ${reportDateLabel(report.reportDate)}`,
     `Work location: ${report.workLocation}`,
-    existingSummary ? `Current summary being replaced: ${existingSummary}` : null,
+    existingSummary
+      ? `Current summary being replaced: ${existingSummary}`
+      : null,
     "",
     "Selected work items:",
     references.map(activityPromptLine).join("\n"),
@@ -609,7 +616,9 @@ function groundedHeading(
     return heading;
   }
 
-  const allowedWords = new Set(comparableWords(headingReferenceText(references)));
+  const allowedWords = new Set(
+    comparableWords(headingReferenceText(references)),
+  );
   const unsupportedSpecificWord = comparableWords(heading).some(
     (word) => !genericHeadingWords.has(word) && !allowedWords.has(word),
   );
@@ -660,6 +669,36 @@ function normalizeBlockerReferences(
     .filter((block): block is StructuredBlock => Boolean(block));
 
   return blocks.length > 0 ? { ...section, blocks } : null;
+}
+
+function sectionHeadingKey(heading: string) {
+  return heading.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function mergeDuplicateSections(sections: StructuredSection[]) {
+  const merged: StructuredSection[] = [];
+  const sectionIndexes = new Map<string, number>();
+
+  for (const section of sections) {
+    const key = sectionHeadingKey(section.heading);
+    const existingIndex = sectionIndexes.get(key);
+
+    if (existingIndex === undefined) {
+      sectionIndexes.set(key, merged.length);
+      merged.push(section);
+      continue;
+    }
+
+    merged[existingIndex] = {
+      ...merged[existingIndex],
+      blocks: [...merged[existingIndex].blocks, ...section.blocks].slice(
+        0,
+        maxBlocksPerSection,
+      ),
+    };
+  }
+
+  return merged;
 }
 
 function normalizeBlock(
@@ -761,8 +800,9 @@ function normalizeStructuredSummary(
     .map((section) => normalizeBlockerReferences(section, referencesByToken))
     .filter((section): section is StructuredSection => Boolean(section))
     .slice(0, maxSections);
+  const mergedSections = mergeDuplicateSections(sections).slice(0, maxSections);
 
-  return sections.length > 0 ? sections : null;
+  return mergedSections.length > 0 ? mergedSections : null;
 }
 
 function renderInline(
@@ -772,7 +812,7 @@ function renderInline(
   const parts = segments
     .map((segment) =>
       segment.type === "activity"
-        ? referencesByToken.get(segment.token)?.markdown ?? ""
+        ? (referencesByToken.get(segment.token)?.markdown ?? "")
         : segment.text,
     )
     .filter(Boolean);
@@ -833,7 +873,10 @@ function renderStructuredSummary(
     return blocks.length > 0 ? [`## ${section.heading}`, ...blocks, ""] : [];
   });
 
-  return chunks.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return chunks
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 async function generateStructuredSummary(
@@ -878,7 +921,10 @@ export async function generateDailyReportSummaryWithAI(
     .filter((reference): reference is ActivityReference => Boolean(reference));
 
   if (references.length === 0) {
-    throw new HttpError(400, "Select at least one work item before summarizing with AI.");
+    throw new HttpError(
+      400,
+      "Select at least one work item before summarizing with AI.",
+    );
   }
 
   const sections = await generateStructuredSummary(userId, report, references);

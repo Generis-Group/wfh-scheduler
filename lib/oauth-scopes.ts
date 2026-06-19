@@ -1,8 +1,9 @@
-export const ATLASSIAN_OAUTH_SCOPE = "read:me read:jira-user read:jira-work offline_access";
+export const ATLASSIAN_OAUTH_SCOPE =
+  "read:me read:jira-user read:jira-work offline_access";
 
 export const GEMINI_OAUTH_SCOPES = [
   "https://www.googleapis.com/auth/cloud-platform",
-  "https://www.googleapis.com/auth/generative-language.retriever"
+  "https://www.googleapis.com/auth/generative-language.retriever",
 ];
 
 export const GOOGLE_OAUTH_SCOPE = [
@@ -12,5 +13,8 @@ export const GOOGLE_OAUTH_SCOPE = [
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/tasks.readonly",
   "https://www.googleapis.com/auth/gmail.readonly",
-  ...GEMINI_OAUTH_SCOPES
+  "https://www.googleapis.com/auth/chat.spaces.readonly",
+  "https://www.googleapis.com/auth/chat.messages.readonly",
+  "https://www.googleapis.com/auth/chat.users.readstate.readonly",
+  ...GEMINI_OAUTH_SCOPES,
 ].join(" ");

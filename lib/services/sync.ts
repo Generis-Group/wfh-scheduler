@@ -1,5 +1,5 @@
 import type { ActivityItem, SyncProvider } from "@prisma/client";
-import type { calendar_v3, gmail_v1, tasks_v1 } from "googleapis";
+import type { calendar_v3, chat_v1, gmail_v1, tasks_v1 } from "googleapis";
 
 import {
   importedActivityMetadata,
@@ -31,6 +31,12 @@ import {
   gmailThreadEvidence,
   type GmailThreadEvidence,
 } from "@/lib/services/gmail-ai-import";
+import {
+  dedupeGoogleChatActivities,
+  extractGoogleChatActivitiesWithAI,
+  googleChatConversationEvidence,
+  type GoogleChatConversationEvidence,
+} from "@/lib/services/google-chat-ai-import";
 import { createReportRevision, getReportById } from "@/lib/services/reports";
 
 type JiraIssue = {
@@ -104,6 +110,12 @@ type GoogleCalendarService = calendar_v3.Calendar;
 type GoogleCalendarEventListParams = Omit<
   calendar_v3.Params$Resource$Events$List,
   "calendarId"
+>;
+type GoogleChatService = chat_v1.Chat;
+type GoogleChatSpacesListParams = chat_v1.Params$Resource$Spaces$List;
+type GoogleChatMessagesListParams = Omit<
+  chat_v1.Params$Resource$Spaces$Messages$List,
+  "parent"
 >;
 type GoogleTasksService = tasks_v1.Tasks;
 type GoogleTaskListParams = Omit<
@@ -192,10 +204,7 @@ function buildJiraJql(clauses: Array<string | null>, orderBy = "updated ASC") {
   return `${clauses.filter(Boolean).join(" AND ")} ORDER BY ${orderBy}`;
 }
 
-const standaloneJiraChangeFields = new Set([
-  "status",
-  "resolution",
-]);
+const standaloneJiraChangeFields = new Set(["status", "resolution"]);
 const supportingJiraChangeFields = new Set([
   "assignee",
   "priority",
@@ -358,6 +367,73 @@ async function listGoogleCalendarEvents(
   return events;
 }
 
+async function listGoogleChatSpaces(
+  chat: GoogleChatService,
+  params: GoogleChatSpacesListParams = {},
+  limit?: number,
+) {
+  const spaces: chat_v1.Schema$Space[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const remaining =
+      typeof limit === "number" ? limit - spaces.length : undefined;
+
+    if (typeof remaining === "number" && remaining <= 0) {
+      break;
+    }
+
+    const response = await chat.spaces.list({
+      pageSize:
+        typeof remaining === "number" ? Math.min(1000, remaining) : 1000,
+      ...params,
+      pageToken,
+    });
+    spaces.push(...(response.data.spaces ?? []));
+    pageToken =
+      typeof limit === "number" && spaces.length >= limit
+        ? undefined
+        : (response.data.nextPageToken ?? undefined);
+  } while (pageToken);
+
+  return spaces;
+}
+
+async function listGoogleChatMessages(
+  chat: GoogleChatService,
+  parent: string,
+  params: GoogleChatMessagesListParams,
+  limit?: number,
+) {
+  const messages: chat_v1.Schema$Message[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const remaining =
+      typeof limit === "number" ? limit - messages.length : undefined;
+
+    if (typeof remaining === "number" && remaining <= 0) {
+      break;
+    }
+
+    const response = await chat.spaces.messages.list({
+      parent,
+      pageSize:
+        typeof remaining === "number" ? Math.min(1000, remaining) : 1000,
+      ...params,
+      showDeleted: false,
+      pageToken,
+    });
+    messages.push(...(response.data.messages ?? []));
+    pageToken =
+      typeof limit === "number" && messages.length >= limit
+        ? undefined
+        : (response.data.nextPageToken ?? undefined);
+  } while (pageToken);
+
+  return messages;
+}
+
 async function listGoogleTasks(
   tasks: GoogleTasksService,
   taskListId: string,
@@ -412,7 +488,7 @@ async function listGmailThreads(
     pageToken =
       typeof limit === "number" && threads.length >= limit
         ? undefined
-        : response.data.nextPageToken ?? undefined;
+        : (response.data.nextPageToken ?? undefined);
   } while (pageToken);
 
   return threads;
@@ -430,6 +506,80 @@ async function getGmailThread(gmail: GoogleGmailService, threadId: string) {
 
 function gmailSearchTimestamp(date: Date) {
   return Math.floor(date.getTime() / 1000);
+}
+
+function googleChatTimestampLiteral(date: Date) {
+  return `"${date.toISOString()}"`;
+}
+
+function googleChatMessageFilter(start: Date, end: Date) {
+  const inclusiveStart = new Date(start.getTime() - 1);
+
+  return [
+    `create_time > ${googleChatTimestampLiteral(inclusiveStart)}`,
+    `create_time < ${googleChatTimestampLiteral(end)}`,
+  ].join(" AND ");
+}
+
+function normalizedGoogleChatUserName(value?: string | null) {
+  const normalized = value?.trim().toLowerCase();
+
+  return normalized?.startsWith("users/") ? normalized : null;
+}
+
+function googleChatUserNameFromReadState(value?: string | null) {
+  const match = value?.match(/^(users\/[^/]+)\/spaces\//i);
+
+  return normalizedGoogleChatUserName(match?.[1]);
+}
+
+async function getGoogleChatCurrentUserNames(
+  chat: GoogleChatService,
+  userId: string,
+  spaces: chat_v1.Schema$Space[],
+) {
+  const names = new Set<string>(["users/me"]);
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  });
+  const emailName = user?.email
+    ? normalizedGoogleChatUserName(`users/${user.email}`)
+    : null;
+
+  if (emailName) {
+    names.add(emailName);
+  }
+
+  const firstSpaceName = spaces.find((space) => space.name)?.name;
+
+  if (!firstSpaceName) {
+    return names;
+  }
+
+  const response = await chat.users.spaces.getSpaceReadState({
+    name: `users/me/${firstSpaceName}/spaceReadState`,
+  });
+  const currentUserName = googleChatUserNameFromReadState(response.data.name);
+
+  if (currentUserName) {
+    names.add(currentUserName);
+  }
+
+  return names;
+}
+
+function spaceCouldHaveDayMessages(
+  space: chat_v1.Schema$Space,
+  start: Date,
+  end: Date,
+) {
+  const createdAt = optionalDate(space.createTime ?? undefined);
+  const lastActiveAt = optionalDate(space.lastActiveTime ?? undefined);
+
+  return (
+    (!createdAt || createdAt < end) && (!lastActiveAt || lastActiveAt >= start)
+  );
 }
 
 function googleApiErrorMessage(error: unknown) {
@@ -475,6 +625,46 @@ function gmailImportError(error: unknown) {
     return new HttpError(
       409,
       "Reconnect Google and approve Gmail access. If this keeps failing, ask a Workspace admin to trust this app for Gmail access.",
+    );
+  }
+
+  return error;
+}
+
+function googleChatImportError(error: unknown) {
+  if (error instanceof HttpError) {
+    return error;
+  }
+
+  const googleError = error as GoogleApiError;
+  const status =
+    typeof googleError.response?.status === "number"
+      ? googleError.response.status
+      : 0;
+  const detail = googleApiErrorMessage(error);
+  const message = error instanceof Error ? error.message : detail;
+
+  if (
+    /invalid input value for enum "(SyncProvider|ActivitySource)": "GOOGLE_CHAT"/i.test(
+      message,
+    )
+  ) {
+    return new HttpError(
+      409,
+      "Google Chat import needs the latest database migration. Apply migration 20260619130000_add_google_chat_activity_source, then try again.",
+    );
+  }
+
+  if (
+    status === 401 ||
+    status === 403 ||
+    /insufficient|scope|forbidden|blocked|permission|access|disabled|not been used/i.test(
+      detail,
+    )
+  ) {
+    return new HttpError(
+      409,
+      "Reconnect Google and approve Google Chat access. If this keeps failing, make sure the Google Chat API is enabled and a Workspace admin has trusted this app.",
     );
   }
 
@@ -933,7 +1123,10 @@ function buildJiraIssueDayEvidence(
     pushDate(activityDates, commentedAt);
   }
 
-  if (changedFields.size > 0 && (hasStandaloneChangelog || activityTypes.size > 0)) {
+  if (
+    changedFields.size > 0 &&
+    (hasStandaloneChangelog || activityTypes.size > 0)
+  ) {
     activityTypes.add("changelog");
   }
 
@@ -1283,7 +1476,9 @@ export async function syncGmail(
           stage: "finding",
           message: "Finding Gmail threads...",
         });
-        const threadStubs = await listGmailThreads(services.gmail, { q: query });
+        const threadStubs = await listGmailThreads(services.gmail, {
+          q: query,
+        });
         const readableThreadStubs = threadStubs.filter((thread) => thread.id);
         const threads = await mapWithConcurrency(
           readableThreadStubs,
@@ -1344,12 +1539,146 @@ export async function syncGmail(
           message: `Saving ${activities.length} Gmail work item${activities.length === 1 ? "" : "s"}...`,
         });
 
-        return upsertImportedActivities("GMAIL", userId, dateString, activities);
+        return upsertImportedActivities(
+          "GMAIL",
+          userId,
+          dateString,
+          activities,
+        );
       } catch (error) {
         throw gmailImportError(error);
       }
     });
   } catch (error) {
     throw gmailImportError(error);
+  }
+}
+
+export async function syncGoogleChat(
+  userId: string,
+  dateString: string,
+  options?: SyncOptions,
+) {
+  try {
+    return await runSync(
+      "GOOGLE_CHAT",
+      userId,
+      dateString,
+      options,
+      async () => {
+        try {
+          const { start, end } = zonedDayRange(dateString, DEFAULT_TIMEZONE);
+          const reportDate = parseReportDate(dateString);
+
+          await emitSyncProgress(options, {
+            stage: "connecting",
+            message: "Connecting to Google Chat...",
+          });
+          const services = await getGoogleServices(userId);
+
+          await emitSyncProgress(options, {
+            stage: "finding",
+            message: "Finding Google Chat spaces...",
+          });
+          const spaces = await listGoogleChatSpaces(services.chat);
+          const readableSpaces = spaces.filter(
+            (space) =>
+              Boolean(space.name) &&
+              spaceCouldHaveDayMessages(space, start, end),
+          );
+          const currentUserNames = await getGoogleChatCurrentUserNames(
+            services.chat,
+            userId,
+            readableSpaces,
+          );
+          const messageFilter = googleChatMessageFilter(start, end);
+          const messagesBySpace = await mapWithConcurrency(
+            readableSpaces,
+            4,
+            async (space, index) => {
+              await emitSyncProgress(options, {
+                stage: "finding",
+                message: `Reading Google Chat space ${index + 1} of ${readableSpaces.length}...`,
+                current: index + 1,
+                total: readableSpaces.length,
+              });
+
+              return {
+                space,
+                messages: await listGoogleChatMessages(
+                  services.chat,
+                  space.name!,
+                  {
+                    filter: messageFilter,
+                    orderBy: "create_time ASC",
+                  },
+                ),
+              };
+            },
+          );
+          const conversations = messagesBySpace.flatMap(({ space, messages }) =>
+            googleChatConversationEvidence(
+              space,
+              messages,
+              start,
+              end,
+              currentUserNames,
+            ),
+          );
+
+          await emitSyncProgress(options, {
+            stage: "finding",
+            message: `Classifying ${conversations.length} Google Chat conversation${conversations.length === 1 ? "" : "s"} with AI...`,
+            current: conversations.length,
+            total: conversations.length,
+          });
+          const extractedActivities = await extractGoogleChatActivitiesWithAI(
+            userId,
+            dateString,
+            conversations,
+            start,
+            end,
+          );
+          const existingActivities = await prisma.activityItem.findMany({
+            where: {
+              userId,
+              reportDate,
+              OR: [{ staleAt: null }, { source: "GOOGLE_CHAT" }],
+            },
+            select: {
+              source: true,
+              sourceId: true,
+              sourceContainerId: true,
+              sourceUrl: true,
+              title: true,
+              description: true,
+              metadata: true,
+              staleAt: true,
+            },
+          });
+          const activities = dedupeGoogleChatActivities(
+            extractedActivities,
+            existingActivities,
+            conversations,
+          );
+
+          await emitSyncProgress(options, {
+            stage: "saving",
+            message: `Saving ${activities.length} Google Chat work item${activities.length === 1 ? "" : "s"}...`,
+          });
+
+          return upsertImportedActivities(
+            "GOOGLE_CHAT",
+            userId,
+            dateString,
+            activities,
+          );
+        } catch (error) {
+          throw googleChatImportError(error);
+        }
+      },
+    );
+  } catch (error) {
+    throw googleChatImportError(error);
   }
 }
