@@ -60,8 +60,9 @@ function getGeminiQuotaProject() {
     getOptionalEnv("GOOGLE_CLOUD_PROJECT");
 
   if (!quotaProjectId) {
-    throw new Error(
-      "GOOGLE_CLOUD_QUOTA_PROJECT or GOOGLE_CLOUD_PROJECT is required for Gemini OAuth requests.",
+    throw new HttpError(
+      409,
+      "Gemini is missing its Google Cloud project configuration. Set GOOGLE_CLOUD_QUOTA_PROJECT or GOOGLE_CLOUD_PROJECT, then try again.",
     );
   }
 

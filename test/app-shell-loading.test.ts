@@ -15,17 +15,28 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockPathname, mockRouterPrefetch, mockRouterPush, mockSearchParams } =
+const {
+  mockPathname,
+  mockRouterPrefetch,
+  mockRouterPush,
+  mockRouterRefresh,
+  mockSearchParams,
+} =
   vi.hoisted(() => ({
     mockPathname: { current: "/" },
     mockRouterPrefetch: vi.fn(),
     mockRouterPush: vi.fn(),
+    mockRouterRefresh: vi.fn(),
     mockSearchParams: { current: "" },
   }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => mockPathname.current,
-  useRouter: () => ({ prefetch: mockRouterPrefetch, push: mockRouterPush }),
+  useRouter: () => ({
+    prefetch: mockRouterPrefetch,
+    push: mockRouterPush,
+    refresh: mockRouterRefresh,
+  }),
   useSearchParams: () => new URLSearchParams(mockSearchParams.current),
 }));
 
@@ -96,6 +107,7 @@ import {
   shellPageKindFromHref,
 } from "@/components/reports/reference-shell";
 import { loadingKindFromHref } from "@/components/reports/page-loading-skeleton";
+import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import { todayDateString } from "@/lib/dates";
 
 const root = process.cwd();
@@ -110,6 +122,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  delete window.__generisServerDataVersion;
+  delete window.__generisServerDataFreshVersion;
   mockPathname.current = "/";
   mockSearchParams.current = "";
   vi.clearAllMocks();
@@ -127,7 +141,7 @@ function walkFiles(directory: string): string[] {
   });
 }
 
-function renderReferenceShell(
+function referenceShellElement(
   children: React.ReactNode = "Current page content",
   variant: "employee" | "reviewer" | "admin" = "employee",
   userRoles?: string[],
@@ -139,17 +153,23 @@ function renderReferenceShell(
         ? "Reviewer"
         : "Employee";
 
-  return render(
-    React.createElement(ReferenceAppShell, {
-      variant,
-      displayName: "Test User",
-      userEmail: "test@example.com",
-      userRole,
-      userRoles,
-      mustChangePassword: false,
-      children: React.createElement("div", null, children),
-    }),
-  );
+  return React.createElement(ReferenceAppShell, {
+    variant,
+    displayName: "Test User",
+    userEmail: "test@example.com",
+    userRole,
+    userRoles,
+    mustChangePassword: false,
+    children: React.createElement("div", null, children),
+  });
+}
+
+function renderReferenceShell(
+  children: React.ReactNode = "Current page content",
+  variant: "employee" | "reviewer" | "admin" = "employee",
+  userRoles?: string[],
+) {
+  return render(referenceShellElement(children, variant, userRoles));
 }
 
 function uniqueLinkHrefs(name: string) {
@@ -278,6 +298,32 @@ describe("authenticated app shell loading boundaries", () => {
         .querySelector(".reference-content-scroll")
         ?.getAttribute("aria-busy"),
     ).toBe("true");
+  });
+
+  it("refreshes stale server data only after the destination route is active", async () => {
+    const view = renderReferenceShell();
+    act(() => {
+      markServerDataStale();
+    });
+
+    fireEvent.click(screen.getAllByRole("link", { name: "Settings" })[0]);
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/settings");
+    expect(mockRouterRefresh).not.toHaveBeenCalled();
+    expect(window.__generisServerDataFreshVersion).not.toBe(
+      window.__generisServerDataVersion,
+    );
+    expect(screen.getByLabelText("Loading page")).toBeTruthy();
+
+    mockPathname.current = "/settings";
+    view.rerender(referenceShellElement("Settings page content"));
+
+    await waitFor(() => {
+      expect(mockRouterRefresh).toHaveBeenCalledTimes(1);
+    });
+    expect(window.__generisServerDataFreshVersion).toBe(
+      window.__generisServerDataVersion,
+    );
   });
 
   it("shows review access for reviewers and admins", () => {

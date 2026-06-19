@@ -39,7 +39,8 @@ import {
 import {
   getFreshServerDataVersion,
   getServerDataVersion,
-  refreshStaleServerData,
+  hasStaleServerData,
+  markServerDataFresh,
   serverDataFreshEvent,
   serverDataStaleEvent,
 } from "@/lib/client-cache-invalidation";
@@ -198,6 +199,7 @@ export function ReferenceAppShell({
   const mobileNavButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileNavRef = useRef<HTMLDivElement | null>(null);
   const prefetchedHrefsRef = useRef<Set<string>>(new Set());
+  const refreshAfterNavigationHrefRef = useRef<string | null>(null);
   const routeTimingRef = useRef<ReturnType<typeof startClientTiming> | null>(
     null,
   );
@@ -250,6 +252,18 @@ export function ReferenceAppShell({
     },
     [router],
   );
+
+  const refreshDestinationAfterStaleNavigation = useCallback(() => {
+    const refreshHref = refreshAfterNavigationHrefRef.current;
+
+    if (!refreshHref || currentHref !== refreshHref) {
+      return;
+    }
+
+    refreshAfterNavigationHrefRef.current = null;
+    router.refresh();
+    markServerDataFresh();
+  }, [currentHref, router]);
 
   useEffect(() => {
     if (!canUseDaily) {
@@ -326,14 +340,18 @@ export function ReferenceAppShell({
 
     setPendingNavigation(null);
     resetContentScroll(contentScrollRef.current);
+    refreshDestinationAfterStaleNavigation();
     routeTimingRef.current?.({ status: "committed" });
     routeTimingRef.current = null;
-  }, [children, pendingNavigation]);
+  }, [children, pendingNavigation, refreshDestinationAfterStaleNavigation]);
 
   useEffect(() => {
+    const pendingHrefWithoutHash =
+      pendingNavigation?.href.split("#")[0] || null;
+
     if (
       !pendingNavigation ||
-      currentHref !== pendingNavigation.href
+      currentHref !== pendingHrefWithoutHash
     ) {
       return;
     }
@@ -344,6 +362,7 @@ export function ReferenceAppShell({
       () => {
         setPendingNavigation(null);
         resetContentScroll(contentScrollRef.current);
+        refreshDestinationAfterStaleNavigation();
         routeTimingRef.current?.({ status: "committed" });
         routeTimingRef.current = null;
       },
@@ -351,7 +370,7 @@ export function ReferenceAppShell({
     );
 
     return () => window.clearTimeout(timeoutId);
-  }, [currentHref, pendingNavigation]);
+  }, [currentHref, pendingNavigation, refreshDestinationAfterStaleNavigation]);
 
   useEffect(() => {
     function syncServerDataVersions() {
@@ -488,8 +507,8 @@ export function ReferenceAppShell({
           setMobileNavOpen(false);
         });
 
-        if (hasStalePrefetchedData) {
-          refreshStaleServerData(router);
+        if (hasStaleServerData()) {
+          refreshAfterNavigationHrefRef.current = hrefWithoutHash;
         }
         router.push(href);
       },

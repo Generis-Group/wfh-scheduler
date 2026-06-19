@@ -664,7 +664,14 @@ function googleChatImportError(error: unknown) {
   ) {
     return new HttpError(
       409,
-      "Reconnect Google and approve Google Chat access. If this keeps failing, make sure the Google Chat API is enabled and a Workspace admin has trusted this app.",
+      "Google Chat access is blocked for this app. Reconnect Google and approve Chat access. If it still fails, ask your Workspace admin to allow this app to read Google Chat.",
+    );
+  }
+
+  if (status >= 400 && status < 600 && detail) {
+    return new HttpError(
+      status >= 500 ? 502 : 409,
+      `Google Chat import failed: ${detail}`,
     );
   }
 

@@ -2062,13 +2062,56 @@ describe("sync service pagination", () => {
     const { syncGoogleChat } = await import("@/lib/services/sync");
 
     await expect(syncGoogleChat("user-1", "2026-05-14")).rejects.toThrow(
-      "Reconnect Google and approve Google Chat access.",
+      "Google Chat access is blocked for this app.",
     );
     expect(mockSyncRunUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           status: "FAILED",
           errorMessage: expect.stringContaining("Google Chat"),
+        }),
+      }),
+    );
+  });
+
+  it("surfaces Google Chat API error details", async () => {
+    const spacesList = vi.fn(async () => {
+      throw {
+        response: {
+          status: 400,
+          data: {
+            error: {
+              message: "Invalid Google Chat filter expression.",
+            },
+          },
+        },
+      };
+    });
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: {},
+      chat: {
+        spaces: {
+          list: spacesList,
+          messages: {
+            list: vi.fn(),
+          },
+        },
+      },
+      gmail: {},
+      tasks: {},
+    });
+
+    const { syncGoogleChat } = await import("@/lib/services/sync");
+
+    await expect(syncGoogleChat("user-1", "2026-05-14")).rejects.toThrow(
+      "Google Chat import failed: Invalid Google Chat filter expression.",
+    );
+    expect(mockSyncRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorMessage:
+            "Google Chat import failed: Invalid Google Chat filter expression.",
         }),
       }),
     );

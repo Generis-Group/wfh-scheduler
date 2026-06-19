@@ -43,6 +43,17 @@ function streamErrorData(error: unknown) {
 
   console.error(error);
 
+  if (
+    process.env.NODE_ENV === "development" &&
+    error instanceof Error &&
+    error.message
+  ) {
+    return {
+      message: `Import failed: ${error.message}`,
+      status: 500,
+    };
+  }
+
   return {
     message: "Import failed. Check your connection and try again.",
     status: 500,

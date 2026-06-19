@@ -796,6 +796,82 @@ describe("DailyReportApp drafts", () => {
     ).toBeNull();
   });
 
+  it("imports Google Chat from the Google Chat menu item only", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/sync/google-chat")) {
+        return Response.json({
+          importedCount: 0,
+          skippedCount: 0,
+          staleCount: 0,
+          activities: [],
+        });
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <DailyReportApp
+        initialReport={emptyReport}
+        date="2026-05-20"
+        integrationStatus={{ google: true, atlassian: true }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import Google Chat with AI" }),
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/sync/google-chat",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/sync/jira",
+      expect.anything(),
+    );
+  });
+
+  it("keeps import button text stable while progress appears in the work items section", async () => {
+    const syncRequest = deferred<Response>();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/sync/google-chat")) {
+        return syncRequest.promise;
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import Google Chat with AI" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Starting Google Chat import...")).toBeTruthy();
+    });
+    expect(screen.getByRole("button", { name: "Import" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Importing Google Chat..." }),
+    ).toBeNull();
+
+    syncRequest.resolve(
+      Response.json({
+        importedCount: 0,
+        skippedCount: 0,
+        staleCount: 0,
+        activities: [],
+      }),
+    );
+  });
+
   it("shows actionable streamed import errors", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input).includes("/api/sync/jira")) {

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { HttpError } from "@/lib/http";
+
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
   revalidateTag: vi.fn(),
@@ -476,6 +478,26 @@ describe("route contracts", () => {
       "user-1",
       "2026-05-13",
       expect.objectContaining({ onProgress: expect.any(Function) }),
+    );
+  });
+
+  it("streams expected sync error messages", async () => {
+    const sync = await import("@/lib/services/sync");
+    const { POST } = await import("@/app/api/sync/jira/route");
+    vi.mocked(sync.syncJira).mockRejectedValueOnce(
+      new HttpError(409, "Reconnect Google before using Gemini AI."),
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/sync/jira", {
+        method: "POST",
+        headers: { Accept: "text/event-stream" },
+        body: JSON.stringify({ date: "2026-05-13" }),
+      }),
+    );
+
+    await expect(response.text()).resolves.toContain(
+      "Reconnect Google before using Gemini AI.",
     );
   });
 

@@ -1458,7 +1458,9 @@ export function DailyReportApp({
           response,
           `${providerLabel} import failed.`,
         );
-        setMessage(message);
+        if (showResultMessage) {
+          setMessage(message);
+        }
         finishTiming({ status: "request-failed" });
         return { ok: false, provider, message };
       }
@@ -1543,7 +1545,9 @@ export function DailyReportApp({
         error instanceof Error && error.message
           ? error.message
           : `${providerLabel} import failed. Check your connection and try again.`;
-      setMessage(message);
+      if (showResultMessage) {
+        setMessage(message);
+      }
       return { ok: false, provider, message };
     } finally {
       setImportingProvider(null);
@@ -2010,35 +2014,35 @@ export function DailyReportApp({
                   </h2>
                 </div>
               </div>
-              <div className="grid min-w-0 grid-cols-3 gap-2 min-[900px]:flex min-[900px]:w-auto min-[900px]:flex-wrap min-[900px]:items-center">
+              <div className="grid min-w-0 grid-cols-3 gap-2 min-[900px]:flex min-[900px]:w-auto min-[900px]:flex-wrap min-[900px]:items-center min-[1200px]:gap-1.5">
                 <Button
                   variant="outline"
-                  className="h-9 min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] min-[900px]:w-auto"
+                  className="h-9 min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] min-[900px]:w-auto min-[1200px]:h-8 min-[1200px]:px-2.5 min-[1200px]:text-xs"
                   disabled={isBusy}
                   onClick={addManualActivity}
                 >
-                  <Plus className="mr-2 h-4 w-4 shrink-0" />
+                  <Plus className="mr-2 h-4 w-4 shrink-0 min-[1200px]:mr-1.5 min-[1200px]:h-3.5 min-[1200px]:w-3.5" />
                   <span className="min-w-0 truncate">Add item</span>
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-9 min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-white dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] dark:disabled:text-[#64748b] dark:disabled:hover:bg-[#0f1b2a] min-[900px]:w-auto"
+                  className="h-9 min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-white dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] dark:disabled:text-[#64748b] dark:disabled:hover:bg-[#0f1b2a] min-[900px]:w-auto min-[1200px]:h-8 min-[1200px]:px-2.5 min-[1200px]:text-xs"
                   disabled={isBusy || activities.length === 0}
                   aria-label="Clear work items"
                   onClick={clearActivities}
                 >
-                  <Trash2 className="mr-2 h-4 w-4 shrink-0" />
+                  <Trash2 className="mr-2 h-4 w-4 shrink-0 min-[1200px]:mr-1.5 min-[1200px]:h-3.5 min-[1200px]:w-3.5" />
                   <span className="min-w-0 truncate">Clear</span>
                 </Button>
                 <div
                   ref={importMenuRef}
-                  className="relative min-w-0 min-[900px]:w-[176px]"
+                  className="relative min-w-0 min-[900px]:w-[176px] min-[1200px]:w-[142px]"
                 >
                   <Button
                     variant="outline"
                     className={cn(
-                      "relative h-9 w-full min-w-0 justify-center overflow-hidden rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-white dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] dark:disabled:text-[#64748b] dark:disabled:hover:bg-[#0f1b2a]",
-                      importProgress ? "pb-[10px] pt-2" : "py-2",
+                      "relative h-9 w-full min-w-0 justify-center overflow-hidden rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-white dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] dark:disabled:text-[#64748b] dark:disabled:hover:bg-[#0f1b2a] min-[1200px]:h-8 min-[1200px]:px-2.5 min-[1200px]:text-xs",
+                      "py-2 min-[1200px]:py-1.5",
                     )}
                     disabled={isBusy && !isImporting}
                     aria-disabled={isBusy}
@@ -2052,39 +2056,20 @@ export function DailyReportApp({
                     }}
                   >
                     {isImporting ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin min-[1200px]:mr-1.5 min-[1200px]:h-3.5 min-[1200px]:w-3.5" />
                     ) : (
-                      <Download className="mr-2 h-4 w-4 shrink-0" />
+                      <Download className="mr-2 h-4 w-4 shrink-0 min-[1200px]:mr-1.5 min-[1200px]:h-3.5 min-[1200px]:w-3.5" />
                     )}
                     <span className="min-w-0 truncate">
-                      {importProgress
-                        ? importProgress.message
-                        : importingProvider
-                          ? `Importing ${syncProviderLabels[importingProvider]}...`
-                          : "Import"}
+                      Import
                     </span>
                     <ChevronDown
                       className={cn(
-                        "ml-2 h-4 w-4 shrink-0",
+                        "ml-2 h-4 w-4 shrink-0 min-[1200px]:ml-1.5 min-[1200px]:h-3.5 min-[1200px]:w-3.5",
                         isImporting && "opacity-0",
                       )}
                       aria-hidden="true"
                     />
-                    {importProgress ? (
-                      <span
-                        className="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-[#e6eaf2] dark:bg-[#22334d]"
-                        role="progressbar"
-                        aria-label={`${syncProviderLabels[importProgress.provider]} import progress`}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-valuenow={importProgressValue}
-                      >
-                        <span
-                          className="block h-full rounded-r-full bg-[linear-gradient(90deg,#7c3aed,#2563eb,#06b6d4)] transition-[width] duration-300 ease-out"
-                          style={{ width: `${importProgressValue}%` }}
-                        />
-                      </span>
-                    ) : null}
                   </Button>
                   {importMenuOpen ? (
                     <div className="absolute right-0 top-12 z-30 w-[min(16rem,calc(100vw-2rem))] rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
@@ -2202,6 +2187,29 @@ export function DailyReportApp({
                 </div>
               </div>
             </div>
+            {importProgress ? (
+              <div className="mt-3 rounded-[8px] bg-[#f8fbff] px-3 py-2 ring-1 ring-[#dbe7ff] dark:bg-blue-400/5 dark:ring-blue-300/15">
+                <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-[#344054] dark:text-blue-100">
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#2563eb] dark:text-blue-300" />
+                  <span className="min-w-0 truncate">
+                    {importProgress.message}
+                  </span>
+                </div>
+                <div
+                  className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e6eaf2] dark:bg-[#22334d]"
+                  role="progressbar"
+                  aria-label={`${syncProviderLabels[importProgress.provider]} import progress`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={importProgressValue}
+                >
+                  <div
+                    className="h-full rounded-full bg-[linear-gradient(90deg,#7c3aed,#2563eb,#06b6d4)] transition-[width] duration-300 ease-out"
+                    style={{ width: `${importProgressValue}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
 
             <ReportSearchField
               value={activitySearch}

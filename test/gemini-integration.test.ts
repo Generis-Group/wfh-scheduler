@@ -93,7 +93,7 @@ describe("Gemini integration", () => {
     delete process.env.GOOGLE_CLOUD_PROJECT;
 
     await expect(getGeminiClient("user-1")).rejects.toThrow(
-      "GOOGLE_CLOUD_QUOTA_PROJECT or GOOGLE_CLOUD_PROJECT is required for Gemini OAuth requests.",
+      "Gemini is missing its Google Cloud project configuration.",
     );
   });
 
