@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { isDescriptiveImportedActivityTitle } from "@/lib/services/ai-import-quality";
+import {
+  importedActivityStatusOrNull,
+  isDescriptiveImportedActivityTitle,
+} from "@/lib/services/ai-import-quality";
 
 describe("AI import quality helpers", () => {
   it("accepts concise acronym-based task titles", () => {
@@ -15,5 +18,12 @@ describe("AI import quality helpers", () => {
     expect(isDescriptiveImportedActivityTitle("Work update")).toBe(false);
     expect(isDescriptiveImportedActivityTitle("Status update")).toBe(false);
     expect(isDescriptiveImportedActivityTitle("AI task")).toBe(false);
+  });
+
+  it("drops non-actionable imported activity statuses", () => {
+    expect(importedActivityStatusOrNull("noted")).toBeNull();
+    expect(importedActivityStatusOrNull("Status")).toBeNull();
+    expect(importedActivityStatusOrNull("in progress")).toBe("in progress");
+    expect(importedActivityStatusOrNull("blocked")).toBe("blocked");
   });
 });

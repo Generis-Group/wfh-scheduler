@@ -89,7 +89,9 @@ describe("Gmail AI import helpers", () => {
           {
             id: "message-1",
             threadId: "thread-1",
-            internalDate: String(new Date("2026-05-14T14:00:00.000Z").getTime()),
+            internalDate: String(
+              new Date("2026-05-14T14:00:00.000Z").getTime(),
+            ),
             payload: {
               headers: [
                 { name: "Subject", value: "Launch follow-up" },
@@ -107,7 +109,9 @@ describe("Gmail AI import helpers", () => {
           {
             id: "message-old",
             threadId: "thread-1",
-            internalDate: String(new Date("2026-05-13T14:00:00.000Z").getTime()),
+            internalDate: String(
+              new Date("2026-05-13T14:00:00.000Z").getTime(),
+            ),
             payload: {
               parts: [
                 {
@@ -519,7 +523,9 @@ describe("Gmail AI import helpers", () => {
           messages: Array.from({ length: 24 }, (_, index) => ({
             id: `message-${index + 1}`,
             threadId: "thread-1",
-            date: new Date(`2026-05-14T14:${String(index).padStart(2, "0")}:00.000Z`),
+            date: new Date(
+              `2026-05-14T14:${String(index).padStart(2, "0")}:00.000Z`,
+            ),
             subject: "Large client thread",
             text: `Handled client follow-up ${index + 1}. ${"Details ".repeat(220)}`,
             senderDomains: ["generisgp.com"],
@@ -629,7 +635,9 @@ describe("Gmail AI import helpers", () => {
       ],
     );
 
-    expect(activities.map((activity) => activity.sourceId)).toEqual(["gmail-2"]);
+    expect(activities.map((activity) => activity.sourceId)).toEqual([
+      "gmail-2",
+    ]);
   });
 
   it("does not suppress Gmail candidates with stale Jira or task matches", () => {

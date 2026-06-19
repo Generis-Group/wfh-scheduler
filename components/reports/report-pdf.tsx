@@ -30,6 +30,18 @@ export type ReportPdfActivity = {
   status?: string | null;
 };
 
+function displayActivityStatus(status?: string | null) {
+  const trimmed = status?.trim();
+
+  return trimmed && trimmed.toLowerCase() !== "noted" ? trimmed : null;
+}
+
+function displayActivityNote(note?: string | null) {
+  const trimmed = note?.trim();
+
+  return trimmed && trimmed.toLowerCase() !== "noted" ? trimmed : null;
+}
+
 export type ReportPdfComment = {
   id: string;
   body: string;
@@ -86,6 +98,11 @@ export function ReportPdfDocument({
   const hasReviewNotesPanel = comments.length > 0 || Boolean(screenExtras);
   const showActivitiesSection = activities !== null;
   const activityItems = activities ?? [];
+  const hasActivityNotes = activityItems.some(
+    (activity) =>
+      Boolean(displayActivityNote(activity.note)) ||
+      Boolean(displayActivityStatus(activity.status)),
+  );
 
   return (
     <main
@@ -205,50 +222,67 @@ export function ReportPdfDocument({
                           <th className="hidden w-24 px-3 py-2 font-semibold min-[840px]:table-cell">
                             Time
                           </th>
-                          <th className="px-3 py-2 font-semibold">Note</th>
+                          {hasActivityNotes ? (
+                            <th className="w-28 px-3 py-2 font-semibold whitespace-nowrap">
+                              Note
+                            </th>
+                          ) : null}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#e5eaf2] dark:divide-[#263a55]">
-                        {activityItems.map((activity) => (
-                          <tr key={activity.id}>
-                            <td className="px-3 py-2.5 align-top">
-                              <div className="flex min-w-0 gap-2">
-                                <ReportActivitySourceIcon
-                                  source={activity.source}
-                                  size="sm"
-                                  className="report-pdf-source-icon"
-                                />
-                                <div className="min-w-0">
-                                  <div className="font-semibold leading-5 text-[#111827] dark:text-foreground">
-                                    {activity.title || "Untitled activity"}
-                                  </div>
-                                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#667085] dark:text-muted-foreground min-[740px]:hidden">
-                                    <span>
-                                      {activity.sourceLabel ??
-                                        reportActivitySourceLabel(
-                                          activity.source,
-                                        )}
-                                    </span>
-                                    <span>{activity.duration}</span>
-                                    {activity.status ? (
-                                      <span>{activity.status}</span>
-                                    ) : null}
+                        {activityItems.map((activity) => {
+                          const activityNote = displayActivityNote(
+                            activity.note,
+                          );
+                          const activityStatus = displayActivityStatus(
+                            activity.status,
+                          );
+                          const activityNoteText =
+                            activityNote || activityStatus;
+
+                          return (
+                            <tr key={activity.id}>
+                              <td className="px-3 py-2.5 align-top">
+                                <div className="flex min-w-0 gap-2">
+                                  <ReportActivitySourceIcon
+                                    source={activity.source}
+                                    size="sm"
+                                    className="report-pdf-source-icon"
+                                  />
+                                  <div className="min-w-0">
+                                    <div className="font-semibold leading-5 text-[#111827] dark:text-foreground">
+                                      {activity.title || "Untitled activity"}
+                                    </div>
+                                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#667085] dark:text-muted-foreground min-[740px]:hidden">
+                                      <span>
+                                        {activity.sourceLabel ??
+                                          reportActivitySourceLabel(
+                                            activity.source,
+                                          )}
+                                      </span>
+                                      <span>{activity.duration}</span>
+                                      {activityStatus ? (
+                                        <span>{activityStatus}</span>
+                                      ) : null}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </td>
-                            <td className="hidden px-3 py-2.5 align-top text-[#475467] dark:text-muted-foreground min-[740px]:table-cell">
-                              {activity.sourceLabel ??
-                                reportActivitySourceLabel(activity.source)}
-                            </td>
-                            <td className="hidden px-3 py-2.5 align-top font-medium text-[#111827] dark:text-foreground min-[840px]:table-cell">
-                              {activity.duration}
-                            </td>
-                            <td className="px-3 py-2.5 align-top text-[#475467] dark:text-muted-foreground">
-                              {activity.note || activity.status || "-"}
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="hidden px-3 py-2.5 align-top text-[#475467] dark:text-muted-foreground min-[740px]:table-cell">
+                                {activity.sourceLabel ??
+                                  reportActivitySourceLabel(activity.source)}
+                              </td>
+                              <td className="hidden px-3 py-2.5 align-top font-medium text-[#111827] dark:text-foreground min-[840px]:table-cell">
+                                {activity.duration}
+                              </td>
+                              {hasActivityNotes ? (
+                                <td className="min-w-24 px-3 py-2.5 align-top text-[#475467] dark:text-muted-foreground">
+                                  {activityNoteText || "-"}
+                                </td>
+                              ) : null}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

@@ -5,7 +5,10 @@ import type { chat_v1 } from "googleapis";
 import { HttpError } from "@/lib/http";
 import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
 import type { NormalizedActivity } from "@/lib/normalizers";
-import { isDescriptiveImportedActivityTitle } from "@/lib/services/ai-import-quality";
+import {
+  importedActivityStatusOrNull,
+  isDescriptiveImportedActivityTitle,
+} from "@/lib/services/ai-import-quality";
 
 type GenerateContentResponse = {
   text?: unknown;
@@ -532,7 +535,7 @@ function buildExtractionPrompt(
   return [
     "Extract daily report work items from Google Chat evidence.",
     "Return JSON only.",
-    'Use this exact shape: {"items":[{"conversationId":"conversation-id","messageIds":["message-id"],"title":"Short work item title","description":"Concise work evidence","status":"noted","confidence":0.75,"reason":"work_performed","startedAt":"2026-06-17T14:00:00.000Z"}]}',
+    'Use this exact shape: {"items":[{"conversationId":"conversation-id","messageIds":["message-id"],"title":"Short work item title","description":"Concise work evidence","status":null,"confidence":0.75,"reason":"work_performed","startedAt":"2026-06-17T14:00:00.000Z"}]}',
     "",
     "Report-worthy items include actual work performed, deliverables, meaningful follow-ups, decisions, client/internal coordination with an outcome, or true blockers.",
     "Exclude small acknowledgements, FYIs, automated app noise, personal content, pure scheduling chatter, vague status chatter, and messages that only mention a task without evidence of work.",
@@ -540,6 +543,7 @@ function buildExtractionPrompt(
     "Every item must reference at least one current_user message id.",
     'Titles must be concise and describe the specific task or deliverable. Do not use generic titles like "Task completed", "Work update", or "Status update".',
     "Do not infer that a user created, completed, or blocked a task unless the Chat messages explicitly say so.",
+    'Use status only when it adds useful information such as "complete", "blocked", or "in progress"; otherwise use null.',
     "Use confidence 0 to 1. Use 0.75+ only when the messages clearly show reportable work.",
     "The reason must be one of: work_performed, deliverable, follow_up, decision, coordination, blocker.",
     "Do not quote chat text. Do not include raw URLs, raw email addresses, markdown, HTML, or unknown message ids.",
@@ -754,9 +758,8 @@ function activityFromItem(
     item.description,
     conversation.messages,
   );
-  const status = generatedFieldWithoutBodyLeak(
-    item.status,
-    conversation.messages,
+  const status = importedActivityStatusOrNull(
+    generatedFieldWithoutBodyLeak(item.status, conversation.messages),
   );
   const selected = item.confidence >= selectedConfidenceThreshold;
   const senderTypes = [
@@ -771,7 +774,7 @@ function activityFromItem(
     sourceContainerId: item.conversationId,
     title,
     description,
-    status: status ?? (selected ? "noted" : "needs review"),
+    status: status ?? (selected ? null : "needs review"),
     sourceUrl: conversation.spaceUri,
     startedAt: item.startedAt,
     endedAt: latestMessageDate(referencedMessages),

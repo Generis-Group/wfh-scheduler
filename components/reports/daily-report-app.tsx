@@ -320,21 +320,22 @@ function statusTone(
 }
 
 function activityStatusLabel(activity: Activity) {
-  if (
-    activity.source === "MANUAL" &&
-    activity.status?.toLowerCase() === "noted"
-  ) {
+  const status = activity.status?.trim();
+  const normalizedStatus = status?.toLowerCase();
+
+  if (activity.source === "MANUAL" && normalizedStatus === "noted") {
     return "Noted";
   }
 
-  if (
-    activity.source === "GOOGLE_TASKS" &&
-    activity.status?.toLowerCase() === "completed"
-  ) {
+  if (!status || normalizedStatus === "noted") {
+    return null;
+  }
+
+  if (activity.source === "GOOGLE_TASKS" && normalizedStatus === "completed") {
     return "Done";
   }
 
-  return activity.status || "Not set";
+  return status;
 }
 
 function setTransparentDragImage(dataTransfer: DataTransfer) {
@@ -2060,9 +2061,7 @@ export function DailyReportApp({
                     ) : (
                       <Download className="mr-2 h-4 w-4 shrink-0 min-[1200px]:mr-1.5 min-[1200px]:h-3.5 min-[1200px]:w-3.5" />
                     )}
-                    <span className="min-w-0 truncate">
-                      Import
-                    </span>
+                    <span className="min-w-0 truncate">Import</span>
                     <ChevronDown
                       className={cn(
                         "ml-2 h-4 w-4 shrink-0 min-[1200px]:ml-1.5 min-[1200px]:h-3.5 min-[1200px]:w-3.5",
@@ -2239,7 +2238,7 @@ export function DailyReportApp({
                     <article
                       key={activity.id}
                       className={cn(
-                        "flex min-w-0 flex-col gap-2 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] transition-[opacity,transform,box-shadow] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[900px]:grid min-[900px]:min-h-[68px] min-[900px]:grid-cols-[24px_34px_minmax(0,1fr)_auto_58px_28px] min-[900px]:items-center min-[900px]:gap-2.5",
+                        "flex min-w-0 flex-col gap-2 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] transition-[opacity,transform,box-shadow] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[900px]:grid min-[900px]:min-h-[68px] min-[900px]:grid-cols-[24px_34px_minmax(0,1fr)_auto_minmax(72px,max-content)_28px] min-[900px]:items-center min-[900px]:gap-2.5",
                         activityDragPreviewId === activity.id &&
                           "scale-[0.995] opacity-55",
                       )}
@@ -2349,7 +2348,7 @@ export function DailyReportApp({
                         {statusLabel ? (
                           <ReferenceBadge
                             tone={statusTone(activity.status)}
-                            className="justify-self-start px-2.5 py-1 text-xs"
+                            className="max-w-full justify-self-start overflow-hidden text-ellipsis px-2.5 py-1 text-xs"
                           >
                             {statusLabel}
                           </ReferenceBadge>

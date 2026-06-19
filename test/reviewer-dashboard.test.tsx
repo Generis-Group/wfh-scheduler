@@ -113,15 +113,13 @@ describe("ReviewerDashboard weekly reports", () => {
 
     const breakdown = screen.getByLabelText("Work location breakdown");
 
-    expect(
-      within(breakdown).getByText("4 submitted reports in the current view"),
-    ).toBeTruthy();
+    expect(within(breakdown).getByText("4 submitted reports")).toBeTruthy();
     expect(within(breakdown).getByText("High WFH")).toBeTruthy();
     expect(within(breakdown).getByText("75% WFH")).toBeTruthy();
     expect(within(breakdown).getByText("Office")).toBeTruthy();
     expect(within(breakdown).getByText("25%")).toBeTruthy();
     expect(
-      within(breakdown).getByText("Not counted: 1 draft, 1 missing"),
+      within(breakdown).getByText("1 draft, 1 missing not counted"),
     ).toBeTruthy();
   });
 
@@ -190,7 +188,9 @@ describe("ReviewerDashboard weekly reports", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "More actions for Alex Employee" }),
     );
-    expect(screen.getByRole("menuitem", { name: "Send reminder" })).toBeTruthy();
+    expect(
+      screen.getByRole("menuitem", { name: "Send reminder" }),
+    ).toBeTruthy();
   });
 
   it("chooses the selected read action from the selected reports", async () => {
@@ -601,6 +601,20 @@ describe("ReviewerDashboard weekly reports", () => {
       document.querySelectorAll(".report-pdf-print-only .weekly-report-day")
         .length,
     ).toBe(7);
+    const weeklyLocationBreakdown = screen.getByLabelText(
+      "Weekly work location breakdown",
+    );
+    expect(
+      within(weeklyLocationBreakdown).getByText("Weekly location breakdown"),
+    ).toBeTruthy();
+    expect(
+      within(weeklyLocationBreakdown).getByText("1 submitted day"),
+    ).toBeTruthy();
+    expect(within(weeklyLocationBreakdown).getByText("WFH")).toBeTruthy();
+    expect(within(weeklyLocationBreakdown).getByText("100%")).toBeTruthy();
+    expect(
+      within(weeklyLocationBreakdown).getByText("6 missing days not counted"),
+    ).toBeTruthy();
     expect(screen.getByText("1 of 7 submitted")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Tue, May 12 Missing" }),

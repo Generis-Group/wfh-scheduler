@@ -18,6 +18,17 @@ const genericTitleWords = new Set([
   "work",
 ]);
 
+const nonActionableStatuses = new Set([
+  "n/a",
+  "na",
+  "none",
+  "not applicable",
+  "note",
+  "noted",
+  "status",
+  "unknown",
+]);
+
 export function isDescriptiveImportedActivityTitle(title: string) {
   const words = (title.match(/[A-Za-z0-9]+/g) ?? []).map((word) => ({
     raw: word,
@@ -30,9 +41,7 @@ export function isDescriptiveImportedActivityTitle(title: string) {
 
   function isShortAcronym(word: string) {
     return (
-      /^[A-Z0-9]{2,5}$/.test(word) &&
-      /[A-Z]/.test(word) &&
-      !/^\d+$/.test(word)
+      /^[A-Z0-9]{2,5}$/.test(word) && /[A-Z]/.test(word) && !/^\d+$/.test(word)
     );
   }
 
@@ -47,4 +56,14 @@ export function isDescriptiveImportedActivityTitle(title: string) {
     specificWords.length >= 2 ||
     (specificWords.length >= 1 && words.length >= 3)
   );
+}
+
+export function importedActivityStatusOrNull(status?: string | null) {
+  const normalized = status?.trim();
+
+  if (!normalized || nonActionableStatuses.has(normalized.toLowerCase())) {
+    return null;
+  }
+
+  return normalized;
 }

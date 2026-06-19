@@ -1220,6 +1220,26 @@ describe("DailyReportApp drafts", () => {
     expect(screen.queryByText("Not set")).toBeNull();
   });
 
+  it("hides non-actionable noted status on imported AI work items", () => {
+    renderDailyReportApp({
+      ...savedDraft,
+      activities: [
+        {
+          ...importedTask,
+          id: "chat-1",
+          source: "GOOGLE_CHAT",
+          title: "Coordinate launch review",
+          status: "noted",
+        },
+      ],
+    });
+
+    expect(screen.getByText("Coordinate launch review")).toBeTruthy();
+    expect(screen.queryByText("noted")).toBeNull();
+    expect(screen.queryByText("Noted")).toBeNull();
+    expect(screen.queryByText("Not set")).toBeNull();
+  });
+
   it("uses a custom drag preview for work item references", async () => {
     const dataTransfer = {
       effectAllowed: "",

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
-  Building2,
   CalendarRange,
   ChevronDown,
   Clock3,
@@ -15,7 +14,6 @@ import {
   EyeOff,
   FileText,
   History,
-  Home,
   ListChecks,
   Loader2,
   Lock,
@@ -361,9 +359,7 @@ const workLocationLabels: Record<WorkLocationKey, string> = {
   UNKNOWN: "Unspecified",
 };
 
-const workLocationKeys = Object.keys(
-  workLocationLabels,
-) as WorkLocationKey[];
+const workLocationKeys = Object.keys(workLocationLabels) as WorkLocationKey[];
 const wfhWarningPercent = 50;
 const wfhCriticalPercent = 70;
 
@@ -416,11 +412,36 @@ function workLocationBreakdown(rows: Row[]): WorkLocationBreakdownData {
   };
 }
 
+function weeklyWorkLocationBreakdown(
+  reports: DashboardReport[],
+  expectedDays: number,
+): WorkLocationBreakdownData {
+  const counts = Object.fromEntries(
+    workLocationKeys.map((location) => [location, 0]),
+  ) as Record<WorkLocationKey, number>;
+  let totalSubmitted = 0;
+  let draft = 0;
+
+  for (const report of reports) {
+    if (report.status !== "SUBMITTED") {
+      draft += 1;
+      continue;
+    }
+
+    totalSubmitted += 1;
+    counts[normalizedWorkLocation(report.workLocation)] += 1;
+  }
+
+  return {
+    totalSubmitted,
+    draft,
+    missing: Math.max(0, expectedDays - totalSubmitted - draft),
+    counts,
+  };
+}
+
 function wfhWarning(breakdown: WorkLocationBreakdownData) {
-  const percent = percentage(
-    breakdown.counts.WFH,
-    breakdown.totalSubmitted,
-  );
+  const percent = percentage(breakdown.counts.WFH, breakdown.totalSubmitted);
 
   if (breakdown.totalSubmitted === 0 || percent < wfhWarningPercent) {
     return null;
@@ -1146,7 +1167,9 @@ export function ReviewerDashboard({
       );
 
       if (unsavedReviewNoteRef.current) {
-        const shouldDiscard = window.confirm("Discard this unsaved review note?");
+        const shouldDiscard = window.confirm(
+          "Discard this unsaved review note?",
+        );
 
         if (!shouldDiscard) {
           updateOpenedReportParam(openReportIdRef.current, "replace");
@@ -1860,9 +1883,7 @@ export function ReviewerDashboard({
       ) : (
         <main
           className={cn(
-            embedded
-              ? "min-w-0"
-              : "reference-page",
+            embedded ? "min-w-0" : "reference-page",
             "min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col",
           )}
         >
@@ -2124,7 +2145,9 @@ export function ReviewerDashboard({
                           }}
                         >
                           <td className="px-1 py-2.5 min-[700px]:px-2">
-                            {canUseReviewerActions && canReview && row.report ? (
+                            {canUseReviewerActions &&
+                            canReview &&
+                            row.report ? (
                               <Checkbox
                                 checked={selectedReportIds.includes(
                                   row.report.id,
@@ -2427,14 +2450,12 @@ type LocationMetricTone =
   | "red"
   | "neutral";
 
-function LocationMetric({
-  icon,
+function LocationCountChip({
   label,
   count,
   total,
   tone,
 }: {
-  icon: ReactNode;
   label: string;
   count: number;
   total: number;
@@ -2442,7 +2463,7 @@ function LocationMetric({
 }) {
   const percent = percentage(count, total);
   const toneClass = {
-    blue: "bg-[#f4f8ff] text-[#1d4ed8] ring-[#dbe7f5] dark:bg-blue-400/10 dark:text-blue-100 dark:ring-blue-300/15",
+    blue: "bg-[#f8fbff] text-[#1d4ed8] ring-[#dbe7f5] dark:bg-blue-400/10 dark:text-blue-100 dark:ring-blue-300/15",
     green:
       "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-300/15",
     purple:
@@ -2455,28 +2476,16 @@ function LocationMetric({
   }[tone];
 
   return (
-    <div
+    <span
       className={cn(
-        "flex min-w-0 items-center justify-between gap-3 rounded-[8px] px-3 py-2.5 ring-1",
+        "inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ring-1",
         toneClass,
       )}
     >
-      <div className="flex min-w-0 items-center gap-2">
-        <span
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/70 [&_svg]:h-4 [&_svg]:w-4 dark:bg-white/10"
-          aria-hidden="true"
-        >
-          {icon}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-xs font-semibold">{label}</p>
-          <p className="text-[11px] font-medium opacity-80">
-            {total > 0 ? `${percent}%` : "No submitted"}
-          </p>
-        </div>
-      </div>
-      <div className="shrink-0 text-xl font-semibold leading-none">{count}</div>
-    </div>
+      <span>{label}</span>
+      <span className="text-sm leading-none">{count}</span>
+      {total > 0 ? <span className="opacity-75">{percent}%</span> : null}
+    </span>
   );
 }
 
@@ -2500,32 +2509,38 @@ function WorkLocationBreakdown({
     breakdown.draft
       ? `${breakdown.draft} draft${breakdown.draft === 1 ? "" : "s"}`
       : null,
-    breakdown.missing
-      ? `${breakdown.missing} missing`
-      : null,
+    breakdown.missing ? `${breakdown.missing} missing` : null,
   ].filter(Boolean);
   const secondaryLocations = (
     ["PTO", "OUT_OF_OFFICE", "UNKNOWN"] as WorkLocationKey[]
   ).filter((location) => breakdown.counts[location] > 0);
+  const primaryLocations: Array<{
+    location: WorkLocationKey;
+    tone: LocationMetricTone;
+  }> = [
+    { location: "OFFICE", tone: "blue" },
+    { location: "WFH", tone: wfhTone },
+    { location: "HYBRID", tone: "purple" },
+  ];
 
   return (
     <section
       aria-label="Work location breakdown"
-      className="mt-3 border-t border-[#e5eaf2] pt-3 dark:border-[#263a55]"
+      className="mt-3 border-t border-[#e5eaf2] pt-2.5 dark:border-[#263a55]"
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <h3 className="text-sm font-semibold text-[#101828] dark:text-foreground">
             Work location breakdown
           </h3>
-          <p className="mt-0.5 text-xs text-[#64748b] dark:text-muted-foreground">
-            {submittedLabel} in the current view
-          </p>
+          <span className="text-xs text-[#64748b] dark:text-muted-foreground">
+            {submittedLabel}
+          </span>
         </div>
         {warning ? (
           <span
             className={cn(
-              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold ring-1",
+              "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ring-1",
               warning.tone === "red"
                 ? "bg-[#fff5f5] text-[#dc2626] ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15"
                 : "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-300/20",
@@ -2535,52 +2550,129 @@ function WorkLocationBreakdown({
             {warning.label}
             <span className="font-bold">{warning.percent}% WFH</span>
           </span>
-        ) : (
-          <span className="inline-flex h-8 shrink-0 items-center rounded-full bg-[#f8fafc] px-3 text-xs font-semibold text-[#64748b] ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:text-muted-foreground dark:ring-[#263a55]">
-            No WFH warning
+        ) : null}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-[#64748b] dark:text-muted-foreground">
+        {primaryLocations.map(({ location, tone }) => (
+          <LocationCountChip
+            key={location}
+            label={workLocationLabels[location]}
+            count={breakdown.counts[location]}
+            total={breakdown.totalSubmitted}
+            tone={tone}
+          />
+        ))}
+        {secondaryLocations.length > 0 || excludedLabels.length > 0 ? (
+          <>
+            {secondaryLocations.map((location) => (
+              <span
+                key={location}
+                className="inline-flex h-7 items-center rounded-full bg-[#f8fafc] px-2.5 font-semibold ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
+              >
+                {workLocationLabels[location]}: {breakdown.counts[location]}
+              </span>
+            ))}
+            {excludedLabels.length > 0 ? (
+              <span className="ml-1 font-medium">
+                {excludedLabels.join(", ")} not counted
+              </span>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function WeeklyWorkLocationBreakdown({
+  breakdown,
+}: {
+  breakdown: WorkLocationBreakdownData;
+}) {
+  const warning = wfhWarning(breakdown);
+  const wfhTone: LocationMetricTone =
+    warning?.tone === "red"
+      ? "red"
+      : warning?.tone === "yellow"
+        ? "yellow"
+        : "green";
+  const submittedLabel =
+    breakdown.totalSubmitted === 1
+      ? "1 submitted day"
+      : `${breakdown.totalSubmitted} submitted days`;
+  const excludedLabels = [
+    breakdown.draft
+      ? `${breakdown.draft} draft${breakdown.draft === 1 ? "" : "s"}`
+      : null,
+    breakdown.missing
+      ? `${breakdown.missing} missing day${breakdown.missing === 1 ? "" : "s"}`
+      : null,
+  ].filter(Boolean);
+  const secondaryLocations = (
+    ["PTO", "OUT_OF_OFFICE", "UNKNOWN"] as WorkLocationKey[]
+  ).filter((location) => breakdown.counts[location] > 0);
+  const primaryLocations: Array<{
+    location: WorkLocationKey;
+    tone: LocationMetricTone;
+  }> = [
+    { location: "OFFICE", tone: "blue" },
+    { location: "WFH", tone: wfhTone },
+    { location: "HYBRID", tone: "purple" },
+  ];
+
+  return (
+    <section
+      aria-label="Weekly work location breakdown"
+      className="report-pdf-card mt-5 rounded-[10px] border border-[#dbe3ee] bg-[#f8fbff] p-4 dark:border-[#263a55] dark:bg-white/[0.03]"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <h2 className="text-sm font-semibold text-[#101828] dark:text-foreground">
+            Weekly location breakdown
+          </h2>
+          <span className="text-xs text-[#64748b] dark:text-muted-foreground">
+            {submittedLabel}
           </span>
-        )}
-      </div>
-      <div className="mt-3 grid gap-2 min-[640px]:grid-cols-3">
-        <LocationMetric
-          icon={<Building2 />}
-          label={workLocationLabels.OFFICE}
-          count={breakdown.counts.OFFICE}
-          total={breakdown.totalSubmitted}
-          tone="blue"
-        />
-        <LocationMetric
-          icon={<Home />}
-          label={workLocationLabels.WFH}
-          count={breakdown.counts.WFH}
-          total={breakdown.totalSubmitted}
-          tone={wfhTone}
-        />
-        <LocationMetric
-          icon={<MapPin />}
-          label={workLocationLabels.HYBRID}
-          count={breakdown.counts.HYBRID}
-          total={breakdown.totalSubmitted}
-          tone="purple"
-        />
-      </div>
-      {secondaryLocations.length > 0 || excludedLabels.length > 0 ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#64748b] dark:text-muted-foreground">
-          {secondaryLocations.map((location) => (
-            <span
-              key={location}
-              className="inline-flex h-7 items-center rounded-full bg-[#f8fafc] px-2.5 font-semibold ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
-            >
-              {workLocationLabels[location]}: {breakdown.counts[location]}
-            </span>
-          ))}
-          {excludedLabels.length > 0 ? (
-            <span className="font-medium">
-              Not counted: {excludedLabels.join(", ")}
-            </span>
-          ) : null}
         </div>
-      ) : null}
+        {warning ? (
+          <span
+            className={cn(
+              "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ring-1",
+              warning.tone === "red"
+                ? "bg-[#fff5f5] text-[#dc2626] ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15"
+                : "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-300/20",
+            )}
+          >
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            {warning.label}
+            <span className="font-bold">{warning.percent}% WFH</span>
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-[#64748b] dark:text-muted-foreground">
+        {primaryLocations.map(({ location, tone }) => (
+          <LocationCountChip
+            key={location}
+            label={workLocationLabels[location]}
+            count={breakdown.counts[location]}
+            total={breakdown.totalSubmitted}
+            tone={tone}
+          />
+        ))}
+        {secondaryLocations.map((location) => (
+          <span
+            key={location}
+            className="inline-flex h-7 items-center rounded-full bg-white px-2.5 font-semibold ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
+          >
+            {workLocationLabels[location]}: {breakdown.counts[location]}
+          </span>
+        ))}
+        {excludedLabels.length > 0 ? (
+          <span className="ml-1 font-medium">
+            {excludedLabels.join(", ")} not counted
+          </span>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -2623,11 +2715,13 @@ function Avatar({ name }: { name?: string | null }) {
 }
 
 function weeklyActivityStatusLabel(activity: DashboardActivity) {
-  if (!activity.status) {
-    return "Done";
+  const status = activity.status?.trim();
+
+  if (!status || status.toLowerCase() === "noted") {
+    return null;
   }
 
-  return titleCase(activity.status);
+  return titleCase(status);
 }
 
 function WeeklyProgressRing({
@@ -2775,34 +2869,42 @@ function WeeklyDayActivities({
       <div className="mt-4 border-t border-[#dbe3ee] dark:border-[#263a55]">
         {activities.length ? (
           <ul className="divide-y divide-[#e6edf6] dark:divide-[#263a55]">
-            {activities.map((activity) => (
-              <li
-                key={activity.id}
-                className="grid min-w-0 gap-3 py-4 min-[640px]:grid-cols-[minmax(0,1fr)_72px_94px] min-[640px]:items-center"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <ReportActivitySourceIcon
-                    source={activity.source}
-                    size="sm"
-                    className="weekly-report-source-icon report-pdf-source-icon"
-                  />
-                  <div className="min-w-0">
-                    <p className="truncate text-[15px] font-semibold leading-5 text-[#0f172a] dark:text-foreground">
-                      {activity.title || "Untitled activity"}
-                    </p>
-                    <p className="mt-0.5 truncate text-[13px] leading-5 text-[#52647a] dark:text-muted-foreground">
-                      {reportActivitySourceLabel(activity.source)}
-                    </p>
+            {activities.map((activity) => {
+              const statusLabel = weeklyActivityStatusLabel(activity);
+
+              return (
+                <li
+                  key={activity.id}
+                  className="grid min-w-0 gap-3 py-4 min-[640px]:grid-cols-[minmax(0,1fr)_72px_94px] min-[640px]:items-center"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <ReportActivitySourceIcon
+                      source={activity.source}
+                      size="sm"
+                      className="weekly-report-source-icon report-pdf-source-icon"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-[15px] font-semibold leading-5 text-[#0f172a] dark:text-foreground">
+                        {activity.title || "Untitled activity"}
+                      </p>
+                      <p className="mt-0.5 truncate text-[13px] leading-5 text-[#52647a] dark:text-muted-foreground">
+                        {reportActivitySourceLabel(activity.source)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="text-[14px] font-medium text-[#0f172a] dark:text-foreground">
-                  {formatReportDuration(activity.durationMinutes)}
-                </div>
-                <span className="inline-flex h-7 w-fit items-center rounded-full bg-emerald-50 px-3 text-[13px] font-semibold text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300">
-                  {weeklyActivityStatusLabel(activity)}
-                </span>
-              </li>
-            ))}
+                  <div className="text-[14px] font-medium text-[#0f172a] dark:text-foreground">
+                    {formatReportDuration(activity.durationMinutes)}
+                  </div>
+                  {statusLabel ? (
+                    <span className="inline-flex h-7 w-fit items-center rounded-full bg-emerald-50 px-3 text-[13px] font-semibold text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300">
+                      {statusLabel}
+                    </span>
+                  ) : (
+                    <span aria-hidden="true" />
+                  )}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="py-5 text-[14px] leading-6 text-[#52647a] dark:text-muted-foreground">
@@ -3047,6 +3149,10 @@ function WeeklyReportReviewPage({
   const selectedDayReport = reportsByDate.get(selectedDayDate);
   const submittedCount = data.submittedCount ?? reports.length;
   const expectedDays = data.expectedDays ?? weekDates.length;
+  const weeklyLocationBreakdown = weeklyWorkLocationBreakdown(
+    reports,
+    expectedDays,
+  );
   const weeklyActivityCount =
     data.activityCount ??
     reports.reduce(
@@ -3107,6 +3213,8 @@ function WeeklyReportReviewPage({
               </Button>
             </div>
           </header>
+
+          <WeeklyWorkLocationBreakdown breakdown={weeklyLocationBreakdown} />
 
           <div className="report-pdf-screen-only mt-6">
             <WeeklyReportDayTabs

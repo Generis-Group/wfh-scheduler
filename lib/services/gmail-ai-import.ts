@@ -5,7 +5,10 @@ import type { gmail_v1 } from "googleapis";
 import { HttpError } from "@/lib/http";
 import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
 import type { NormalizedActivity } from "@/lib/normalizers";
-import { isDescriptiveImportedActivityTitle } from "@/lib/services/ai-import-quality";
+import {
+  importedActivityStatusOrNull,
+  isDescriptiveImportedActivityTitle,
+} from "@/lib/services/ai-import-quality";
 
 type GenerateContentResponse = {
   text?: unknown;
@@ -156,11 +159,11 @@ function collectBodyParts(
   return [...current, ...children].filter((text) => text.trim().length > 0);
 }
 
-export function extractGmailMessageText(
-  payload?: gmail_v1.Schema$MessagePart,
-) {
+export function extractGmailMessageText(payload?: gmail_v1.Schema$MessagePart) {
   const plain = collectBodyParts(payload, "text/plain").join("\n\n");
-  const html = collectBodyParts(payload, "text/html").map(stripHtml).join("\n\n");
+  const html = collectBodyParts(payload, "text/html")
+    .map(stripHtml)
+    .join("\n\n");
   const source = plain || html || decodeGmailBody(payload?.body?.data);
   const cleaned = source
     .replace(/\r/g, "\n")
@@ -176,9 +179,8 @@ function headerValue(
   name: string,
 ) {
   return (
-    headers?.find(
-      (header) => header.name?.toLowerCase() === name.toLowerCase(),
-    )?.value ?? null
+    headers?.find((header) => header.name?.toLowerCase() === name.toLowerCase())
+      ?.value ?? null
   );
 }
 
@@ -363,8 +365,7 @@ function parseStartedAt(value: unknown, start: Date, end: Date) {
 
 function earliestMessageDate(messages: GmailMessageEvidence[]) {
   return messages.reduce(
-    (earliest, message) =>
-      message.date < earliest ? message.date : earliest,
+    (earliest, message) => (message.date < earliest ? message.date : earliest),
     messages[0].date,
   );
 }
@@ -426,7 +427,10 @@ function normalizeExtractionItems(
       continue;
     }
 
-    const dedupeKey = `${threadId}:${title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`;
+    const dedupeKey = `${threadId}:${title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()}`;
 
     if (seen.has(dedupeKey)) {
       continue;
@@ -479,15 +483,19 @@ function threadPromptBlock(thread: GmailThreadEvidence) {
   return lines.filter(Boolean).join("\n");
 }
 
-function buildExtractionPrompt(dateString: string, threads: GmailThreadEvidence[]) {
+function buildExtractionPrompt(
+  dateString: string,
+  threads: GmailThreadEvidence[],
+) {
   return [
     "Extract daily report work items from Gmail evidence.",
     "Return JSON only.",
-    'Use this exact shape: {"items":[{"threadId":"thread-id","messageIds":["message-id"],"title":"Short work item title","description":"Concise work evidence","status":"noted","confidence":0.75,"reason":"work_performed","startedAt":"2026-06-17T14:00:00.000Z"}]}',
+    'Use this exact shape: {"items":[{"threadId":"thread-id","messageIds":["message-id"],"title":"Short work item title","description":"Concise work evidence","status":null,"confidence":0.75,"reason":"work_performed","startedAt":"2026-06-17T14:00:00.000Z"}]}',
     "",
     "Report-worthy items include actual work performed, deliverables, meaningful follow-ups, decisions, client/internal coordination with an outcome, or true blockers.",
     "Exclude newsletters, FYIs, automated mail, calendar notifications, small acknowledgements, pure scheduling chatter, personal content, and vague items.",
     'Titles must be concise and describe the specific task or deliverable. Do not use generic titles like "Task completed", "Work update", or "Status update".',
+    'Use status only when it adds useful information such as "complete", "blocked", or "in progress"; otherwise use null.',
     "Use confidence 0 to 1. Use 0.75+ only when the email clearly shows reportable work.",
     "The reason must be one of: work_performed, deliverable, follow_up, decision, coordination, blocker.",
     "Do not quote email text. Do not include raw URLs, raw email addresses, markdown, HTML, or unknown message ids.",
@@ -505,10 +513,7 @@ function extractionPromptLength(
   return buildExtractionPrompt(dateString, threads).length;
 }
 
-function splitThreadForPrompt(
-  thread: GmailThreadEvidence,
-  dateString: string,
-) {
+function splitThreadForPrompt(thread: GmailThreadEvidence, dateString: string) {
   if (extractionPromptLength(dateString, [thread]) <= maxPromptChars) {
     return [thread];
   }
@@ -548,10 +553,7 @@ function splitThreadForPrompt(
       continue;
     }
 
-    if (
-      messages.length > 0 &&
-      nextPromptLength > maxPromptChars
-    ) {
+    if (messages.length > 0 && nextPromptLength > maxPromptChars) {
       chunks.push({ ...thread, messages });
       messages = [message];
       continue;
@@ -615,7 +617,9 @@ function threadEvidenceById(threads: GmailThreadEvidence[]) {
     );
     const messages = [
       ...existing.messages,
-      ...thread.messages.filter((message) => !existingMessageIds.has(message.id)),
+      ...thread.messages.filter(
+        (message) => !existingMessageIds.has(message.id),
+      ),
     ];
 
     threadsById.set(thread.threadId, {
@@ -669,10 +673,7 @@ function isLikelyVerbatimBodyExcerpt(
       ) {
         const span = valueWords.slice(startIndex, endIndex).join(" ");
 
-        if (
-          span.length >= minLeakCheckChars &&
-          comparableBody.includes(span)
-        ) {
+        if (span.length >= minLeakCheckChars && comparableBody.includes(span)) {
           return true;
         }
       }
@@ -736,13 +737,17 @@ function activityFromItem(
     item.description,
     thread.messages,
   );
-  const status = generatedFieldWithoutBodyLeak(item.status, thread.messages);
+  const status = importedActivityStatusOrNull(
+    generatedFieldWithoutBodyLeak(item.status, thread.messages),
+  );
   const selected = item.confidence >= selectedConfidenceThreshold;
   const senderDomains = [
     ...new Set(referencedMessages.flatMap((message) => message.senderDomains)),
   ].slice(0, 8);
   const recipientDomains = [
-    ...new Set(referencedMessages.flatMap((message) => message.recipientDomains)),
+    ...new Set(
+      referencedMessages.flatMap((message) => message.recipientDomains),
+    ),
   ].slice(0, 8);
 
   return {
@@ -751,7 +756,7 @@ function activityFromItem(
     sourceContainerId: item.threadId,
     title,
     description,
-    status: status ?? (selected ? "noted" : "needs review"),
+    status: status ?? (selected ? null : "needs review"),
     sourceUrl: gmailThreadUrl(item.threadId),
     startedAt: item.startedAt,
     endedAt: latestMessageDate(referencedMessages),
@@ -760,7 +765,9 @@ function activityFromItem(
       importBatch: "gmail-ai-v1",
       threadId: item.threadId,
       messageIds: item.messageIds,
-      messageDates: referencedMessages.map((message) => message.date.toISOString()),
+      messageDates: referencedMessages.map((message) =>
+        message.date.toISOString(),
+      ),
       senderDomains,
       recipientDomains,
       confidence: item.confidence,
@@ -776,7 +783,9 @@ function jiraKeys(value: string) {
   );
 }
 
-function activityText(activity: Pick<NormalizedActivity, "title" | "description">) {
+function activityText(
+  activity: Pick<NormalizedActivity, "title" | "description">,
+) {
   return [activity.title, activity.description].filter(Boolean).join(" ");
 }
 
@@ -855,7 +864,8 @@ function reconcileGmailSourceIds(
   }
 
   for (const activity of activities) {
-    const key = activity.source === "GMAIL" ? activityEvidenceKey(activity) : null;
+    const key =
+      activity.source === "GMAIL" ? activityEvidenceKey(activity) : null;
 
     if (key) {
       incomingCountsByEvidenceKey.set(
@@ -866,7 +876,8 @@ function reconcileGmailSourceIds(
   }
 
   return activities.map((activity) => {
-    const key = activity.source === "GMAIL" ? activityEvidenceKey(activity) : null;
+    const key =
+      activity.source === "GMAIL" ? activityEvidenceKey(activity) : null;
     const existingIds = key ? existingIdsByEvidenceKey.get(key) : null;
 
     if (
@@ -925,7 +936,8 @@ export function dedupeGmailActivities(
   const existingJiraKeys = new Set(
     existingActivities
       .filter(
-        (activity) => activity.source === "JIRA" && isActiveExistingActivity(activity),
+        (activity) =>
+          activity.source === "JIRA" && isActiveExistingActivity(activity),
       )
       .flatMap((activity) => jiraKeys(activityText(activity))),
   );
@@ -933,7 +945,8 @@ export function dedupeGmailActivities(
     existingActivities
       .filter(
         (activity) =>
-          activity.source === "GOOGLE_TASKS" && isActiveExistingActivity(activity),
+          activity.source === "GOOGLE_TASKS" &&
+          isActiveExistingActivity(activity),
       )
       .flatMap((activity) => [activity.sourceId, activity.sourceUrl])
       .filter((value): value is string => Boolean(value)),
