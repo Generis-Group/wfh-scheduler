@@ -62,7 +62,11 @@ import {
   markServerDataStale,
   refreshStaleServerData,
 } from "@/lib/client-cache-invalidation";
-import { clampReportDateToToday, todayDateString } from "@/lib/dates";
+import {
+  addReportDateDays,
+  clampReportDateToToday,
+  todayDateString,
+} from "@/lib/dates";
 import {
   removeSummaryActivityReferences,
   summaryActivityReferenceHref,
@@ -74,8 +78,17 @@ import {
 import { startClientTiming } from "@/lib/performance";
 import {
   emptyReportSubmitMessage,
+  hasRequiredWorkLocation,
   hasSubmitReadyContent,
+  missingWorkLocationSubmitMessage,
 } from "@/lib/report-submit-readiness";
+import {
+  dailyWorkLocationValues,
+  plannedWorkLocationValues,
+  workLocationLabel,
+  type PlannedWorkLocationValue,
+  type WorkLocationValue,
+} from "@/lib/work-locations";
 import type { SyncProgressEvent } from "@/lib/services/sync";
 import { cn } from "@/lib/utils";
 
@@ -104,13 +117,7 @@ type Activity = {
 type Report = {
   id: string;
   reportDate: string | Date;
-  workLocation:
-    | "OFFICE"
-    | "WFH"
-    | "HYBRID"
-    | "PTO"
-    | "OUT_OF_OFFICE"
-    | "UNKNOWN";
+  workLocation: WorkLocationValue;
   summary: string;
   status: "DRAFT" | "SUBMITTED";
   submittedAt?: string | Date | null;
@@ -120,6 +127,15 @@ type Report = {
 };
 
 type WorkLocation = Report["workLocation"];
+
+type PlannedWorkLocation = {
+  id?: string;
+  userId?: string;
+  date: string;
+  workLocation: PlannedWorkLocationValue;
+};
+
+const emptyWeeklyPlannedLocations: PlannedWorkLocation[] = [];
 
 type IntegrationStatus = {
   google: boolean;
@@ -134,14 +150,15 @@ const syncProviderLabels = {
   "google-chat": "Google Chat",
 } as const;
 
-const workLocationOptions: Array<{ value: WorkLocation; label: string }> = [
-  { value: "UNKNOWN", label: "Unspecified" },
-  { value: "OFFICE", label: "Office" },
-  { value: "WFH", label: "WFH" },
-  { value: "HYBRID", label: "Hybrid" },
-  { value: "PTO", label: "PTO" },
-  { value: "OUT_OF_OFFICE", label: "Out of office" },
-];
+const workLocationOptions = dailyWorkLocationValues.map((value) => ({
+  value,
+  label: workLocationLabel(value),
+}));
+
+const weeklyPlanLocationOptions = plannedWorkLocationValues.map((value) => ({
+  value,
+  label: workLocationLabel(value),
+}));
 
 const interactiveActivityControlSelector =
   "a, button, input, textarea, select, [role='button'], [role='textbox'], [contenteditable='true']";
@@ -284,11 +301,27 @@ function dateInputValue(value: string | Date) {
   return dateOnlyString(value);
 }
 
-function workLocationLabel(value: WorkLocation) {
-  return (
-    workLocationOptions.find((option) => option.value === value)?.label ??
-    "Unspecified"
-  );
+function reportWeekDates(value: string) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  const weekday = date.getUTCDay();
+  const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+  const start = addReportDateDays(value, mondayOffset);
+  const dates: string[] = [];
+
+  for (let index = 0; index < 7; index += 1) {
+    dates.push(addReportDateDays(start, index));
+  }
+
+  return dates;
+}
+
+function shortWeekdayLabel(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T12:00:00.000Z`));
 }
 
 function statusTone(
@@ -530,10 +563,12 @@ export function DailyReportApp({
   initialReport,
   date,
   integrationStatus = { google: false, atlassian: false },
+  weeklyPlannedLocations = emptyWeeklyPlannedLocations,
 }: {
   initialReport: Report;
   date: string;
   integrationStatus?: IntegrationStatus;
+  weeklyPlannedLocations?: PlannedWorkLocation[];
 }) {
   const router = useRouter();
   const reportDate = dateInputValue(date);
@@ -552,6 +587,10 @@ export function DailyReportApp({
   const [workLocation, setWorkLocation] = useState<WorkLocation>(
     initialReport.workLocation,
   );
+  const [weeklyPlan, setWeeklyPlan] = useState(weeklyPlannedLocations);
+  const [savingPlanDate, setSavingPlanDate] = useState<string | null>(null);
+  const [pendingLocationOverride, setPendingLocationOverride] =
+    useState<WorkLocation | null>(null);
   const [activities, setActivities] = useState(initialReport.activities);
   const [deletedActivityIds, setDeletedActivityIds] = useState<string[]>([]);
   const [openActivityMenu, setOpenActivityMenu] = useState<{
@@ -589,6 +628,7 @@ export function DailyReportApp({
   const lastSavedSignatureRef = useRef(
     draftPayloadSignature(reportDate, initialPayload),
   );
+  const confirmedPlanOverrideRef = useRef(false);
   const activityDragPreviewId = activityDragPreview?.id ?? null;
 
   useDismissableLayer({
@@ -639,6 +679,9 @@ export function DailyReportApp({
     setSummary(nextSummary);
     setSummaryEditorSeed(nextSummary);
     setWorkLocation(initialReport.workLocation);
+    setWeeklyPlan(weeklyPlannedLocations);
+    setSavingPlanDate(null);
+    setPendingLocationOverride(null);
     setActivities(initialReport.activities);
     setDeletedActivityIds([]);
     setOpenActivityMenu(null);
@@ -650,8 +693,9 @@ export function DailyReportApp({
     setActivitySearch("");
     setActivityDragPreview(null);
     setPendingDateControl(null);
+    confirmedPlanOverrideRef.current = false;
     pendingSummarySnapshotRef.current = null;
-  }, [initialReport, date, reportDate]);
+  }, [initialReport, date, reportDate, weeklyPlannedLocations]);
 
   useEffect(() => {
     if (!pendingDateControl) {
@@ -1278,6 +1322,11 @@ export function DailyReportApp({
 
     const snapshot = captureCurrentDraftSnapshot();
 
+    if (!hasRequiredWorkLocation(snapshot.payload.workLocation)) {
+      setMessage(missingWorkLocationSubmitMessage);
+      return;
+    }
+
     if (!hasSubmittableReportPayload(snapshot.payload)) {
       setMessage(emptyReportSubmitMessage);
       return;
@@ -1775,6 +1824,16 @@ export function DailyReportApp({
   const dateNavigationPending = pendingDateControl !== null;
   const isBusy = busyAction !== null || isImporting || dateNavigationPending;
   const maxReportDate = todayDateString();
+  const planWeekDates = useMemo(
+    () => reportWeekDates(reportDate),
+    [reportDate],
+  );
+  const weeklyPlanByDate = useMemo(
+    () => new Map(weeklyPlan.map((plan) => [plan.date, plan])),
+    [weeklyPlan],
+  );
+  const plannedLocationForReport =
+    weeklyPlanByDate.get(reportDate)?.workLocation ?? null;
   const selectedActivities = useMemo(
     () => activities.filter((activity) => activity.selected),
     [activities],
@@ -1809,6 +1868,10 @@ export function DailyReportApp({
       )
     : activities;
   const selectedWorkLocationLabel = workLocationLabel(workLocation);
+  const planMismatch =
+    Boolean(plannedLocationForReport) &&
+    workLocation !== "UNKNOWN" &&
+    workLocation !== plannedLocationForReport;
   const activityReferences = useMemo(
     () =>
       Object.fromEntries(
@@ -1863,9 +1926,97 @@ export function DailyReportApp({
     finishTiming({ status: "push" });
   }
 
-  function selectWorkLocation(nextLocation: WorkLocation) {
+  function applyWorkLocation(nextLocation: WorkLocation) {
     setWorkLocation(nextLocation);
     setLocationMenuOpen(false);
+    setPendingLocationOverride(null);
+  }
+
+  function selectWorkLocation(nextLocation: WorkLocation) {
+    if (
+      plannedLocationForReport &&
+      nextLocation !== "UNKNOWN" &&
+      nextLocation !== plannedLocationForReport &&
+      !confirmedPlanOverrideRef.current
+    ) {
+      setPendingLocationOverride(nextLocation);
+      setLocationMenuOpen(false);
+      return;
+    }
+
+    applyWorkLocation(nextLocation);
+  }
+
+  function confirmPlanOverride() {
+    if (!pendingLocationOverride) {
+      return;
+    }
+
+    confirmedPlanOverrideRef.current = true;
+    applyWorkLocation(pendingLocationOverride);
+  }
+
+  function keepPlannedLocation() {
+    if (plannedLocationForReport) {
+      applyWorkLocation(plannedLocationForReport);
+    }
+
+    setPendingLocationOverride(null);
+  }
+
+  async function saveWeeklyPlan(
+    dateString: string,
+    nextLocation: PlannedWorkLocationValue | null,
+  ) {
+    if (savingPlanDate) {
+      return;
+    }
+
+    const previousPlan = weeklyPlanByDate.get(dateString)?.workLocation ?? null;
+    setSavingPlanDate(dateString);
+    setMessage(null);
+
+    try {
+      const response = await fetch("/api/work-location-plans", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: dateString,
+          workLocation: nextLocation,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          await responseErrorMessage(response, "Unable to update weekly plan."),
+        );
+      }
+
+      const body = (await response.json()) as {
+        plan?: PlannedWorkLocation | null;
+      };
+      setWeeklyPlan((current) => [
+        ...current.filter((plan) => plan.date !== dateString),
+        ...(body.plan ? [body.plan] : []),
+      ]);
+      markServerDataStale();
+
+      if (
+        dateString === reportDate &&
+        !reportRef.current.id &&
+        (workLocation === "UNKNOWN" || workLocation === previousPlan)
+      ) {
+        setWorkLocation(nextLocation ?? "UNKNOWN");
+      }
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to update weekly plan.",
+      );
+    } finally {
+      setSavingPlanDate(null);
+    }
   }
 
   function toggleLocationMenu() {
@@ -2001,6 +2152,76 @@ export function DailyReportApp({
                   })}
                 </div>
               ) : null}
+            </div>
+          </div>
+          {pendingLocationOverride && plannedLocationForReport ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-[8px] bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200 dark:bg-amber-300/10 dark:text-amber-100 dark:ring-amber-300/20">
+              <span className="min-w-0 flex-1">
+                Your weekly plan says{" "}
+                <strong>{workLocationLabel(plannedLocationForReport)}</strong>{" "}
+                for this day. Use{" "}
+                <strong>{workLocationLabel(pendingLocationOverride)}</strong>{" "}
+                for this daily report instead?
+              </span>
+              <Button
+                type="button"
+                className="h-8 rounded-[7px] bg-amber-600 px-3 text-xs font-semibold text-white hover:bg-amber-700"
+                onClick={confirmPlanOverride}
+              >
+                Use {workLocationLabel(pendingLocationOverride)}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 rounded-[7px] bg-white px-3 text-xs font-semibold text-amber-950 ring-1 ring-amber-200 hover:bg-amber-50 dark:bg-transparent dark:text-amber-100 dark:ring-amber-300/30 dark:hover:bg-amber-300/10"
+                onClick={keepPlannedLocation}
+              >
+                Keep {workLocationLabel(plannedLocationForReport)}
+              </Button>
+            </div>
+          ) : planMismatch ? (
+            <div className="mt-2 text-xs font-medium text-[#667085] dark:text-muted-foreground">
+              Different from weekly plan
+            </div>
+          ) : null}
+          <div className="mt-3 rounded-[8px] bg-[#f8fbff] p-2 ring-1 ring-[#dbe7ff] dark:bg-blue-400/5 dark:ring-blue-300/15">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
+              Weekly plan
+            </div>
+            <div className="grid gap-2 min-[720px]:grid-cols-7">
+              {planWeekDates.map((planDate) => {
+                const plan = weeklyPlanByDate.get(planDate);
+                const saving = savingPlanDate === planDate;
+
+                return (
+                  <label key={planDate} className="grid gap-1">
+                    <span className="text-[11px] font-semibold text-[#667085] dark:text-muted-foreground">
+                      {shortWeekdayLabel(planDate)}
+                    </span>
+                    <select
+                      className="h-8 min-w-0 rounded-[7px] bg-white px-2 text-xs font-medium text-[#111827] ring-1 ring-[#dfe4ee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:opacity-60 dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]"
+                      value={plan?.workLocation ?? ""}
+                      disabled={isBusy || saving}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        void saveWeeklyPlan(
+                          planDate,
+                          nextValue
+                            ? (nextValue as PlannedWorkLocationValue)
+                            : null,
+                        );
+                      }}
+                    >
+                      <option value="">No plan</option>
+                      {weeklyPlanLocationOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              })}
             </div>
           </div>
         </ReportSurface>

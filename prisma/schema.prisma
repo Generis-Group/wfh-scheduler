@@ -28,6 +28,8 @@ enum WorkLocation {
   OFFICE
   WFH
   HYBRID
+  OFFICE_AM_WFH_PM
+  WFH_AM_OFFICE_PM
   PTO
   OUT_OF_OFFICE
   UNKNOWN
@@ -97,6 +99,7 @@ model User {
   reportReadReceipts     ReportReadReceipt[]      @relation("ReadReceiptReviewer")
   weeklyReports          WeeklyReport[]           @relation("WeeklyReportEmployee")
   generatedWeeklyReports WeeklyReport[]           @relation("WeeklyReportGenerator")
+  plannedWorkLocations   PlannedWorkLocation[]
   bugReports             BugReport[]              @relation("BugReportReporter")
   solvedBugReports       BugReport[]              @relation("BugReportSolver")
   syncRuns               SyncRun[]
@@ -167,6 +170,7 @@ model PendingSignup {
   email        String   @unique
   name         String?
   passwordHash String   @db.Text
+  departmentIds String[] @default([])
   expiresAt    DateTime
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -204,6 +208,19 @@ model DailyReport {
 
   @@unique([userId, reportDate])
   @@index([reportDate, status])
+}
+
+model PlannedWorkLocation {
+  id           String       @id @default(cuid())
+  userId       String
+  workDate     DateTime     @db.Date
+  workLocation WorkLocation
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workDate])
+  @@index([workDate])
 }
 
 model ActivityItem {

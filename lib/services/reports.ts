@@ -13,7 +13,9 @@ import {
 import { prisma } from "@/lib/prisma";
 import {
   emptyReportSubmitMessage,
+  hasRequiredWorkLocation,
   hasSubmitReadyContent,
+  missingWorkLocationSubmitMessage,
 } from "@/lib/report-submit-readiness";
 import {
   departmentMembershipSelect,
@@ -21,6 +23,7 @@ import {
   type ReviewScope,
 } from "@/lib/services/departments";
 import type { updateReportSchema } from "@/lib/validation";
+import { workLocationValues } from "@/lib/work-locations";
 import type { z } from "zod";
 
 type UpdateReportInput = z.infer<typeof updateReportSchema>;
@@ -143,14 +146,7 @@ const weeklyReportSnapshotVersion = 1;
 const defaultReportHistoryPageSize = defaultPaginationPageSize;
 const defaultAdminReportsPageSize = defaultPaginationPageSize;
 const maxPaginatedPageSize = maxPaginationPageSize;
-const workLocations = [
-  "OFFICE",
-  "WFH",
-  "HYBRID",
-  "PTO",
-  "OUT_OF_OFFICE",
-  "UNKNOWN",
-] as const;
+const workLocations = workLocationValues;
 
 const userIdentitySelect = {
   id: true,
@@ -637,6 +633,10 @@ export async function updateReport(
 export async function submitReport(reportId: string, editedById: string) {
   const report = await getReportById(reportId);
 
+  if (!hasRequiredWorkLocation(report.workLocation)) {
+    throw new HttpError(400, missingWorkLocationSubmitMessage);
+  }
+
   if (
     !hasSubmitReadyContent({
       summary: report.summary,
@@ -722,7 +722,10 @@ export async function deleteSubmittedReport(reportId: string) {
   const report = await getReportById(reportId);
 
   if (report.status !== "SUBMITTED") {
-    throw new HttpError(400, "Only submitted reports can be deleted by admins.");
+    throw new HttpError(
+      400,
+      "Only submitted reports can be deleted by admins.",
+    );
   }
 
   await prisma.$transaction(async (tx) => {
@@ -1172,10 +1175,7 @@ function reportHistoryWhere(
     status,
     fromDate,
     toDate,
-  }: Pick<
-    ReportHistoryOptions,
-    "search" | "status" | "fromDate" | "toDate"
-  >,
+  }: Pick<ReportHistoryOptions, "search" | "status" | "fromDate" | "toDate">,
 ) {
   const where: Prisma.DailyReportWhereInput = { userId };
 
@@ -1406,9 +1406,8 @@ export async function listReportHistory(
   ) {
     return {
       reports,
-      targetReport: reports.find(
-        (report) => report.id === options.targetReportId,
-      ) ?? null,
+      targetReport:
+        reports.find((report) => report.id === options.targetReportId) ?? null,
       page: currentPage,
       pageSize: limit,
       totalCount,
@@ -1439,11 +1438,7 @@ export async function listReportsForAdminManagement(
     prisma.dailyReport.count({ where }),
     prisma.dailyReport.findMany({
       where,
-      orderBy: [
-        { reportDate: "desc" },
-        { updatedAt: "desc" },
-        { id: "desc" },
-      ],
+      orderBy: [{ reportDate: "desc" }, { updatedAt: "desc" }, { id: "desc" }],
       skip: (currentPage - 1) * limit,
       take: limit,
       select: {

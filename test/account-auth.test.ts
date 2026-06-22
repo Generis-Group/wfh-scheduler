@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  departmentCount,
   pendingSignupDeleteMany,
   pendingSignupFindUnique,
   pendingSignupUpsert,
@@ -14,6 +15,7 @@ const {
   verificationTokenDeleteMany,
   verificationTokenFindUnique,
 } = vi.hoisted(() => ({
+  departmentCount: vi.fn(),
   pendingSignupDeleteMany: vi.fn(),
   pendingSignupFindUnique: vi.fn(),
   pendingSignupUpsert: vi.fn(),
@@ -29,6 +31,9 @@ const {
 }));
 
 const prismaMock = vi.hoisted(() => ({
+  department: {
+    count: departmentCount,
+  },
   pendingSignup: {
     deleteMany: pendingSignupDeleteMany,
     findUnique: pendingSignupFindUnique,
@@ -69,6 +74,7 @@ describe("self-service account auth", () => {
     userFindUnique.mockResolvedValue(null);
     userCreate.mockResolvedValue({ id: "user-1" });
     userUpdate.mockResolvedValue({ id: "user-1" });
+    departmentCount.mockResolvedValue(1);
     pendingSignupUpsert.mockResolvedValue({});
     pendingSignupFindUnique.mockResolvedValue(null);
     pendingSignupDeleteMany.mockResolvedValue({ count: 0 });
@@ -99,6 +105,7 @@ describe("self-service account auth", () => {
       email: "Employee@GenerisGP.com",
       name: "Employee",
       password: "password123",
+      departmentIds: ["dept-it"],
     });
 
     expect(pendingSignupUpsert).toHaveBeenCalledWith(
@@ -108,6 +115,7 @@ describe("self-service account auth", () => {
           email: "employee@generisgp.com",
           name: "Employee",
           passwordHash: expect.any(String),
+          departmentIds: ["dept-it"],
         }),
       }),
     );
@@ -136,6 +144,7 @@ describe("self-service account auth", () => {
       requestSelfServiceSignup({
         email: "employee@generisgp.com",
         password: "password123",
+        departmentIds: ["dept-it"],
       }),
     ).rejects.toMatchObject({
       status: 503,
@@ -149,6 +158,7 @@ describe("self-service account auth", () => {
       email: "employee@generisgp.com",
       name: "Employee",
       passwordHash: "hashed-password",
+      departmentIds: ["dept-it"],
       expiresAt: expires,
     });
     verificationTokenFindUnique.mockResolvedValue({
@@ -175,6 +185,14 @@ describe("self-service account auth", () => {
         status: "ACTIVE",
         passwordHash: "hashed-password",
         mustChangePassword: false,
+        departments: {
+          create: [
+            {
+              departmentId: "dept-it",
+              role: "EMPLOYEE",
+            },
+          ],
+        },
       }),
     });
     expect(pendingSignupDeleteMany).toHaveBeenCalledWith({

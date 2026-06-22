@@ -6,6 +6,7 @@ import { HttpError } from "@/lib/http";
 import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
 import type { NormalizedActivity } from "@/lib/normalizers";
 import {
+  formatImportedActivityTitle,
   importedActivityStatusOrNull,
   isDescriptiveImportedActivityTitle,
 } from "@/lib/services/ai-import-quality";
@@ -421,7 +422,9 @@ function normalizeExtractionItems(
       continue;
     }
 
-    const title = cleanText(item.title, maxExtractedTitleLength);
+    const title = formatImportedActivityTitle(
+      cleanText(item.title, maxExtractedTitleLength),
+    );
 
     if (!title || !isDescriptiveImportedActivityTitle(title)) {
       continue;
@@ -494,7 +497,7 @@ function buildExtractionPrompt(
     "",
     "Report-worthy items include actual work performed, deliverables, meaningful follow-ups, decisions, client/internal coordination with an outcome, or true blockers.",
     "Exclude newsletters, FYIs, automated mail, calendar notifications, small acknowledgements, pure scheduling chatter, personal content, and vague items.",
-    'Titles must be concise and describe the specific task or deliverable. Do not use generic titles like "Task completed", "Work update", or "Status update".',
+    'Titles must be short, specific, and sentence case, like "Fix disappearing sponsor info" or "Update ESC26 delegate list". Preserve Jira keys, acronyms, product names, and event names. Do not use generic titles like "Task completed", "Work update", "Status update", or "Noted".',
     'Use status only when it adds useful information such as "complete", "blocked", or "in progress"; otherwise use null.',
     "Use confidence 0 to 1. Use 0.75+ only when the email clearly shows reportable work.",
     "The reason must be one of: work_performed, deliverable, follow_up, decision, coordination, blocker.",
@@ -723,7 +726,9 @@ function activityFromItem(
     return null;
   }
 
-  const title = generatedFieldWithoutBodyLeak(item.title, thread.messages);
+  const title = formatImportedActivityTitle(
+    generatedFieldWithoutBodyLeak(item.title, thread.messages),
+  );
 
   if (!title) {
     return null;

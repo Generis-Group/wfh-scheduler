@@ -111,6 +111,30 @@ async function findValidVerificationToken({
   return verificationToken;
 }
 
+function uniqueIds(ids: string[]) {
+  return [...new Set(ids)];
+}
+
+async function assertDepartmentsExist(departmentIds: string[]) {
+  const ids = uniqueIds(departmentIds);
+
+  if (ids.length === 0) {
+    throw new HttpError(422, "Choose at least one department.");
+  }
+
+  const count = await prisma.department.count({
+    where: {
+      id: { in: ids },
+    },
+  });
+
+  if (count !== ids.length) {
+    throw new HttpError(422, "Choose valid departments.");
+  }
+
+  return ids;
+}
+
 export async function requestSelfServiceSignup(input: SignupInput) {
   const email = normalizeEmail(input.email);
 
@@ -136,6 +160,7 @@ export async function requestSelfServiceSignup(input: SignupInput) {
 
   const expires = expiresIn(SIGNUP_TOKEN_TTL_MS);
   const passwordHash = await bcrypt.hash(input.password, 12);
+  const departmentIds = await assertDepartmentsExist(input.departmentIds);
 
   await prisma.pendingSignup.upsert({
     where: { email },
@@ -143,11 +168,13 @@ export async function requestSelfServiceSignup(input: SignupInput) {
       email,
       name: input.name?.trim() || null,
       passwordHash,
+      departmentIds,
       expiresAt: expires,
     },
     update: {
       name: input.name?.trim() || null,
       passwordHash,
+      departmentIds,
       expiresAt: expires,
     },
   });
@@ -219,6 +246,10 @@ export async function verifySelfServiceSignup({
     return null;
   }
 
+  const departmentIds = await assertDepartmentsExist(
+    pendingSignup.departmentIds,
+  );
+
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
@@ -230,6 +261,12 @@ export async function verifySelfServiceSignup({
         status: "ACTIVE",
         passwordHash: pendingSignup.passwordHash,
         mustChangePassword: false,
+        departments: {
+          create: departmentIds.map((departmentId) => ({
+            departmentId,
+            role: "EMPLOYEE",
+          })),
+        },
       },
     });
 
@@ -290,9 +327,7 @@ export async function requestPasswordReset(input: PasswordResetRequestInput) {
   return { emailSent: true };
 }
 
-export async function resetPasswordWithToken(
-  input: PasswordResetConfirmInput,
-) {
+export async function resetPasswordWithToken(input: PasswordResetConfirmInput) {
   const email = normalizeEmail(input.email);
 
   if (!isGenerisEmail(email)) {

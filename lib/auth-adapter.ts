@@ -30,18 +30,9 @@ export function encryptedPrismaAdapter(prisma: PrismaClient): Adapter {
         throw new Error("Only Generis email addresses can create accounts.");
       }
 
-      return prisma.user.create({
-        data: {
-          name: user.name,
-          email,
-          emailVerified: user.emailVerified ?? new Date(),
-          image: user.image,
-          role: "EMPLOYEE",
-          roles: ["EMPLOYEE"],
-          status: "ACTIVE",
-          mustChangePassword: false
-        }
-      });
+      throw new Error(
+        "Sign up with email and choose a department before using OAuth sign-in.",
+      );
     },
     async linkAccount(account: AdapterAccount) {
       if (!adapter.linkAccount) {

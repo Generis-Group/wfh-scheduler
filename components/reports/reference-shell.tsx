@@ -4,18 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { ElementType, MouseEvent, ReactNode } from "react";
 import {
   BarChart3,
   Bug,
+  CalendarDays,
   ChevronDown,
   CircleUser,
   ClipboardList,
@@ -51,7 +46,14 @@ import generisLogo from "@/images/Generis_logo.png";
 
 type ShellVariant = "employee" | "reviewer" | "admin";
 
-type NavKey = "report" | "reports" | "review" | "admin" | "bugs" | "settings";
+type NavKey =
+  | "report"
+  | "reports"
+  | "calendar"
+  | "review"
+  | "admin"
+  | "bugs"
+  | "settings";
 
 type NavItem = {
   href: string;
@@ -95,6 +97,13 @@ const employeeNav: NavItem[] = [
     prefetch: "eager",
   },
   {
+    href: "/calendar",
+    label: "Locations",
+    icon: CalendarDays,
+    key: "calendar",
+    prefetch: "intent",
+  },
+  {
     href: "/bugs",
     label: "Bug reports",
     icon: Bug,
@@ -119,6 +128,13 @@ const reviewerNav: NavItem[] = [
     prefetch: "eager",
   },
   {
+    href: "/calendar",
+    label: "Locations",
+    icon: CalendarDays,
+    key: "calendar",
+    prefetch: "intent",
+  },
+  {
     href: "/bugs",
     label: "Bug reports",
     icon: Bug,
@@ -140,6 +156,13 @@ const adminNav: NavItem[] = [
     label: "Admin",
     icon: Users,
     key: "admin",
+    prefetch: "intent",
+  },
+  {
+    href: "/calendar",
+    label: "Locations",
+    icon: CalendarDays,
+    key: "calendar",
     prefetch: "intent",
   },
   {
@@ -349,10 +372,7 @@ export function ReferenceAppShell({
     const pendingHrefWithoutHash =
       pendingNavigation?.href.split("#")[0] || null;
 
-    if (
-      !pendingNavigation ||
-      currentHref !== pendingHrefWithoutHash
-    ) {
+    if (!pendingNavigation || currentHref !== pendingHrefWithoutHash) {
       return;
     }
 
@@ -411,7 +431,6 @@ export function ReferenceAppShell({
       desktopMediaQuery.removeEventListener("change", closeDrawerOnDesktop);
     };
   }, []);
-
 
   useEffect(() => {
     if (hasStalePrefetchedData) {
@@ -652,7 +671,9 @@ export function ReferenceAppShell({
                 type="button"
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-white text-sm font-semibold text-[#111827] ring-1 ring-[#dfe5ef] transition-colors hover:bg-[#f6f8fb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-white/[0.06] dark:text-[#e2e8f0] dark:ring-white/[0.08] dark:hover:bg-white/[0.1] xl:hidden"
                 aria-label={
-                  mobileNavOpen ? "Close navigation menu" : "Open navigation menu"
+                  mobileNavOpen
+                    ? "Close navigation menu"
+                    : "Open navigation menu"
                 }
                 aria-expanded={mobileNavOpen}
                 aria-haspopup="menu"
@@ -724,8 +745,7 @@ export function ReferenceAppShell({
                         {displayName}
                       </div>
                       <div className="text-xs text-[#64748b] dark:text-[#94a3b8]">
-                        {userEmail ??
-                          (displayName ? "Signed in" : "Account")}
+                        {userEmail ?? (displayName ? "Signed in" : "Account")}
                       </div>
                     </div>
                     <Link
@@ -815,18 +835,25 @@ function navForRoles(
 ) {
   const roles = rolesFromShell(userRoles, variant);
   const nav: NavItem[] = [];
+  const pushUnique = (items: NavItem[]) => {
+    for (const item of items) {
+      if (!nav.some((existing) => existing.key === item.key)) {
+        nav.push(item);
+      }
+    }
+  };
 
   if (roles.has("EMPLOYEE")) {
-    nav.push(
-      ...employeeNav.filter(
+    pushUnique(
+      employeeNav.filter(
         (item) => item.key !== "settings" && item.key !== "bugs",
       ),
     );
   }
 
   if (roles.has("REVIEWER")) {
-    nav.push(
-      ...reviewerNav.filter(
+    pushUnique(
+      reviewerNav.filter(
         (item) => item.key !== "settings" && item.key !== "bugs",
       ),
     );
@@ -837,11 +864,12 @@ function navForRoles(
       nav.push(reviewerNav.find((item) => item.key === "review")!);
     }
 
-    nav.push(...adminNav.filter((item) => item.key === "admin"));
+    pushUnique(adminNav.filter((item) => item.key === "admin"));
+    pushUnique(adminNav.filter((item) => item.key === "calendar"));
   }
 
-  nav.push(employeeNav.find((item) => item.key === "bugs")!);
-  nav.push(employeeNav.find((item) => item.key === "settings")!);
+  pushUnique([employeeNav.find((item) => item.key === "bugs")!]);
+  pushUnique([employeeNav.find((item) => item.key === "settings")!]);
 
   return nav;
 }
@@ -945,6 +973,10 @@ export function activeNavKey(pathname: string | null): NavKey {
     return "reports";
   }
 
+  if (path.startsWith("/calendar")) {
+    return "calendar";
+  }
+
   if (path.startsWith("/review")) {
     return "review";
   }
@@ -973,6 +1005,7 @@ export function shellPageKindFromHref(
   if (
     path === "/" ||
     path.startsWith("/reports") ||
+    path.startsWith("/calendar") ||
     path.startsWith("/review") ||
     path.startsWith("/admin") ||
     path.startsWith("/bugs") ||

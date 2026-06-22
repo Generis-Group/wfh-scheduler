@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LoginForm } from "@/components/auth/login-form";
@@ -16,6 +22,7 @@ const oauthConfig = {
   google: true,
   atlassian: true,
 };
+const departments = [{ id: "dept-it", name: "IT" }];
 
 afterEach(() => {
   cleanup();
@@ -25,10 +32,13 @@ afterEach(() => {
 
 describe("LoginForm", () => {
   it("lets employees request a verified email signup", async () => {
-    const fetchMock = vi.fn(async () => Response.json({ ok: true }));
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({ ok: true }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<LoginForm oauthConfig={oauthConfig} />);
+    render(<LoginForm oauthConfig={oauthConfig} departments={departments} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Sign up" }));
     fireEvent.change(screen.getByLabelText("Name"), {
@@ -40,6 +50,7 @@ describe("LoginForm", () => {
     fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "password123" },
     });
+    fireEvent.click(screen.getByLabelText("IT"));
     fireEvent.click(screen.getByRole("button", { name: "Verify email" }));
 
     await waitFor(() => {
@@ -48,14 +59,19 @@ describe("LoginForm", () => {
         expect.objectContaining({ method: "POST" }),
       );
     });
-    expect(screen.getByText("Check your email to verify your account.")).toBeTruthy();
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
+      departmentIds: ["dept-it"],
+    });
+    expect(
+      screen.getByText("Check your email to verify your account."),
+    ).toBeTruthy();
   });
 
   it("lets employees request a password reset email", async () => {
     const fetchMock = vi.fn(async () => Response.json({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<LoginForm oauthConfig={oauthConfig} />);
+    render(<LoginForm oauthConfig={oauthConfig} departments={departments} />);
 
     fireEvent.change(screen.getByLabelText("Email"), {
       target: { value: "employee@generisgp.com" },
@@ -70,7 +86,9 @@ describe("LoginForm", () => {
       );
     });
     expect(
-      screen.getByText("If an active account exists, a reset link has been sent."),
+      screen.getByText(
+        "If an active account exists, a reset link has been sent.",
+      ),
     ).toBeTruthy();
   });
 });

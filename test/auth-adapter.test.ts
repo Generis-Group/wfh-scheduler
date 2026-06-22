@@ -18,31 +18,23 @@ describe("encryptedPrismaAdapter", () => {
     prismaUserCreate.mockResolvedValue({ id: "user-1" });
   });
 
-  it("creates first-time OAuth users as active verified employees", async () => {
+  it("rejects first-time OAuth users before creating a departmentless account", async () => {
     const { encryptedPrismaAdapter } = await import("@/lib/auth-adapter");
     const adapter = encryptedPrismaAdapter({
       user: { create: prismaUserCreate },
     } as unknown as PrismaClient);
 
-    await adapter.createUser?.({
-      email: "Employee@GenerisGP.com",
-      emailVerified: null,
-      image: "https://example.com/avatar.png",
-      name: "Employee",
-    });
-
-    expect(prismaUserCreate).toHaveBeenCalledWith({
-      data: {
-        email: "employee@generisgp.com",
-        emailVerified: expect.any(Date),
+    await expect(
+      adapter.createUser?.({
+        email: "Employee@GenerisGP.com",
+        emailVerified: null,
         image: "https://example.com/avatar.png",
-        mustChangePassword: false,
         name: "Employee",
-        role: "EMPLOYEE",
-        roles: ["EMPLOYEE"],
-        status: "ACTIVE",
-      },
-    });
+      }),
+    ).rejects.toThrow(
+      "Sign up with email and choose a department before using OAuth sign-in.",
+    );
+    expect(prismaUserCreate).not.toHaveBeenCalled();
   });
 
   it("rejects first-time OAuth users outside the Generis domain", async () => {

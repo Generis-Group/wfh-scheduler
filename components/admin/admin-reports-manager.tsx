@@ -16,6 +16,7 @@ import {
   writeClientJsonCache,
 } from "@/lib/client-request-cache";
 import { defaultPaginationPageSize } from "@/lib/pagination";
+import { workLocationLabel } from "@/lib/work-locations";
 import { initials } from "@/lib/utils";
 
 type AdminManagedReport = {
@@ -93,46 +94,49 @@ export function AdminReportsManager({
     return `/api/admin/reports?${params.toString()}`;
   }, [currentReportPage, reportPageSize, search, statusFilter]);
 
-  const loadReports = useCallback(async ({
-    signal,
-  }: {
-    signal?: AbortSignal;
-  } = {}) => {
-    const requestId = ++requestIdRef.current;
+  const loadReports = useCallback(
+    async ({
+      signal,
+    }: {
+      signal?: AbortSignal;
+    } = {}) => {
+      const requestId = ++requestIdRef.current;
 
-    setIsRefreshing(true);
+      setIsRefreshing(true);
 
-    try {
-      const data = await fetchJsonWithClientCache<AdminReportsPageResponse>(
-        reportsUrl(),
-        {
-          signal,
-          errorMessage: "Unable to load reports.",
-        },
-      );
+      try {
+        const data = await fetchJsonWithClientCache<AdminReportsPageResponse>(
+          reportsUrl(),
+          {
+            signal,
+            errorMessage: "Unable to load reports.",
+          },
+        );
 
-      if (requestId !== requestIdRef.current) {
+        if (requestId !== requestIdRef.current) {
+          return false;
+        }
+
+        setReports(data.reports ?? []);
+        setTotalCount(data.totalCount ?? 0);
+        return true;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return false;
+        }
+
+        setMessage(
+          error instanceof Error ? error.message : "Unable to load reports.",
+        );
         return false;
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setIsRefreshing(false);
+        }
       }
-
-      setReports(data.reports ?? []);
-      setTotalCount(data.totalCount ?? 0);
-      return true;
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return false;
-      }
-
-      setMessage(
-        error instanceof Error ? error.message : "Unable to load reports.",
-      );
-      return false;
-    } finally {
-      if (requestId === requestIdRef.current) {
-        setIsRefreshing(false);
-      }
-    }
-  }, [reportsUrl]);
+    },
+    [reportsUrl],
+  );
 
   function requestImmediateRefresh() {
     immediateRefreshRef.current = true;
@@ -329,7 +333,9 @@ export function AdminReportsManager({
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                           <h2 className="truncate text-sm font-semibold text-[#0f172a] dark:text-foreground">
-                            {report.user.name ?? report.user.email ?? "Unknown employee"}
+                            {report.user.name ??
+                              report.user.email ??
+                              "Unknown employee"}
                           </h2>
                           <ReportStatusBadge
                             status={
@@ -354,10 +360,19 @@ export function AdminReportsManager({
                     </div>
                   </div>
 
-                  <ReportCount label="Activities" value={report._count.activities} />
+                  <ReportCount
+                    label="Activities"
+                    value={report._count.activities}
+                  />
                   <div className="grid grid-cols-2 gap-2 text-xs text-[#64748b] dark:text-muted-foreground min-[860px]:block min-[860px]:space-y-1">
-                    <ReportCount label="Comments" value={report._count.comments} />
-                    <ReportCount label="Edits" value={report._count.revisions} />
+                    <ReportCount
+                      label="Comments"
+                      value={report._count.comments}
+                    />
+                    <ReportCount
+                      label="Edits"
+                      value={report._count.revisions}
+                    />
                   </div>
                   <Button
                     type="button"
@@ -435,14 +450,6 @@ function departmentLabel(report: AdminManagedReport) {
       .filter(Boolean) ?? [];
 
   return departments.length > 0 ? departments.join(", ") : "No department";
-}
-
-function workLocationLabel(value: string) {
-  return value
-    .toLowerCase()
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function formatReportDate(value: string | Date) {

@@ -293,7 +293,9 @@ describe("AdminUsers", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(confirmMock).toHaveBeenCalledWith(
-      expect.stringContaining("Apply this destructive action to 1 team member?"),
+      expect.stringContaining(
+        "Apply this destructive action to 1 team member?",
+      ),
     );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith(
@@ -334,7 +336,9 @@ describe("AdminUsers", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(confirmMock).toHaveBeenCalledWith(
-      expect.stringContaining("Apply this destructive action to 1 team member?"),
+      expect.stringContaining(
+        "Apply this destructive action to 1 team member?",
+      ),
     );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith("/api/admin/users/reviewer-1/data", {
@@ -602,7 +606,13 @@ describe("AdminUsers", () => {
               roles: ["EMPLOYEE"],
               status: "ACTIVE",
               reviewerAllDepartments: false,
-              departments: [],
+              departments: [
+                {
+                  departmentId: "dept-engineering",
+                  role: "EMPLOYEE",
+                  department: initialDepartments[0],
+                },
+              ],
             },
             temporaryPassword: "TempPass123!",
             emailDelivery: {
@@ -632,6 +642,10 @@ describe("AdminUsers", () => {
     fireEvent.change(screen.getByLabelText("Email"), {
       target: { value: "morgan@generisgp.com" },
     });
+    fireEvent.click(
+      screen.getByLabelText("Employee departments for new team member"),
+    );
+    fireEvent.click(screen.getByRole("option", { name: "Engineering" }));
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     const popup = await screen.findByRole("dialog", {

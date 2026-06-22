@@ -31,6 +31,7 @@ describe("public auth routes", () => {
       jsonRequest("/api/auth/signup", {
         email: "employee@generisgp.com",
         password: "password123",
+        departmentIds: ["dept-it"],
       }),
     );
 
@@ -39,9 +40,8 @@ describe("public auth routes", () => {
 
   it("does not expose whether a reset email matched an account", async () => {
     requestPasswordReset.mockResolvedValue({ emailSent: false });
-    const { POST } = await import(
-      "@/app/api/auth/password-reset/request/route"
-    );
+    const { POST } =
+      await import("@/app/api/auth/password-reset/request/route");
 
     const response = await POST(
       jsonRequest("/api/auth/password-reset/request", {

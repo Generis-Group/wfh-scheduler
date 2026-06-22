@@ -19,21 +19,31 @@ import { Label } from "@/components/ui/label";
 import { generisEmailMessage, isGenerisEmail } from "@/lib/auth-domain";
 import type { OAuthProviderConfig } from "@/lib/oauth-config";
 
+type SignupDepartment = {
+  id: string;
+  name: string;
+};
+
 const oauthButtonClassName =
   "flex h-10 w-full items-center justify-center gap-3 rounded-[8px] border border-[#dfe5ef] bg-white px-3 text-sm font-semibold text-[#344054] shadow-[0_1px_2px_rgba(15,23,42,0.035)] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#263a55] dark:bg-white/[0.04] dark:text-[#e2e8f0] dark:hover:bg-white/[0.08]";
 
 export function LoginForm({
   oauthConfig,
   notice,
+  departments,
 }: {
   oauthConfig: OAuthProviderConfig;
   notice?: string | null;
+  departments?: SignupDepartment[];
 }) {
   const [mode, setMode] = useState<"signin" | "signup" | "reset">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [newAccountPassword, setNewAccountPassword] = useState("");
+  const [selectedDepartmentIds, setSelectedDepartmentIds] = useState<string[]>(
+    [],
+  );
   const [resetEmail, setResetEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [noticeDismissed, setNoticeDismissed] = useState(false);
@@ -80,6 +90,12 @@ export function LoginForm({
       return;
     }
 
+    if (selectedDepartmentIds.length === 0) {
+      setError("Choose at least one department.");
+      setIsSubmitting(false);
+      return;
+    }
+
     const response = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -87,6 +103,7 @@ export function LoginForm({
         email,
         name: name.trim() || undefined,
         password: newAccountPassword,
+        departmentIds: selectedDepartmentIds,
       }),
     });
 
@@ -101,7 +118,16 @@ export function LoginForm({
     setMode("signin");
     setPassword("");
     setNewAccountPassword("");
+    setSelectedDepartmentIds([]);
     setError("Check your email to verify your account.");
+  }
+
+  function toggleSignupDepartment(departmentId: string) {
+    setSelectedDepartmentIds((current) =>
+      current.includes(departmentId)
+        ? current.filter((id) => id !== departmentId)
+        : [...current, departmentId],
+    );
   }
 
   async function submitResetRequest(event: React.FormEvent<HTMLFormElement>) {
@@ -272,6 +298,33 @@ export function LoginForm({
                   required
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Department</Label>
+                <div className="grid max-h-36 gap-2 overflow-y-auto rounded-[8px] border border-[#dfe5ef] bg-white p-2 dark:border-[#263a55] dark:bg-white/[0.03]">
+                  {departments?.length ? (
+                    departments.map((department) => (
+                      <label
+                        key={department.id}
+                        className="flex min-h-8 items-center gap-2 rounded-[7px] px-2 text-sm font-medium text-[#344054] transition-colors hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/[0.06]"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-[#cbd5e1] text-[#2563eb]"
+                          checked={selectedDepartmentIds.includes(
+                            department.id,
+                          )}
+                          onChange={() => toggleSignupDepartment(department.id)}
+                        />
+                        <span>{department.name}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <div className="px-2 py-1 text-sm text-[#667085] dark:text-muted-foreground">
+                      No departments are available.
+                    </div>
+                  )}
+                </div>
+              </div>
               <Button className="w-full" disabled={isSubmitting}>
                 <Mail className="mr-2 h-4 w-4" />
                 {isSubmitting ? "Sending verification..." : "Verify email"}
@@ -325,7 +378,8 @@ export function LoginForm({
           </p>
           {!oauthConfig.google || !oauthConfig.atlassian ? (
             <p className="text-xs text-muted-foreground">
-              OAuth sign-in buttons are enabled after client IDs and secrets are added to `.env.local`.
+              OAuth sign-in buttons are enabled after client IDs and secrets are
+              added to `.env.local`.
             </p>
           ) : null}
         </CardContent>

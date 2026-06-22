@@ -6,14 +6,25 @@ import {
   maxBugReportBodyLines,
   maxBugReportBodyWords,
 } from "@/lib/bug-report-limits";
-import { isFutureReportDateString } from "@/lib/dates";
+import { isFutureReportDateString, isValidReportDateString } from "@/lib/dates";
+import {
+  plannedWorkLocationValues,
+  workLocationValues,
+} from "@/lib/work-locations";
 
-export const dateStringSchema = z
+export const dateStringFormatSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.")
-  .refine((date) => !isFutureReportDateString(date), {
-    message: "Future dates are not available.",
+  .refine(isValidReportDateString, {
+    message: "Use a valid date.",
   });
+
+export const dateStringSchema = dateStringFormatSchema.refine(
+  (date) => !isFutureReportDateString(date),
+  {
+    message: "Future dates are not available.",
+  },
+);
 
 export const reportQuerySchema = z.object({
   date: dateStringSchema,
@@ -22,9 +33,7 @@ export const reportQuerySchema = z.object({
 
 export const updateReportSchema = z.object({
   summary: z.string().max(8000).optional(),
-  workLocation: z
-    .enum(["OFFICE", "WFH", "HYBRID", "PTO", "OUT_OF_OFFICE", "UNKNOWN"])
-    .optional(),
+  workLocation: z.enum(workLocationValues).optional(),
   activityUpdates: z
     .array(
       z.object({
@@ -61,6 +70,16 @@ export const updateReportSchema = z.object({
 
 export const createReportSchema = updateReportSchema.extend({
   date: dateStringSchema,
+});
+
+export const plannedWorkLocationSchema = z.object({
+  date: dateStringFormatSchema,
+  workLocation: z.enum(plannedWorkLocationValues).nullable().optional(),
+});
+
+export const workLocationCalendarQuerySchema = z.object({
+  date: dateStringFormatSchema.optional(),
+  departmentId: z.string().optional(),
 });
 
 export const commentSchema = z.object({
@@ -110,6 +129,7 @@ export const signupSchema = z.object({
   email: z.string().email().refine(isGenerisEmail, generisEmailMessage()),
   name: z.string().min(1).max(200).optional(),
   password: z.string().min(8).max(200),
+  departmentIds: z.array(z.string()).min(1, "Choose at least one department."),
 });
 
 export const passwordResetRequestSchema = z.object({

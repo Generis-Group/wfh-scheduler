@@ -8,6 +8,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -167,7 +168,10 @@ vi.mock("@/components/reports/lazy-summary-editor", async () => {
 
 import { DailyReportApp } from "@/components/reports/daily-report-app";
 import { todayDateString } from "@/lib/dates";
-import { emptyReportSubmitMessage } from "@/lib/report-submit-readiness";
+import {
+  emptyReportSubmitMessage,
+  missingWorkLocationSubmitMessage,
+} from "@/lib/report-submit-readiness";
 
 type DailyReportProps = React.ComponentProps<typeof DailyReportApp>;
 
@@ -191,6 +195,7 @@ const savedDraft: DailyReportProps["initialReport"] = {
 
 const submittedReport: DailyReportProps["initialReport"] = {
   ...savedDraft,
+  workLocation: "OFFICE" as const,
   status: "SUBMITTED" as const,
   submittedAt: "2026-05-20T14:10:00.000Z",
 };
@@ -239,13 +244,32 @@ const linkedJiraTask: DailyReportProps["initialReport"]["activities"][number] =
 function renderDailyReportApp(
   initialReport: DailyReportProps["initialReport"] = emptyReport,
   date = "2026-05-20",
+  props: Partial<
+    Pick<DailyReportProps, "integrationStatus" | "weeklyPlannedLocations">
+  > = {},
 ) {
   return render(
     <DailyReportApp
       initialReport={initialReport}
       date={date}
-      integrationStatus={{ google: true, atlassian: false }}
+      integrationStatus={
+        props.integrationStatus ?? { google: true, atlassian: false }
+      }
+      weeklyPlannedLocations={props.weeklyPlannedLocations}
     />,
+  );
+}
+
+function chooseDailyWorkLocation(name: string) {
+  fireEvent.click(
+    screen.getByRole("combobox", {
+      name: "Work location",
+    }),
+  );
+  fireEvent.click(
+    within(
+      screen.getByRole("listbox", { name: "Work location options" }),
+    ).getByRole("option", { name }),
   );
 }
 
@@ -1204,10 +1228,94 @@ describe("DailyReportApp drafts", () => {
       name: "Work location",
     });
 
-    fireEvent.click(locationPicker);
-    fireEvent.click(screen.getByRole("option", { name: "Hybrid" }));
+    chooseDailyWorkLocation("Office AM / WFH PM");
 
-    expect(locationPicker.textContent).toContain("Hybrid");
+    expect(locationPicker.textContent).toContain("Office AM / WFH PM");
+  });
+
+  it("saves a weekly plan and applies it to an unsaved daily report", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/work-location-plans") {
+        return Response.json({
+          plan: {
+            id: "plan-1",
+            userId: "user-1",
+            date: "2026-05-20",
+            workLocation: "OFFICE",
+          },
+        });
+      }
+
+      return Response.json({ error: "Unexpected request." }, { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Wed, May 20" }), {
+      target: { value: "OFFICE" },
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/work-location-plans",
+        expect.objectContaining({
+          method: "PUT",
+          body: expect.stringContaining('"workLocation":"OFFICE"'),
+        }),
+      );
+    });
+    expect(
+      screen.getByRole("combobox", { name: "Work location" }).textContent,
+    ).toContain("Office");
+  });
+
+  it("confirms changing a daily location away from the weekly plan", async () => {
+    renderDailyReportApp(
+      {
+        ...savedDraft,
+        workLocation: "OFFICE" as const,
+      },
+      "2026-05-20",
+      {
+        weeklyPlannedLocations: [
+          { date: "2026-05-20", workLocation: "OFFICE" },
+        ],
+      },
+    );
+
+    chooseDailyWorkLocation("WFH");
+
+    expect(screen.getByText(/Your weekly plan says/i).textContent).toContain(
+      "Office",
+    );
+    expect(screen.getByRole("button", { name: "Use WFH" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Use WFH" }));
+
+    expect(
+      screen.getByRole("combobox", { name: "Work location" }).textContent,
+    ).toContain("WFH");
+    expect(screen.getByText("Different from weekly plan")).toBeTruthy();
+  });
+
+  it("confirms a weekly plan mismatch when changing from unspecified", () => {
+    renderDailyReportApp(emptyReport, "2026-05-20", {
+      weeklyPlannedLocations: [{ date: "2026-05-20", workLocation: "OFFICE" }],
+    });
+
+    chooseDailyWorkLocation("WFH");
+
+    expect(screen.getByText(/Your weekly plan says/i).textContent).toContain(
+      "Office",
+    );
+    expect(screen.getByRole("button", { name: "Use WFH" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Use WFH" }));
+
+    expect(
+      screen.getByRole("combobox", { name: "Work location" }).textContent,
+    ).toContain("WFH");
   });
 
   it("labels completed imported Google Tasks as done", () => {
@@ -1825,12 +1933,27 @@ describe("DailyReportApp drafts", () => {
     expect(requestBody.deletedActivityIds).toEqual(["task-manual"]);
   });
 
+  it("blocks submitting without a work location", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDailyReportApp();
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit update" }));
+
+    expect(
+      await screen.findByText(missingWorkLocationSubmitMessage),
+    ).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("blocks submitting an empty draft", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
     renderDailyReportApp();
 
+    chooseDailyWorkLocation("Office");
     fireEvent.click(screen.getByRole("button", { name: "Submit update" }));
 
     expect(await screen.findByText(emptyReportSubmitMessage)).toBeTruthy();
@@ -1864,6 +1987,7 @@ describe("DailyReportApp drafts", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Summary" }), {
       target: { value: submittedSummary },
     });
+    chooseDailyWorkLocation("Office");
     fireEvent.click(screen.getByRole("button", { name: "Submit update" }));
 
     await waitFor(() => {
@@ -1908,12 +2032,7 @@ describe("DailyReportApp drafts", () => {
 
     renderDailyReportApp();
 
-    fireEvent.click(
-      screen.getByRole("combobox", {
-        name: "Work location",
-      }),
-    );
-    fireEvent.click(screen.getByRole("option", { name: "PTO" }));
+    chooseDailyWorkLocation("PTO");
     fireEvent.click(screen.getByRole("button", { name: "Submit update" }));
 
     await waitFor(() => {

@@ -222,7 +222,7 @@ export const authOptions: NextAuthOptions = {
       });
 
       if (!invitedUser) {
-        return true;
+        return false;
       }
 
       const canSignIn =
@@ -245,6 +245,11 @@ export const authOptions: NextAuthOptions = {
       const dbUser = await prisma.user.findUnique({ where: { id: userId } });
 
       if (!dbUser) {
+        delete token.userId;
+        delete token.role;
+        delete token.roles;
+        delete token.status;
+        delete token.mustChangePassword;
         return token;
       }
 

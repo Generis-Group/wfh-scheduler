@@ -49,6 +49,7 @@ import {
   todayDateString,
 } from "@/lib/dates";
 import { defaultPaginationPageSize } from "@/lib/pagination";
+import { workLocationLabel } from "@/lib/work-locations";
 import { cn, titleCase } from "@/lib/utils";
 
 type HistoryActivity = {
@@ -333,47 +334,50 @@ export function ReportHistory({
     toDateValue,
   ]);
 
-  const loadReports = useCallback(async ({
-    signal,
-  }: {
-    signal?: AbortSignal;
-  } = {}) => {
-    const requestId = ++requestIdRef.current;
+  const loadReports = useCallback(
+    async ({
+      signal,
+    }: {
+      signal?: AbortSignal;
+    } = {}) => {
+      const requestId = ++requestIdRef.current;
 
-    setIsRefreshing(true);
-    setMessage(null);
+      setIsRefreshing(true);
+      setMessage(null);
 
-    try {
-      const data = await fetchJsonWithClientCache<ReportHistoryPageResponse>(
-        reportsUrl(),
-        {
-          signal,
-          errorMessage: "Unable to load reports.",
-        },
-      );
+      try {
+        const data = await fetchJsonWithClientCache<ReportHistoryPageResponse>(
+          reportsUrl(),
+          {
+            signal,
+            errorMessage: "Unable to load reports.",
+          },
+        );
 
-      if (requestId !== requestIdRef.current) {
+        if (requestId !== requestIdRef.current) {
+          return false;
+        }
+
+        setItems(data.reports ?? []);
+        setTotalCount(data.totalCount ?? 0);
+        return true;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return false;
+        }
+
+        setMessage(
+          error instanceof Error ? error.message : "Unable to load reports.",
+        );
         return false;
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setIsRefreshing(false);
+        }
       }
-
-      setItems(data.reports ?? []);
-      setTotalCount(data.totalCount ?? 0);
-      return true;
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return false;
-      }
-
-      setMessage(
-        error instanceof Error ? error.message : "Unable to load reports.",
-      );
-      return false;
-    } finally {
-      if (requestId === requestIdRef.current) {
-        setIsRefreshing(false);
-      }
-    }
-  }, [reportsUrl]);
+    },
+    [reportsUrl],
+  );
 
   function requestImmediateRefresh() {
     immediateRefreshRef.current = true;
@@ -573,7 +577,9 @@ export function ReportHistory({
 
       setMessage("Draft submitted for review.");
     } catch {
-      setMessage("Unable to submit draft. Check your connection and try again.");
+      setMessage(
+        "Unable to submit draft. Check your connection and try again.",
+      );
     } finally {
       setPendingReportAction(null);
     }
@@ -627,7 +633,9 @@ export function ReportHistory({
 
       setMessage("Draft deleted.");
     } catch {
-      setMessage("Unable to delete draft. Check your connection and try again.");
+      setMessage(
+        "Unable to delete draft. Check your connection and try again.",
+      );
     } finally {
       setPendingReportAction(null);
     }
@@ -703,9 +711,7 @@ export function ReportHistory({
         <main className="reference-page min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
           <div className="reference-page-header shrink-0">
             <div className="min-w-0">
-              <h1 className="reference-title">
-                Review your submitted updates
-              </h1>
+              <h1 className="reference-title">Review your submitted updates</h1>
             </div>
           </div>
 
@@ -820,93 +826,94 @@ export function ReportHistory({
               }
               aria-busy={isRefreshing}
             >
-            {isRefreshing && items.length === 0 ? (
-              <div className="p-4">
-                <EmptyReferenceState>Loading reports...</EmptyReferenceState>
-              </div>
-            ) : items.length === 0 ? (
-              <div className="p-4">
-                <EmptyReferenceState>
-                  No reports match the current filters. Create a report or clear
-                  your filters.
-                </EmptyReferenceState>
-              </div>
-            ) : (
-              <>
-                <div
-                  className={cn(
-                    "sticky top-0 z-10 hidden border-b border-[#e8ecf3] bg-white px-4 py-3 text-sm font-semibold text-[#667085] dark:border-[#263a55] dark:bg-[#0f1b2a] dark:text-muted-foreground",
-                    reportHistoryRowGridClass,
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    Date
-                    <ArrowUpDown className="h-3.5 w-3.5" />
-                  </div>
-                  <div>Status</div>
-                  <div>Summary</div>
-                  <div className="text-right">Actions</div>
+              {isRefreshing && items.length === 0 ? (
+                <div className="p-4">
+                  <EmptyReferenceState>Loading reports...</EmptyReferenceState>
                 </div>
-                {items.map((report) => (
-                  <article
-                    key={report.id}
+              ) : items.length === 0 ? (
+                <div className="p-4">
+                  <EmptyReferenceState>
+                    No reports match the current filters. Create a report or
+                    clear your filters.
+                  </EmptyReferenceState>
+                </div>
+              ) : (
+                <>
+                  <div
                     className={cn(
-                      "space-y-3 border-b border-[#e8ecf3] px-4 py-3 last:border-b-0 dark:border-[#263a55] min-[860px]:min-h-[86px] min-[860px]:space-y-0",
+                      "sticky top-0 z-10 hidden border-b border-[#e8ecf3] bg-white px-4 py-3 text-sm font-semibold text-[#667085] dark:border-[#263a55] dark:bg-[#0f1b2a] dark:text-muted-foreground",
                       reportHistoryRowGridClass,
                     )}
                   >
-                    <div>
-                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
-                        Date
-                      </div>
-                      <div className="text-sm font-medium text-[#111827] dark:text-foreground">
-                        {formatReportDate(report.reportDate)}
-                      </div>
-                      <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
-                        {formatWeekday(report.reportDate)}
-                      </div>
+                    <div className="flex items-center gap-2">
+                      Date
+                      <ArrowUpDown className="h-3.5 w-3.5" />
                     </div>
-                    <div>
-                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
-                        Status
+                    <div>Status</div>
+                    <div>Summary</div>
+                    <div className="text-right">Actions</div>
+                  </div>
+                  {items.map((report) => (
+                    <article
+                      key={report.id}
+                      className={cn(
+                        "space-y-3 border-b border-[#e8ecf3] px-4 py-3 last:border-b-0 dark:border-[#263a55] min-[860px]:min-h-[86px] min-[860px]:space-y-0",
+                        reportHistoryRowGridClass,
+                      )}
+                    >
+                      <div>
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
+                          Date
+                        </div>
+                        <div className="text-sm font-medium text-[#111827] dark:text-foreground">
+                          {formatReportDate(report.reportDate)}
+                        </div>
+                        <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
+                          {formatWeekday(report.reportDate)}
+                        </div>
                       </div>
-                      <StatusPill tone={statusTone(report)}>
-                        {statusLabel(report)}
-                      </StatusPill>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
-                        Summary
+                      <div>
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
+                          Status
+                        </div>
+                        <StatusPill tone={statusTone(report)}>
+                          {statusLabel(report)}
+                        </StatusPill>
                       </div>
-                      <div className="truncate text-base text-[#111827] dark:text-foreground">
-                        {summaryPlainText(report.summary)}
+                      <div className="min-w-0">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
+                          Summary
+                        </div>
+                        <div className="truncate text-base text-[#111827] dark:text-foreground">
+                          {summaryPlainText(report.summary)}
+                        </div>
+                        <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
+                          {report.activities.length} activit
+                          {report.activities.length === 1 ? "y" : "ies"}{" "}
+                          included
+                        </div>
                       </div>
-                      <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
-                        {report.activities.length} activit
-                        {report.activities.length === 1 ? "y" : "ies"} included
+                      <div className="flex items-center justify-start gap-3 min-[860px]:justify-end">
+                        <Button
+                          variant="outline"
+                          className="h-9 rounded-[7px] bg-white px-4 text-sm font-medium ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
+                          onClick={() => openReport(report)}
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Open
+                        </Button>
+                        <button
+                          className="reference-menu-button"
+                          aria-label={`More actions for ${formatReportDate(report.reportDate)}`}
+                          onClick={(event) => toggleRowMenu(report, event)}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-start gap-3 min-[860px]:justify-end">
-                      <Button
-                        variant="outline"
-                        className="h-9 rounded-[7px] bg-white px-4 text-sm font-medium ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
-                        onClick={() => openReport(report)}
-                      >
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        Open
-                      </Button>
-                      <button
-                        className="reference-menu-button"
-                        aria-label={`More actions for ${formatReportDate(report.reportDate)}`}
-                        onClick={(event) => toggleRowMenu(report, event)}
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </>
-            )}
+                    </article>
+                  ))}
+                </>
+              )}
             </div>
             <PaginationControls
               className="reference-paginated-footer px-3 pb-3 pt-5"
@@ -1081,7 +1088,7 @@ function OpenedReportView({
       }
       meta={[
         { label: "Department", value: departmentLabel },
-        { label: "Location", value: titleCase(report.workLocation) },
+        { label: "Location", value: workLocationLabel(report.workLocation) },
         { label: "Submitted", value: formatTimestamp(report.submittedAt) },
         { label: "Last updated", value: formatTimestamp(report.updatedAt) },
       ]}

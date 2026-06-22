@@ -254,6 +254,12 @@ export function AdminUsers({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [roles, setRoles] = useState<UserRole[]>(["EMPLOYEE"]);
+  const [createEmployeeDepartmentIds, setCreateEmployeeDepartmentIds] =
+    useState<string[]>([]);
+  const [createReviewerDepartmentIds, setCreateReviewerDepartmentIds] =
+    useState<string[]>([]);
+  const [createReviewerAllDepartments, setCreateReviewerAllDepartments] =
+    useState(false);
   const [newDepartmentName, setNewDepartmentName] = useState("");
   const [userSearch, setUserSearch] = useState("");
   const [userPage, setUserPage] = useState(1);
@@ -440,13 +446,48 @@ export function AdminUsers({
 
     setMessage(null);
     setTemporaryCredentials(null);
+
+    if (
+      roles.includes("EMPLOYEE") &&
+      createEmployeeDepartmentIds.length === 0
+    ) {
+      setMessage("Employees need at least one department.");
+      return;
+    }
+
+    if (
+      roles.includes("REVIEWER") &&
+      !createReviewerAllDepartments &&
+      createReviewerDepartmentIds.length === 0
+    ) {
+      setMessage(
+        "Reviewers need a reviewer scope. Select departments or all departments.",
+      );
+      return;
+    }
+
     setIsCreatingUser(true);
 
     try {
       const response = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, roles, status: "ACTIVE" }),
+        body: JSON.stringify({
+          name,
+          email,
+          roles,
+          status: "ACTIVE",
+          employeeDepartmentIds: roles.includes("EMPLOYEE")
+            ? createEmployeeDepartmentIds
+            : [],
+          reviewerAllDepartments: roles.includes("REVIEWER")
+            ? createReviewerAllDepartments
+            : false,
+          reviewerDepartmentIds:
+            roles.includes("REVIEWER") && !createReviewerAllDepartments
+              ? createReviewerDepartmentIds
+              : [],
+        }),
       });
 
       const data = await response.json();
@@ -461,6 +502,9 @@ export function AdminUsers({
       setName("");
       setEmail("");
       setRoles(["EMPLOYEE"]);
+      setCreateEmployeeDepartmentIds([]);
+      setCreateReviewerDepartmentIds([]);
+      setCreateReviewerAllDepartments(false);
       setTemporaryCredentials([
         {
           email: data.user.email,
@@ -895,6 +939,17 @@ export function AdminUsers({
     }
 
     setRoles(normalizedRoles);
+  }
+
+  function updateCreateReviewerDepartmentIds(values: string[]) {
+    if (values.includes(allDepartmentsValue)) {
+      setCreateReviewerAllDepartments(true);
+      setCreateReviewerDepartmentIds([]);
+      return;
+    }
+
+    setCreateReviewerAllDepartments(false);
+    setCreateReviewerDepartmentIds(values);
   }
 
   async function resetPassword(
@@ -1356,10 +1411,7 @@ export function AdminUsers({
                             checked={userSelected}
                             className={teamMemberCheckboxClass}
                             onChange={(event) =>
-                              toggleUserSelection(
-                                user.id,
-                                event.target.checked,
-                              )
+                              toggleUserSelection(user.id, event.target.checked)
                             }
                             onClick={(event) => event.stopPropagation()}
                             onKeyDown={(event) => event.stopPropagation()}
@@ -1511,6 +1563,39 @@ export function AdminUsers({
                         triggerClassName="h-8 text-xs"
                       />
                     </div>
+                    {roles.includes("EMPLOYEE") ? (
+                      <div className="space-y-0.5">
+                        <Label className="text-xs">Employee departments</Label>
+                        <DepartmentSelector
+                          departments={departments}
+                          selectedIds={createEmployeeDepartmentIds}
+                          disabled={isCreatingUser}
+                          placeholder="Select departments"
+                          emptyText="Create departments to assign employees."
+                          aria-label="Employee departments for new team member"
+                          onChange={setCreateEmployeeDepartmentIds}
+                        />
+                      </div>
+                    ) : null}
+                    {roles.includes("REVIEWER") ? (
+                      <div className="space-y-0.5">
+                        <Label className="text-xs">Reviewer scope</Label>
+                        <DepartmentSelector
+                          departments={departments}
+                          selectedIds={
+                            createReviewerAllDepartments
+                              ? [allDepartmentsValue]
+                              : createReviewerDepartmentIds
+                          }
+                          disabled={isCreatingUser}
+                          placeholder="Select reviewer scope"
+                          emptyText="Create departments to scope reviewer access."
+                          includeAllOption
+                          aria-label="Reviewer departments for new team member"
+                          onChange={updateCreateReviewerDepartmentIds}
+                        />
+                      </div>
+                    ) : null}
                     <Button
                       className="h-8 w-full bg-[#2563eb] text-xs hover:bg-[#1d4ed8]"
                       disabled={isCreatingUser}
@@ -1558,8 +1643,7 @@ export function AdminUsers({
                               "cursor-pointer hover:bg-[#f4f8ff] dark:hover:bg-white/[0.05]",
                             checked &&
                               "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-[#bfdbfe]",
-                            action.danger &&
-                              "text-red-700 dark:text-red-200",
+                            action.danger && "text-red-700 dark:text-red-200",
                             action.danger &&
                               checked &&
                               "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200",

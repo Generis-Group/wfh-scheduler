@@ -7,7 +7,12 @@ import { withServerTiming } from "@/lib/performance";
 import { prisma } from "@/lib/prisma";
 import { hasUserRole } from "@/lib/roles";
 import { serialize } from "@/lib/serializers";
-import { getDailyReportEditorData } from "@/lib/services/reports";
+import {
+  getDailyReportEditorData,
+  reportWorkWeekRange,
+} from "@/lib/services/reports";
+import { listPlannedWorkLocations } from "@/lib/services/work-location-plans";
+import type { WorkLocationValue } from "@/lib/work-locations";
 
 export default async function HomePage({
   searchParams,
@@ -31,9 +36,7 @@ export default async function HomePage({
   }
 
   if (!hasUserRole(session.user, "EMPLOYEE")) {
-    redirect(
-      hasUserRole(session.user, "REVIEWER") ? "/review" : "/admin/team",
-    );
+    redirect(hasUserRole(session.user, "REVIEWER") ? "/review" : "/admin/team");
   }
 
   const requestedDate = searchParams?.date;
@@ -43,25 +46,34 @@ export default async function HomePage({
     redirect(`/?date=${date}`);
   }
 
-  const [{ report, activities }, accounts] = await withServerTiming(
-    "page:daily:data",
-    () =>
-      Promise.all([
-        getDailyReportEditorData(session.user.id, date),
-        prisma.account.findMany({
-          where: { userId: session.user.id },
-          select: { provider: true },
-        }),
-      ]),
-    { date },
-  );
+  const { start: weekStart, end: weekEnd } = reportWorkWeekRange(date);
+  const [{ report, activities }, accounts, weeklyPlannedLocations] =
+    await withServerTiming(
+      "page:daily:data",
+      () =>
+        Promise.all([
+          getDailyReportEditorData(session.user.id, date),
+          prisma.account.findMany({
+            where: { userId: session.user.id },
+            select: { provider: true },
+          }),
+          listPlannedWorkLocations(session.user.id, weekStart, weekEnd),
+        ]),
+      { date },
+    );
+  const plannedLocation =
+    weeklyPlannedLocations.find(
+      (plan: { date: string; workLocation: WorkLocationValue }) =>
+        plan.date === date,
+    )?.workLocation ??
+    null;
 
   const initialReport = report
     ? serialize({ ...report, activities })
     : {
         id: "",
         reportDate: date,
-        workLocation: "UNKNOWN" as const,
+        workLocation: plannedLocation ?? ("UNKNOWN" as const),
         summary: "",
         status: "DRAFT" as const,
         submittedAt: null,
@@ -76,9 +88,14 @@ export default async function HomePage({
       initialReport={initialReport}
       date={date}
       integrationStatus={{
-        google: accounts.some((account) => account.provider === "google"),
-        atlassian: accounts.some((account) => account.provider === "atlassian"),
+        google: accounts.some(
+          (account: { provider: string }) => account.provider === "google",
+        ),
+        atlassian: accounts.some(
+          (account: { provider: string }) => account.provider === "atlassian",
+        ),
       }}
+      weeklyPlannedLocations={serialize(weeklyPlannedLocations)}
     />
   );
 }

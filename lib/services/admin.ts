@@ -57,6 +57,20 @@ function membershipIds(
     .map((membership) => membership.departmentId);
 }
 
+async function assertDepartmentIdsExist(departmentIds: string[]) {
+  if (departmentIds.length === 0) {
+    return;
+  }
+
+  const count = await prisma.department.count({
+    where: { id: { in: departmentIds } },
+  });
+
+  if (count !== departmentIds.length) {
+    throw new HttpError(422, "Select valid departments.");
+  }
+}
+
 function resolveLegacyDepartmentIds(input: {
   roles?: CreateUserInput["roles"] | UpdateUserInput["roles"];
   role?: CreateUserInput["role"] | UpdateUserInput["role"];
@@ -137,6 +151,23 @@ export async function createAppUser(input: CreateUserInput) {
   const reviewerIds = roles.includes("REVIEWER")
     ? uniqueIds(reviewerDepartmentIds)
     : [];
+
+  if (roles.includes("EMPLOYEE") && employeeIds.length === 0) {
+    throw new HttpError(422, "Employees need at least one department.");
+  }
+
+  if (
+    roles.includes("REVIEWER") &&
+    !input.reviewerAllDepartments &&
+    reviewerIds.length === 0
+  ) {
+    throw new HttpError(
+      422,
+      "Reviewers need a reviewer scope. Select departments or all departments.",
+    );
+  }
+
+  await assertDepartmentIdsExist(uniqueIds([...employeeIds, ...reviewerIds]));
 
   const user = await prisma.user.create({
     data: {
@@ -270,6 +301,12 @@ export async function updateAppUser(
       throw new HttpError(
         422,
         "Reviewers need a reviewer scope. Select departments or all departments.",
+      );
+    }
+
+    if (assignmentsChanged) {
+      await assertDepartmentIdsExist(
+        uniqueIds([...nextEmployeeDepartmentIds, ...nextReviewerDepartmentIds]),
       );
     }
 

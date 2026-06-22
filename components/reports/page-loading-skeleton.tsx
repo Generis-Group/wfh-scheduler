@@ -34,7 +34,9 @@ function LoadingCard({
   className?: string;
 }) {
   return (
-    <section className={cn("reference-card p-3", className)}>{children}</section>
+    <section className={cn("reference-card p-3", className)}>
+      {children}
+    </section>
   );
 }
 
@@ -336,9 +338,7 @@ export function AdminTeamSectionSkeleton() {
             </div>
           </div>
           <div className="reference-paginated-viewport reference-visible-rows-viewport reference-team-member-viewport space-y-1 pr-1 min-[1180px]:mt-1">
-            <div
-              className="reference-team-member-header reference-team-member-row-grid sticky top-0 z-10 hidden bg-white px-2 dark:bg-[#0f1b2a] min-[900px]:grid"
-            >
+            <div className="reference-team-member-header reference-team-member-row-grid sticky top-0 z-10 hidden bg-white px-2 dark:bg-[#0f1b2a] min-[900px]:grid">
               <LoadingBar className="h-4 w-4 rounded-[4px]" />
               <LoadingBar className="h-3 w-24 rounded-[4px]" />
               <LoadingBar className="h-3 w-12 rounded-[4px]" />
@@ -781,7 +781,7 @@ export function loadingKindFromHref(
     return "reports";
   }
 
-  if (path.endsWith("/review")) {
+  if (path.endsWith("/review") || path.endsWith("/calendar")) {
     return "review";
   }
 

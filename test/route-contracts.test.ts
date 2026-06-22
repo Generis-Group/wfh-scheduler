@@ -174,6 +174,44 @@ vi.mock("@/lib/services/departments", () => ({
   deleteDepartment: vi.fn(async () => ({ ok: true })),
 }));
 
+vi.mock("@/lib/services/work-location-plans", () => ({
+  setPlannedWorkLocation: vi.fn(
+    async ({
+      userId,
+      dateString,
+      workLocation,
+    }: {
+      userId: string;
+      dateString: string;
+      workLocation?: string | null;
+    }) =>
+      workLocation
+        ? {
+            id: "plan-1",
+            userId,
+            date: dateString,
+            workLocation,
+          }
+        : null,
+  ),
+  getWorkLocationCalendarData: vi.fn(
+    async ({
+      dateString,
+      departmentId,
+    }: {
+      dateString: string;
+      departmentId?: string | null;
+    }) => ({
+      weekStart: "2026-05-11",
+      weekEnd: "2026-05-17",
+      dates: [dateString],
+      departments: [],
+      selectedDepartmentId: departmentId ?? null,
+      rows: [],
+    }),
+  ),
+}));
+
 vi.mock("@/lib/services/email-digest", () => ({
   sendReviewDigest: vi.fn(async ({ trigger }) => ({
     skipped: trigger === "SCHEDULED",
@@ -499,6 +537,64 @@ describe("route contracts", () => {
     await expect(response.text()).resolves.toContain(
       "Reconnect Google before using Gemini AI.",
     );
+  });
+
+  it("updates planned work locations", async () => {
+    const plans = await import("@/lib/services/work-location-plans");
+    const { PUT } = await import("@/app/api/work-location-plans/route");
+    vi.mocked(plans.setPlannedWorkLocation).mockClear();
+
+    const response = await PUT(
+      new Request("http://localhost/api/work-location-plans", {
+        method: "PUT",
+        body: JSON.stringify({
+          date: "2026-05-13",
+          workLocation: "OFFICE_AM_WFH_PM",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(plans.setPlannedWorkLocation).toHaveBeenCalledWith({
+      userId: "user-1",
+      dateString: "2026-05-13",
+      workLocation: "OFFICE_AM_WFH_PM",
+    });
+    await expect(response.json()).resolves.toEqual({
+      plan: {
+        id: "plan-1",
+        userId: "user-1",
+        date: "2026-05-13",
+        workLocation: "OFFICE_AM_WFH_PM",
+      },
+    });
+  });
+
+  it("returns work location calendar data", async () => {
+    const plans = await import("@/lib/services/work-location-plans");
+    const { GET } = await import("@/app/api/work-location-calendar/route");
+    vi.mocked(plans.getWorkLocationCalendarData).mockClear();
+
+    const response = await GET(
+      new Request(
+        "http://localhost/api/work-location-calendar?date=2026-05-13&departmentId=dept-it",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(plans.getWorkLocationCalendarData).toHaveBeenCalledWith({
+      dateString: "2026-05-13",
+      scope: {
+        userId: "user-1",
+        roles: ["EMPLOYEE"],
+      },
+      departmentId: "dept-it",
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      weekStart: "2026-05-11",
+      selectedDepartmentId: "dept-it",
+      rows: [],
+    });
   });
 
   it("hides unexpected sync errors from streaming responses", async () => {

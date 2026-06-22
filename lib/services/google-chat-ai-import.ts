@@ -6,6 +6,7 @@ import { HttpError } from "@/lib/http";
 import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
 import type { NormalizedActivity } from "@/lib/normalizers";
 import {
+  formatImportedActivityTitle,
   importedActivityStatusOrNull,
   isDescriptiveImportedActivityTitle,
 } from "@/lib/services/ai-import-quality";
@@ -466,7 +467,9 @@ function normalizeExtractionItems(
       continue;
     }
 
-    const title = cleanText(item.title, maxExtractedTitleLength);
+    const title = formatImportedActivityTitle(
+      cleanText(item.title, maxExtractedTitleLength),
+    );
 
     if (!title || !isDescriptiveImportedActivityTitle(title)) {
       continue;
@@ -541,7 +544,7 @@ function buildExtractionPrompt(
     "Exclude small acknowledgements, FYIs, automated app noise, personal content, pure scheduling chatter, vague status chatter, and messages that only mention a task without evidence of work.",
     "Extract work only for messages marked author=current_user. Other-user messages are context only.",
     "Every item must reference at least one current_user message id.",
-    'Titles must be concise and describe the specific task or deliverable. Do not use generic titles like "Task completed", "Work update", or "Status update".',
+    'Titles must be short, specific, and sentence case, like "Fix disappearing sponsor info" or "Update ESC26 delegate list". Preserve Jira keys, acronyms, product names, and event names. Do not use generic titles like "Task completed", "Work update", "Status update", or "Noted".',
     "Do not infer that a user created, completed, or blocked a task unless the Chat messages explicitly say so.",
     'Use status only when it adds useful information such as "complete", "blocked", or "in progress"; otherwise use null.',
     "Use confidence 0 to 1. Use 0.75+ only when the messages clearly show reportable work.",
@@ -741,9 +744,8 @@ function activityFromItem(
     return null;
   }
 
-  const title = generatedFieldWithoutBodyLeak(
-    item.title,
-    conversation.messages,
+  const title = formatImportedActivityTitle(
+    generatedFieldWithoutBodyLeak(item.title, conversation.messages),
   );
 
   if (!title) {

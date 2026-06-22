@@ -77,6 +77,20 @@ async function runOAuthSignIn({
   });
 }
 
+async function runJwtCallback(token: Record<string, unknown>, user?: { id: string }) {
+  const callback = authOptions.callbacks?.jwt;
+
+  if (!callback) {
+    throw new Error("Missing jwt callback.");
+  }
+
+  return callback({
+    token,
+    ...(user ? { user } : {}),
+    account: null,
+  } as unknown as Parameters<typeof callback>[0]);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   accountFindUnique.mockResolvedValue(null);
@@ -108,17 +122,17 @@ describe("auth OAuth sign-in", () => {
     });
   });
 
-  it("allows a verified Generis OAuth user when the admin has not created the user", async () => {
-    await expect(runOAuthSignIn({ profileEmail: "employee@generisgp.com" })).resolves.toBe(true);
+  it("blocks a verified Generis OAuth user when the app user does not exist", async () => {
+    await expect(runOAuthSignIn({ profileEmail: "employee@generisgp.com" })).resolves.toBe(false);
   });
 
-  it("allows a Generis Atlassian OAuth user when the admin has not created the user", async () => {
+  it("blocks a Generis Atlassian OAuth user when the app user does not exist", async () => {
     await expect(
       runOAuthSignIn({
         profileEmail: "employee@generisgp.com",
         provider: "atlassian",
       }),
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
   });
 
   it("blocks OAuth sign-in for non-Generis provider emails before account lookup", async () => {
@@ -210,5 +224,26 @@ describe("auth OAuth sign-in", () => {
         mustChangePassword: false
       }
     });
+  });
+});
+
+describe("auth JWT session refresh", () => {
+  it("clears app user claims when the stored user no longer exists", async () => {
+    const token = await runJwtCallback({
+      userId: "deleted-user",
+      role: "EMPLOYEE",
+      roles: ["EMPLOYEE"],
+      status: "ACTIVE",
+      mustChangePassword: false,
+    });
+
+    expect(userFindUnique).toHaveBeenCalledWith({
+      where: { id: "deleted-user" },
+    });
+    expect(token).not.toHaveProperty("userId");
+    expect(token).not.toHaveProperty("role");
+    expect(token).not.toHaveProperty("roles");
+    expect(token).not.toHaveProperty("status");
+    expect(token).not.toHaveProperty("mustChangePassword");
   });
 });

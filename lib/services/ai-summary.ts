@@ -7,6 +7,7 @@ import {
   summaryActivityReferenceMarkdown,
   summaryLinkAt,
 } from "@/lib/summary-format";
+import { workLocationLabel } from "@/lib/work-locations";
 
 type SummaryActivity = {
   id: string;
@@ -240,7 +241,7 @@ function buildSummaryPrompt(
     "Keep wording concise and professional in first person.",
     "",
     `Report date: ${reportDateLabel(report.reportDate)}`,
-    `Work location: ${report.workLocation}`,
+    `Work location: ${workLocationLabel(report.workLocation)}`,
     existingSummary
       ? `Current summary being replaced: ${existingSummary}`
       : null,

@@ -21,14 +21,13 @@ const {
   mockRouterPush,
   mockRouterRefresh,
   mockSearchParams,
-} =
-  vi.hoisted(() => ({
-    mockPathname: { current: "/" },
-    mockRouterPrefetch: vi.fn(),
-    mockRouterPush: vi.fn(),
-    mockRouterRefresh: vi.fn(),
-    mockSearchParams: { current: "" },
-  }));
+} = vi.hoisted(() => ({
+  mockPathname: { current: "/" },
+  mockRouterPrefetch: vi.fn(),
+  mockRouterPush: vi.fn(),
+  mockRouterRefresh: vi.fn(),
+  mockSearchParams: { current: "" },
+}));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => mockPathname.current,
@@ -359,6 +358,7 @@ describe("authenticated app shell loading boundaries", () => {
     ).toEqual([
       "Daily update",
       "My reports",
+      "Locations",
       "Team review",
       "Admin",
       "Bug reports",
@@ -369,6 +369,7 @@ describe("authenticated app shell loading boundaries", () => {
       `/?date=${todayDateString()}`,
     ]);
     expect(uniqueLinkHrefs("My reports")).toEqual(["/reports"]);
+    expect(uniqueLinkHrefs("Locations")).toEqual(["/calendar"]);
     expect(uniqueLinkHrefs("Team review")).toEqual(["/review"]);
     expect(uniqueLinkHrefs("Admin")).toEqual(["/admin/team"]);
     expect(uniqueLinkHrefs("Bug reports")).toEqual(["/bugs?from=%2F"]);
@@ -473,9 +474,7 @@ describe("authenticated app shell loading boundaries", () => {
       expect(uniqueLinkHrefs("Team review")).toEqual([
         "/review?date=2026-05-19",
       ]);
-      expect(uniqueLinkHrefs("Generis")).toEqual([
-        "/review?date=2026-05-19",
-      ]);
+      expect(uniqueLinkHrefs("Generis")).toEqual(["/review?date=2026-05-19"]);
     });
   });
 
@@ -559,7 +558,7 @@ describe("authenticated app shell loading boundaries", () => {
     );
 
     expect(shellSource).toContain('href: "/settings"');
-    expect(shellSource).toContain('href: defaultAdminHref');
+    expect(shellSource).toContain("href: defaultAdminHref");
     expect(shellSource).toContain('prefetch: "intent"');
     expect(shellSource).toContain('item.prefetch === "eager"');
   });

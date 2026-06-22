@@ -5,9 +5,13 @@ import { LoginForm } from "@/components/auth/login-form";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { auth } from "@/lib/auth";
 import { getOAuthProviderConfig } from "@/lib/oauth-config";
+import { serialize } from "@/lib/serializers";
+import { listDepartments } from "@/lib/services/departments";
 import generisLogo from "@/images/Generis_logo.png";
 
-function loginNotice(searchParams?: Record<string, string | string[] | undefined>) {
+function loginNotice(
+  searchParams?: Record<string, string | string[] | undefined>,
+) {
   if (searchParams?.verified === "1") {
     return "Email verified. You can sign in now.";
   }
@@ -18,6 +22,10 @@ function loginNotice(searchParams?: Record<string, string | string[] | undefined
 
   if (searchParams?.signupError) {
     return "That verification link is invalid or expired.";
+  }
+
+  if (searchParams?.error === "AccessDenied") {
+    return "Sign up with email and choose a department before using OAuth sign-in.";
   }
 
   return null;
@@ -42,6 +50,8 @@ export default async function LoginPage({
     redirect("/");
   }
 
+  const departments = await listDepartments();
+
   return (
     <main className="relative flex min-h-[100dvh] items-center justify-center overflow-x-hidden bg-[#f6f8fb] px-3 py-4 dark:bg-background sm:min-h-screen sm:px-4 sm:py-10">
       <div className="flex w-full max-w-md flex-col gap-4 sm:contents">
@@ -61,6 +71,7 @@ export default async function LoginPage({
         <LoginForm
           oauthConfig={getOAuthProviderConfig()}
           notice={loginNotice(searchParams)}
+          departments={serialize(departments)}
         />
       </div>
     </main>

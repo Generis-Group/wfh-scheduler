@@ -63,6 +63,12 @@ import {
 } from "@/lib/dates";
 import { defaultPaginationPageSize } from "@/lib/pagination";
 import type { SummaryActivityReferenceMap } from "@/lib/summary-format";
+import {
+  wfhDayFraction,
+  workLocationLabel as sharedWorkLocationLabel,
+  workLocationValues,
+  type WorkLocationValue,
+} from "@/lib/work-locations";
 import { cn, initials, titleCase } from "@/lib/utils";
 
 type DashboardUser = {
@@ -200,16 +206,11 @@ type Metrics = {
   sourceMix: Array<{ source: string; count: number }>;
 };
 
-type WorkLocationKey =
-  | "OFFICE"
-  | "WFH"
-  | "HYBRID"
-  | "PTO"
-  | "OUT_OF_OFFICE"
-  | "UNKNOWN";
+type WorkLocationKey = WorkLocationValue;
 
 type WorkLocationBreakdownData = {
   totalSubmitted: number;
+  wfhDays: number;
   missing: number;
   draft: number;
   counts: Record<WorkLocationKey, number>;
@@ -350,16 +351,7 @@ function editedAfterDate(report: DashboardReport | null, date: string) {
   );
 }
 
-const workLocationLabels: Record<WorkLocationKey, string> = {
-  OFFICE: "Office",
-  WFH: "WFH",
-  HYBRID: "Hybrid",
-  PTO: "PTO",
-  OUT_OF_OFFICE: "Out of office",
-  UNKNOWN: "Unspecified",
-};
-
-const workLocationKeys = Object.keys(workLocationLabels) as WorkLocationKey[];
+const workLocationKeys = [...workLocationValues];
 const wfhWarningPercent = 50;
 const wfhCriticalPercent = 70;
 
@@ -370,7 +362,7 @@ function normalizedWorkLocation(value?: string | null): WorkLocationKey {
 }
 
 function workLocationLabel(value?: string | null) {
-  return workLocationLabels[normalizedWorkLocation(value)];
+  return sharedWorkLocationLabel(normalizedWorkLocation(value));
 }
 
 function percentage(count: number, total: number) {
@@ -386,6 +378,7 @@ function workLocationBreakdown(rows: Row[]): WorkLocationBreakdownData {
     workLocationKeys.map((location) => [location, 0]),
   ) as Record<WorkLocationKey, number>;
   let totalSubmitted = 0;
+  let wfhDays = 0;
   let missing = 0;
   let draft = 0;
 
@@ -401,11 +394,14 @@ function workLocationBreakdown(rows: Row[]): WorkLocationBreakdownData {
     }
 
     totalSubmitted += 1;
-    counts[normalizedWorkLocation(row.report.workLocation)] += 1;
+    const location = normalizedWorkLocation(row.report.workLocation);
+    counts[location] += 1;
+    wfhDays += wfhDayFraction(location);
   }
 
   return {
     totalSubmitted,
+    wfhDays,
     missing,
     draft,
     counts,
@@ -420,6 +416,7 @@ function weeklyWorkLocationBreakdown(
     workLocationKeys.map((location) => [location, 0]),
   ) as Record<WorkLocationKey, number>;
   let totalSubmitted = 0;
+  let wfhDays = 0;
   let draft = 0;
 
   for (const report of reports) {
@@ -429,11 +426,14 @@ function weeklyWorkLocationBreakdown(
     }
 
     totalSubmitted += 1;
-    counts[normalizedWorkLocation(report.workLocation)] += 1;
+    const location = normalizedWorkLocation(report.workLocation);
+    counts[location] += 1;
+    wfhDays += wfhDayFraction(location);
   }
 
   return {
     totalSubmitted,
+    wfhDays,
     draft,
     missing: Math.max(0, expectedDays - totalSubmitted - draft),
     counts,
@@ -441,7 +441,7 @@ function weeklyWorkLocationBreakdown(
 }
 
 function wfhWarning(breakdown: WorkLocationBreakdownData) {
-  const percent = percentage(breakdown.counts.WFH, breakdown.totalSubmitted);
+  const percent = percentage(breakdown.wfhDays, breakdown.totalSubmitted);
 
   if (breakdown.totalSubmitted === 0 || percent < wfhWarningPercent) {
     return null;
@@ -2512,7 +2512,7 @@ function WorkLocationBreakdown({
     breakdown.missing ? `${breakdown.missing} missing` : null,
   ].filter(Boolean);
   const secondaryLocations = (
-    ["PTO", "OUT_OF_OFFICE", "UNKNOWN"] as WorkLocationKey[]
+    ["HYBRID", "PTO", "OUT_OF_OFFICE", "UNKNOWN"] as WorkLocationKey[]
   ).filter((location) => breakdown.counts[location] > 0);
   const primaryLocations: Array<{
     location: WorkLocationKey;
@@ -2520,7 +2520,8 @@ function WorkLocationBreakdown({
   }> = [
     { location: "OFFICE", tone: "blue" },
     { location: "WFH", tone: wfhTone },
-    { location: "HYBRID", tone: "purple" },
+    { location: "OFFICE_AM_WFH_PM", tone: "purple" },
+    { location: "WFH_AM_OFFICE_PM", tone: "purple" },
   ];
 
   return (
@@ -2556,7 +2557,7 @@ function WorkLocationBreakdown({
         {primaryLocations.map(({ location, tone }) => (
           <LocationCountChip
             key={location}
-            label={workLocationLabels[location]}
+            label={workLocationLabel(location)}
             count={breakdown.counts[location]}
             total={breakdown.totalSubmitted}
             tone={tone}
@@ -2569,7 +2570,7 @@ function WorkLocationBreakdown({
                 key={location}
                 className="inline-flex h-7 items-center rounded-full bg-[#f8fafc] px-2.5 font-semibold ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
               >
-                {workLocationLabels[location]}: {breakdown.counts[location]}
+                {workLocationLabel(location)}: {breakdown.counts[location]}
               </span>
             ))}
             {excludedLabels.length > 0 ? (
@@ -2609,7 +2610,7 @@ function WeeklyWorkLocationBreakdown({
       : null,
   ].filter(Boolean);
   const secondaryLocations = (
-    ["PTO", "OUT_OF_OFFICE", "UNKNOWN"] as WorkLocationKey[]
+    ["HYBRID", "PTO", "OUT_OF_OFFICE", "UNKNOWN"] as WorkLocationKey[]
   ).filter((location) => breakdown.counts[location] > 0);
   const primaryLocations: Array<{
     location: WorkLocationKey;
@@ -2617,7 +2618,8 @@ function WeeklyWorkLocationBreakdown({
   }> = [
     { location: "OFFICE", tone: "blue" },
     { location: "WFH", tone: wfhTone },
-    { location: "HYBRID", tone: "purple" },
+    { location: "OFFICE_AM_WFH_PM", tone: "purple" },
+    { location: "WFH_AM_OFFICE_PM", tone: "purple" },
   ];
 
   return (
@@ -2653,7 +2655,7 @@ function WeeklyWorkLocationBreakdown({
         {primaryLocations.map(({ location, tone }) => (
           <LocationCountChip
             key={location}
-            label={workLocationLabels[location]}
+            label={workLocationLabel(location)}
             count={breakdown.counts[location]}
             total={breakdown.totalSubmitted}
             tone={tone}
@@ -2664,7 +2666,7 @@ function WeeklyWorkLocationBreakdown({
             key={location}
             className="inline-flex h-7 items-center rounded-full bg-white px-2.5 font-semibold ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
           >
-            {workLocationLabels[location]}: {breakdown.counts[location]}
+            {workLocationLabel(location)}: {breakdown.counts[location]}
           </span>
         ))}
         {excludedLabels.length > 0 ? (
