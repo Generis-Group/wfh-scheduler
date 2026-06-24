@@ -9,6 +9,7 @@ import type {
 import {
   CalendarDays,
   CheckCircle2,
+  Clock3,
   FileText,
   Mail,
   MessageSquare,
@@ -86,6 +87,10 @@ function activitySourceIconTone(source?: string | null) {
     return "bg-white text-[#0f9d58] ring-1 ring-[#b7e4cf] dark:bg-[#0b1523] dark:text-[#86efac] dark:ring-emerald-300/25";
   }
 
+  if (source === "HUBSPOT") {
+    return "bg-white text-[#ff5c35] ring-1 ring-[#ffb199] dark:bg-[#0b1523] dark:text-[#fb923c] dark:ring-orange-300/25";
+  }
+
   if (source === "MANUAL") {
     return "bg-white text-[#2563eb] ring-1 ring-[#2563eb] dark:bg-[#0b1523]";
   }
@@ -112,6 +117,10 @@ function activitySourceIcon(source?: string | null) {
 
   if (source === "GOOGLE_CHAT") {
     return <MessageSquare aria-hidden="true" />;
+  }
+
+  if (source === "HUBSPOT") {
+    return <Clock3 aria-hidden="true" />;
   }
 
   if (source === "MANUAL") {
@@ -187,6 +196,10 @@ export function reportActivitySourceLabel(source?: string | null) {
 
   if (source === "GOOGLE_CHAT") {
     return "Google Chat";
+  }
+
+  if (source === "HUBSPOT") {
+    return "HubSpot";
   }
 
   if (source === "JIRA") {

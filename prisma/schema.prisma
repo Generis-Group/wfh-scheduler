@@ -46,6 +46,7 @@ enum ActivitySource {
   GOOGLE_TASKS
   GMAIL
   GOOGLE_CHAT
+  HUBSPOT
   MANUAL
 }
 
@@ -55,6 +56,7 @@ enum SyncProvider {
   GOOGLE_TASKS
   GMAIL
   GOOGLE_CHAT
+  HUBSPOT
 }
 
 enum SyncStatus {

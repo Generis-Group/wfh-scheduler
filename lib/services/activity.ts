@@ -1,5 +1,13 @@
 import type { ActivitySource, Prisma } from "@prisma/client";
+import { createHash } from "crypto";
 
+import {
+  metadataWithRelatedSourceLinks,
+  relatedActivityIdFromMetadata,
+  relatedSourceLinksFromMetadata,
+  sourceLinkForActivity,
+  uniqueActivitySourceLinks,
+} from "@/lib/activity-source-links";
 import {
   importedActivityMetadata,
   importedActivityTitle,
@@ -55,6 +63,11 @@ type ExistingImportedActivity = {
   selected: boolean;
   metadata: Prisma.JsonValue | null;
   staleAt: Date | null;
+};
+type RelatedActivityTarget = {
+  id: string;
+  dailyReportId: string | null;
+  metadata: Prisma.JsonValue | null;
 };
 type ImportedDraftReport = {
   id: string;
@@ -135,6 +148,164 @@ function importedActivityChanged(
   );
 }
 
+function normalizedTaskKeyText(value?: string | null) {
+  return value
+    ?.toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function importTaskKey(item: NormalizedActivity) {
+  if (item.source === "HUBSPOT") {
+    const titleKey = normalizedTaskKeyText(item.title);
+
+    if (titleKey) {
+      return `${item.source}:title:${item.sourceContainerId ?? ""}:${titleKey}`;
+    }
+  }
+
+  return `${item.source}:source:${item.sourceId}`;
+}
+
+function mergedSourceId(source: ActivitySource, key: string) {
+  const hash = createHash("sha256").update(key).digest("hex").slice(0, 24);
+
+  return `merged:${source.toLowerCase()}:${hash}`;
+}
+
+function earliestDate(
+  first: Date | null | undefined,
+  second: Date | null | undefined,
+) {
+  if (!first) {
+    return second ?? null;
+  }
+
+  if (!second) {
+    return first;
+  }
+
+  return first.getTime() <= second.getTime() ? first : second;
+}
+
+function latestDate(
+  first: Date | null | undefined,
+  second: Date | null | undefined,
+) {
+  if (!first) {
+    return second ?? null;
+  }
+
+  if (!second) {
+    return first;
+  }
+
+  return first.getTime() >= second.getTime() ? first : second;
+}
+
+function summedDuration(
+  first: number | null | undefined,
+  second: number | null | undefined,
+) {
+  if (first == null && second == null) {
+    return null;
+  }
+
+  return (first ?? 0) + (second ?? 0);
+}
+
+function mergedMetadata(
+  existing: Record<string, unknown> | undefined,
+  incoming: Record<string, unknown> | undefined,
+) {
+  const metadata = { ...(existing ?? {}) };
+
+  for (const [key, value] of Object.entries(incoming ?? {})) {
+    if (metadata[key] === undefined) {
+      metadata[key] = value;
+    }
+  }
+
+  return metadata;
+}
+
+function mergeDuplicateImportActivities(activities: NormalizedActivity[]) {
+  const grouped = new Map<
+    string,
+    {
+      activity: NormalizedActivity;
+      links: ReturnType<typeof uniqueActivitySourceLinks>;
+      sourceIds: string[];
+      count: number;
+    }
+  >();
+
+  for (const item of activities) {
+    const key = importTaskKey(item);
+    const group = grouped.get(key);
+    const sourceLink = sourceLinkForActivity(item);
+
+    if (!group) {
+      grouped.set(key, {
+        activity: { ...item },
+        links: uniqueActivitySourceLinks([sourceLink]),
+        sourceIds: [item.sourceId],
+        count: 1,
+      });
+      continue;
+    }
+
+    group.count += 1;
+    group.sourceIds.push(item.sourceId);
+    group.links = uniqueActivitySourceLinks([...group.links, sourceLink]);
+    group.activity = {
+      ...group.activity,
+      description: group.activity.description ?? item.description,
+      status: group.activity.status ?? item.status,
+      sourceUrl: group.activity.sourceUrl ?? item.sourceUrl,
+      startedAt: earliestDate(group.activity.startedAt, item.startedAt),
+      endedAt: latestDate(group.activity.endedAt, item.endedAt),
+      durationMinutes: summedDuration(
+        group.activity.durationMinutes,
+        item.durationMinutes,
+      ),
+      selected:
+        group.activity.selected === false && item.selected === false
+          ? false
+          : true,
+      metadata: mergedMetadata(group.activity.metadata, item.metadata),
+    };
+  }
+
+  return [...grouped.entries()].map(([key, group]) => {
+    if (group.count === 1) {
+      return group.activity;
+    }
+
+    const metadata = {
+      ...(group.activity.metadata ?? {}),
+      mergedSourceIds: [...new Set(group.sourceIds)],
+    };
+
+    return {
+      ...group.activity,
+      sourceId: mergedSourceId(group.activity.source, key),
+      metadata: metadataWithRelatedSourceLinks(
+        metadata as Prisma.JsonValue,
+        group.links,
+      ) as Record<string, unknown>,
+    };
+  });
+}
+
+function relatedActivityLinks(item: NormalizedActivity) {
+  return uniqueActivitySourceLinks([
+    sourceLinkForActivity(item),
+    ...relatedSourceLinksFromMetadata(item.metadata),
+  ]);
+}
+
 export async function upsertImportedActivities(
   source: ImportedActivitySource,
   userId: string,
@@ -145,7 +316,8 @@ export async function upsertImportedActivities(
   let importedCount = 0;
   let skippedCount = 0;
   const importedSourceIds = new Set<string>();
-  const importableActivities: NormalizedActivity[] = [];
+  const relatedActivities: NormalizedActivity[] = [];
+  const rawImportableActivities: NormalizedActivity[] = [];
 
   for (const item of activities) {
     if (!item.sourceId || item.source !== source) {
@@ -153,8 +325,20 @@ export async function upsertImportedActivities(
       continue;
     }
 
+    if (relatedActivityIdFromMetadata(item.metadata)) {
+      relatedActivities.push(item);
+      continue;
+    }
+
+    rawImportableActivities.push(item);
+  }
+
+  const importableActivities = mergeDuplicateImportActivities(
+    rawImportableActivities,
+  );
+
+  for (const item of importableActivities) {
     importedSourceIds.add(item.sourceId);
-    importableActivities.push(item);
   }
 
   const existingImports: ExistingImportedActivity[] = importedSourceIds.size
@@ -215,7 +399,9 @@ export async function upsertImportedActivities(
     )
     .map((activity) => activity.id);
   const shouldPersistDraft =
-    importableActivities.length > 0 || staleIds.length > 0;
+    importableActivities.length > 0 ||
+    relatedActivities.length > 0 ||
+    staleIds.length > 0;
   const report: ImportedDraftReport | null = shouldPersistDraft
     ? await prisma.dailyReport.upsert({
         where: {
@@ -240,6 +426,58 @@ export async function upsertImportedActivities(
   }> = [];
 
   if (report) {
+    const relatedActivityIds = [
+      ...new Set(
+        relatedActivities
+          .map((activity) => relatedActivityIdFromMetadata(activity.metadata))
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const relatedTargets: RelatedActivityTarget[] = relatedActivityIds.length
+      ? await prisma.activityItem.findMany({
+          where: {
+            id: { in: relatedActivityIds },
+            userId,
+            reportDate,
+            staleAt: null,
+          },
+          select: {
+            id: true,
+            dailyReportId: true,
+            metadata: true,
+          },
+        })
+      : [];
+    const relatedTargetById = new Map(
+      relatedTargets.map((activity) => [activity.id, activity]),
+    );
+
+    for (const item of relatedActivities) {
+      const relatedActivityId = relatedActivityIdFromMetadata(item.metadata);
+      const target = relatedActivityId
+        ? relatedTargetById.get(relatedActivityId)
+        : null;
+      const links = relatedActivityLinks(item);
+
+      if (!target || links.length === 0) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const metadata = metadataWithRelatedSourceLinks(target.metadata, links);
+
+      await prisma.activityItem.update({
+        where: { id: target.id },
+        data: {
+          dailyReportId: target.dailyReportId ?? report.id,
+          metadata,
+        },
+      });
+      target.dailyReportId = target.dailyReportId ?? report.id;
+      target.metadata = metadata as Prisma.JsonValue;
+      importedCount += 1;
+    }
+
     for (const item of importableActivities) {
       const existingActivity = existingBySourceId.get(item.sourceId);
       const data = importedActivityData(item, existingActivity);

@@ -313,4 +313,135 @@ describe("activity service", () => {
       }),
     );
   });
+
+  it("attaches related imports as source links on the existing activity", async () => {
+    const targetActivity = {
+      id: "jira-1",
+      dailyReportId: "report-1",
+      metadata: null,
+    };
+
+    mockActivityUpdateMany.mockResolvedValue({ count: 0 });
+    mockActivityFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([targetActivity])
+      .mockResolvedValueOnce([targetActivity]);
+
+    const { upsertImportedActivities } =
+      await import("@/lib/services/activity");
+    const result = await upsertImportedActivities(
+      "GMAIL",
+      "user-1",
+      "2026-05-14",
+      [
+        {
+          source: "GMAIL",
+          sourceId: "gmail-thread-1",
+          sourceUrl: "https://mail.google.com/mail/u/0/#inbox/thread-1",
+          title: "GEN-1 discussion",
+          metadata: {
+            relatedActivityId: "jira-1",
+          },
+        },
+      ],
+    );
+
+    expect(result).toEqual({
+      importedCount: 1,
+      skippedCount: 0,
+      staleCount: 0,
+      activities: [targetActivity],
+      report: expect.objectContaining({ id: "report-1" }),
+    });
+    expect(mockActivityCreateMany).not.toHaveBeenCalled();
+    expect(mockActivityUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "jira-1" },
+        data: expect.objectContaining({
+          dailyReportId: "report-1",
+          metadata: expect.objectContaining({
+            relatedSourceLinks: [
+              {
+                href: "https://mail.google.com/mail/u/0/#inbox/thread-1",
+                label: "Gmail thread",
+                source: "GMAIL",
+              },
+            ],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("merges duplicate HubSpot logged-hour imports for the same task", async () => {
+    const importedActivity = {
+      id: "activity-merged",
+      source: "HUBSPOT",
+      sourceId: "merged:hubspot",
+    };
+
+    mockActivityUpdateMany.mockResolvedValue({ count: 0 });
+    mockActivityFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([importedActivity]);
+
+    const { upsertImportedActivities } =
+      await import("@/lib/services/activity");
+    const result = await upsertImportedActivities(
+      "HUBSPOT",
+      "user-1",
+      "2026-05-14",
+      [
+        {
+          source: "HUBSPOT",
+          sourceId: "logged-hours:time_entries:1",
+          sourceContainerId: "time_entries",
+          sourceUrl: "https://app.hubspot.com/tasks/1",
+          title: "Client report clean-up",
+          durationMinutes: 30,
+        },
+        {
+          source: "HUBSPOT",
+          sourceId: "logged-hours:time_entries:2",
+          sourceContainerId: "time_entries",
+          sourceUrl: "https://app.hubspot.com/tasks/2",
+          title: "Client report clean-up",
+          durationMinutes: 45,
+        },
+      ],
+    );
+
+    expect(result.importedCount).toBe(1);
+    expect(mockActivityCreateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [
+          expect.objectContaining({
+            source: "HUBSPOT",
+            sourceId: expect.stringMatching(/^merged:hubspot:/),
+            title: "Client report clean-up",
+            durationMinutes: 75,
+            metadata: expect.objectContaining({
+              mergedSourceIds: [
+                "logged-hours:time_entries:1",
+                "logged-hours:time_entries:2",
+              ],
+              relatedSourceLinks: [
+                {
+                  href: "https://app.hubspot.com/tasks/1",
+                  label: "HubSpot",
+                  source: "HUBSPOT",
+                },
+                {
+                  href: "https://app.hubspot.com/tasks/2",
+                  label: "HubSpot",
+                  source: "HUBSPOT",
+                },
+              ],
+            }),
+          }),
+        ],
+      }),
+    );
+  });
 });

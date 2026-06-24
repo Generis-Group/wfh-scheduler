@@ -12,9 +12,14 @@ import {
   zonedDayRange,
 } from "@/lib/dates";
 import { getGoogleServices } from "@/lib/integrations/google";
+import {
+  getHubSpotLoggedHoursConfig,
+  searchHubSpotLoggedHours,
+} from "@/lib/integrations/hubspot";
 import { getJiraConnection } from "@/lib/integrations/jira";
 import { HttpError } from "@/lib/http";
 import {
+  normalizeHubSpotLoggedHours,
   normalizeCalendarEvent,
   normalizeGoogleTask,
   normalizeJiraIssueDay,
@@ -672,6 +677,27 @@ function googleChatImportError(error: unknown) {
     return new HttpError(
       status >= 500 ? 502 : 409,
       `Google Chat import failed: ${detail}`,
+    );
+  }
+
+  return error;
+}
+
+function hubSpotImportError(error: unknown) {
+  if (error instanceof HttpError) {
+    return error;
+  }
+
+  const message = error instanceof Error ? error.message : "";
+
+  if (
+    /invalid input value for enum "(SyncProvider|ActivitySource)": "HUBSPOT"/i.test(
+      message,
+    )
+  ) {
+    return new HttpError(
+      409,
+      "HubSpot import needs the latest database migration. Apply migration 20260624130000_add_hubspot_activity_source, then try again.",
     );
   }
 
@@ -1456,6 +1482,65 @@ export async function syncGoogleTasks(
   });
 }
 
+export async function syncHubSpot(
+  userId: string,
+  dateString: string,
+  options?: SyncOptions,
+) {
+  try {
+    return await runSync("HUBSPOT", userId, dateString, options, async () => {
+      const { start, end } = zonedDayRange(dateString, DEFAULT_TIMEZONE);
+      const exclusiveEnd = new Date(end.getTime() + 1);
+
+      await emitSyncProgress(options, {
+        stage: "connecting",
+        message: "Connecting to HubSpot...",
+      });
+      const config = getHubSpotLoggedHoursConfig();
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      });
+      const userEmail = user?.email?.trim();
+
+      if (!userEmail) {
+        throw new HttpError(
+          409,
+          "Your account needs an email address before HubSpot hours can be matched.",
+        );
+      }
+
+      await emitSyncProgress(options, {
+        stage: "finding",
+        message: "Finding HubSpot logged hours...",
+      });
+      const records = await searchHubSpotLoggedHours(
+        config,
+        userEmail,
+        start,
+        exclusiveEnd,
+      );
+      const activities = records
+        .map((record) => normalizeHubSpotLoggedHours(record, config))
+        .filter((item): item is NormalizedActivity => Boolean(item));
+
+      await emitSyncProgress(options, {
+        stage: "saving",
+        message: `Saving ${activities.length} HubSpot hour item${activities.length === 1 ? "" : "s"}...`,
+      });
+
+      return upsertImportedActivities(
+        "HUBSPOT",
+        userId,
+        dateString,
+        activities,
+      );
+    });
+  } catch (error) {
+    throw hubSpotImportError(error);
+  }
+}
+
 export async function syncGmail(
   userId: string,
   dateString: string,
@@ -1525,6 +1610,7 @@ export async function syncGmail(
             OR: [{ staleAt: null }, { source: "GMAIL" }],
           },
           select: {
+            id: true,
             source: true,
             sourceId: true,
             sourceContainerId: true,
@@ -1653,6 +1739,7 @@ export async function syncGoogleChat(
               OR: [{ staleAt: null }, { source: "GOOGLE_CHAT" }],
             },
             select: {
+              id: true,
               source: true,
               sourceId: true,
               sourceContainerId: true,

@@ -63,6 +63,7 @@ import {
   todayDateString,
 } from "@/lib/dates";
 import { defaultPaginationPageSize } from "@/lib/pagination";
+import type { ActivitySourceLink } from "@/lib/activity-source-links";
 import type { SummaryActivityReferenceMap } from "@/lib/summary-format";
 import {
   wfhDayFraction,
@@ -94,6 +95,7 @@ type DashboardActivity = {
   durationMinutes?: number | null;
   employeeNote?: string | null;
   sourceUrl?: string | null;
+  sourceLinks?: ActivitySourceLink[] | null;
 };
 
 type DashboardComment = {
@@ -3178,6 +3180,7 @@ function WeeklyReportReviewPage({
         activity.id,
         {
           href: activity.sourceUrl,
+          links: activity.sourceLinks,
           source: activity.source,
           title: activity.title,
         },
@@ -3300,6 +3303,7 @@ function ReportReviewPage({
           activity.id,
           {
             href: activity.sourceUrl,
+            links: activity.sourceLinks,
             source: activity.source,
             title: activity.title,
           },

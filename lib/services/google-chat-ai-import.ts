@@ -2,6 +2,10 @@ import { createHash } from "crypto";
 
 import type { chat_v1 } from "googleapis";
 
+import {
+  metadataWithRelatedActivity,
+  sourceLinkForActivity,
+} from "@/lib/activity-source-links";
 import { HttpError } from "@/lib/http";
 import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
 import type { NormalizedActivity } from "@/lib/normalizers";
@@ -48,6 +52,7 @@ type GoogleChatExtractionItem = {
 };
 
 type ExistingActivityForDedupe = {
+  id?: string;
   source: string;
   sourceId: string | null;
   sourceContainerId?: string | null;
@@ -1064,29 +1069,50 @@ function isActiveExistingActivity(activity: ExistingActivityForDedupe) {
   return activity.staleAt == null;
 }
 
+function relatedActivityMetadata(
+  activity: NormalizedActivity,
+  relatedActivity: ExistingActivityForDedupe,
+) {
+  return relatedActivity.id
+    ? metadataWithRelatedActivity(activity.metadata, relatedActivity.id, [
+        sourceLinkForActivity(activity),
+      ])
+    : null;
+}
+
 export function dedupeGoogleChatActivities(
   activities: NormalizedActivity[],
   existingActivities: ExistingActivityForDedupe[],
   conversations: GoogleChatConversationEvidence[] = [],
 ) {
-  const existingJiraKeys = new Set(
-    existingActivities
-      .filter(
-        (activity) =>
-          activity.source === "JIRA" && isActiveExistingActivity(activity),
-      )
-      .flatMap((activity) => jiraKeys(activityText(activity))),
-  );
-  const existingGoogleTaskIds = new Set(
-    existingActivities
-      .filter(
-        (activity) =>
-          activity.source === "GOOGLE_TASKS" &&
-          isActiveExistingActivity(activity),
-      )
-      .flatMap((activity) => [activity.sourceId, activity.sourceUrl])
-      .filter((value): value is string => Boolean(value)),
-  );
+  const existingJiraByKey = new Map<string, ExistingActivityForDedupe>();
+  const existingGoogleTaskByIdOrUrl = new Map<
+    string,
+    ExistingActivityForDedupe
+  >();
+
+  for (const activity of existingActivities) {
+    if (!isActiveExistingActivity(activity)) {
+      continue;
+    }
+
+    if (activity.source === "JIRA") {
+      for (const key of jiraKeys(activityText(activity))) {
+        if (!existingJiraByKey.has(key)) {
+          existingJiraByKey.set(key, activity);
+        }
+      }
+    }
+
+    if (activity.source === "GOOGLE_TASKS") {
+      for (const value of [activity.sourceId, activity.sourceUrl]) {
+        if (value && !existingGoogleTaskByIdOrUrl.has(value)) {
+          existingGoogleTaskByIdOrUrl.set(value, activity);
+        }
+      }
+    }
+  }
+
   const seenConversationTitles = new Set<string>();
   const conversationsById = conversationEvidenceById(conversations);
   const reconciledActivities = reconcileGoogleChatSourceIds(
@@ -1094,24 +1120,34 @@ export function dedupeGoogleChatActivities(
     existingActivities,
   );
 
-  return reconciledActivities.filter((activity) => {
+  return reconciledActivities.flatMap((activity) => {
     const text = activityText(activity);
     const evidenceText = sourceTextForActivity(activity, conversationsById);
+    const matchingJiraActivity = jiraKeys(`${text} ${evidenceText}`)
+      .map((key) => existingJiraByKey.get(key))
+      .find(
+        (activity): activity is ExistingActivityForDedupe => Boolean(activity),
+      );
 
-    if (
-      jiraKeys(`${text} ${evidenceText}`).some((key) =>
-        existingJiraKeys.has(key),
-      )
-    ) {
-      return false;
+    if (matchingJiraActivity) {
+      const metadata = relatedActivityMetadata(activity, matchingJiraActivity);
+
+      return metadata ? [{ ...activity, metadata }] : [];
     }
 
-    if (
-      [...existingGoogleTaskIds].some(
-        (idOrUrl) => text.includes(idOrUrl) || evidenceText.includes(idOrUrl),
-      )
-    ) {
-      return false;
+    const matchingGoogleTaskActivity = [
+      ...existingGoogleTaskByIdOrUrl.entries(),
+    ].find(
+      ([idOrUrl]) => text.includes(idOrUrl) || evidenceText.includes(idOrUrl),
+    )?.[1];
+
+    if (matchingGoogleTaskActivity) {
+      const metadata = relatedActivityMetadata(
+        activity,
+        matchingGoogleTaskActivity,
+      );
+
+      return metadata ? [{ ...activity, metadata }] : [];
     }
 
     const conversationId =
@@ -1121,11 +1157,11 @@ export function dedupeGoogleChatActivities(
     const conversationTitleKey = `${conversationId}:${normalizedComparableTitle(activity.title)}`;
 
     if (seenConversationTitles.has(conversationTitleKey)) {
-      return false;
+      return [];
     }
 
     seenConversationTitles.add(conversationTitleKey);
-    return true;
+    return [activity];
   });
 }
 

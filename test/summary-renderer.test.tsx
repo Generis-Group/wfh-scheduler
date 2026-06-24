@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SummaryRenderer } from "@/components/reports/summary-renderer";
@@ -63,6 +63,49 @@ describe("SummaryRenderer", () => {
       "https://generisgp.atlassian.net/browse/IT-3027",
     );
     expect(link.getAttribute("target")).toBe("_blank");
+  });
+
+  it("renders a source picker when an activity reference has multiple links", () => {
+    const href = summaryActivityReferenceHref("activity-1", "JIRA");
+
+    render(
+      <SummaryRenderer
+        value={`[Imported task](${href})`}
+        activityReferences={{
+          "activity-1": {
+            href: "https://generisgp.atlassian.net/browse/IT-3027",
+            links: [
+              {
+                href: "https://generisgp.atlassian.net/browse/IT-3027",
+                label: "Jira",
+                source: "JIRA",
+              },
+              {
+                href: "https://mail.google.com/mail/u/0/#inbox/thread-1",
+                label: "Gmail thread",
+                source: "GMAIL",
+              },
+            ],
+            source: "JIRA",
+            title: "Imported task",
+          },
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("link", { name: "Imported task" })).toBeNull();
+
+    const summary = document.querySelector("summary");
+
+    expect(summary).not.toBeNull();
+    fireEvent.click(summary!);
+
+    expect(screen.getByRole("link", { name: "Jira" }).getAttribute("href")).toBe(
+      "https://generisgp.atlassian.net/browse/IT-3027",
+    );
+    expect(
+      screen.getByRole("link", { name: "Gmail thread" }).getAttribute("href"),
+    ).toBe("https://mail.google.com/mail/u/0/#inbox/thread-1");
   });
 
   it("uses current activity titles for internal references", () => {

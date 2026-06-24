@@ -13,7 +13,9 @@ const {
   mockDailyReportUpdate,
   mockDailyReportUpsert,
   mockGetGoogleServices,
+  mockGetHubSpotLoggedHoursConfig,
   mockGetJiraConnection,
+  mockSearchHubSpotLoggedHours,
   mockExtractGmailActivitiesWithAI,
   mockDedupeGmailActivities,
   mockExtractGoogleChatActivitiesWithAI,
@@ -33,7 +35,9 @@ const {
   mockDailyReportUpdate: vi.fn(),
   mockDailyReportUpsert: vi.fn(),
   mockGetGoogleServices: vi.fn(),
+  mockGetHubSpotLoggedHoursConfig: vi.fn(),
   mockGetJiraConnection: vi.fn(),
+  mockSearchHubSpotLoggedHours: vi.fn(),
   mockExtractGmailActivitiesWithAI: vi.fn(),
   mockDedupeGmailActivities: vi.fn((activities) => activities),
   mockExtractGoogleChatActivitiesWithAI: vi.fn(),
@@ -48,6 +52,11 @@ const {
 
 vi.mock("@/lib/integrations/google", () => ({
   getGoogleServices: mockGetGoogleServices,
+}));
+
+vi.mock("@/lib/integrations/hubspot", () => ({
+  getHubSpotLoggedHoursConfig: mockGetHubSpotLoggedHoursConfig,
+  searchHubSpotLoggedHours: mockSearchHubSpotLoggedHours,
 }));
 
 vi.mock("@/lib/integrations/jira", () => ({
@@ -135,6 +144,21 @@ describe("sync service pagination", () => {
     mockDedupeGoogleChatActivities.mockImplementation(
       (activities) => activities,
     );
+    mockGetHubSpotLoggedHoursConfig.mockReturnValue({
+      apiBaseUrl: "https://api.hubapi.com",
+      crmApiVersion: "2026-03",
+      token: "hubspot-token",
+      objectType: "time_entries",
+      dateProperty: "work_date",
+      durationProperty: "hours",
+      durationUnit: "hours",
+      userEmailProperty: "user_email",
+      titleProperties: ["task_name"],
+      descriptionProperties: ["notes"],
+      pageLimit: 100,
+      dateFilterFormat: "epochMillis",
+    });
+    mockSearchHubSpotLoggedHours.mockResolvedValue([]);
     mockUpsertImportedActivities.mockResolvedValue({
       importedCount: 1,
       skippedCount: 0,
@@ -1031,6 +1055,48 @@ describe("sync service pagination", () => {
     await syncJira("user-1", "2026-05-14");
 
     expect(mockUpsertImportedActivities.mock.calls.at(-1)?.[3]).toEqual([]);
+  });
+
+  it("imports HubSpot logged hours for the current user's email", async () => {
+    mockSearchHubSpotLoggedHours.mockResolvedValue([
+      {
+        id: "hubspot-hours-1",
+        properties: {
+          user_email: "employee@generisgp.com",
+          work_date: "2026-05-14T14:00:00.000Z",
+          hours: "1.5",
+          task_name: "Campaign landing page QA",
+          notes: "Checked launch blockers",
+        },
+      },
+    ]);
+
+    const { syncHubSpot } = await import("@/lib/services/sync");
+    await syncHubSpot("user-1", "2026-05-14");
+
+    expect(mockSearchHubSpotLoggedHours).toHaveBeenCalledWith(
+      expect.objectContaining({
+        objectType: "time_entries",
+        dateProperty: "work_date",
+      }),
+      "employee@generisgp.com",
+      new Date("2026-05-14T04:00:00.000Z"),
+      new Date("2026-05-15T04:00:00.000Z"),
+    );
+    expect(mockUpsertImportedActivities).toHaveBeenLastCalledWith(
+      "HUBSPOT",
+      "user-1",
+      "2026-05-14",
+      [
+        expect.objectContaining({
+          source: "HUBSPOT",
+          sourceId: "logged-hours:time_entries:hubspot-hours-1",
+          title: "Campaign landing page QA",
+          description: "Checked launch blockers",
+          durationMinutes: 90,
+        }),
+      ],
+    );
   });
 
   it("paginates Google Calendar events", async () => {

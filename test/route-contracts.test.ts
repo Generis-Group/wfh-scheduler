@@ -134,6 +134,12 @@ vi.mock("@/lib/services/sync", () => ({
     staleCount: 0,
     activities: [],
   })),
+  syncHubSpot: vi.fn(async () => ({
+    importedCount: 0,
+    skippedCount: 0,
+    staleCount: 0,
+    activities: [],
+  })),
   searchIncompleteGoogleTasks: vi.fn(async () => []),
   addGoogleTaskReference: vi.fn(async () => ({
     id: "report-1",
@@ -477,6 +483,24 @@ describe("route contracts", () => {
     const { POST } = await import("@/app/api/sync/google-chat/route");
     const response = await POST(
       new Request("http://localhost/api/sync/google-chat", {
+        method: "POST",
+        body: JSON.stringify({ date: "2026-05-13" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      importedCount: 0,
+      skippedCount: 0,
+      staleCount: 0,
+      activities: [],
+    });
+  });
+
+  it("accepts HubSpot sync requests", async () => {
+    const { POST } = await import("@/app/api/sync/hubspot/route");
+    const response = await POST(
+      new Request("http://localhost/api/sync/hubspot", {
         method: "POST",
         body: JSON.stringify({ date: "2026-05-13" }),
       }),

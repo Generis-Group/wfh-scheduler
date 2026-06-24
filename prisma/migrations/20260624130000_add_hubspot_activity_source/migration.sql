@@ -1,0 +1,2 @@
+ALTER TYPE "ActivitySource" ADD VALUE 'HUBSPOT';
+ALTER TYPE "SyncProvider" ADD VALUE 'HUBSPOT';

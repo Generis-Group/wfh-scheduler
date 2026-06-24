@@ -71,6 +71,7 @@ import {
   removeSummaryActivityReferences,
   summaryActivityReferenceHref,
 } from "@/lib/summary-format";
+import type { ActivitySourceLink } from "@/lib/activity-source-links";
 import {
   summaryActivityReferenceDragType,
   type SummaryActivityReferenceDragPayload,
@@ -96,6 +97,7 @@ type ActivitySource =
   | "GOOGLE_TASKS"
   | "GMAIL"
   | "GOOGLE_CHAT"
+  | "HUBSPOT"
   | "MANUAL";
 
 type Activity = {
@@ -105,6 +107,7 @@ type Activity = {
   description?: string | null;
   status?: string | null;
   sourceUrl?: string | null;
+  sourceLinks?: ActivitySourceLink[] | null;
   startedAt?: string | Date | null;
   durationMinutes?: number | null;
   selected: boolean;
@@ -146,6 +149,7 @@ const syncProviderLabels = {
   "google-tasks": "Tasks",
   gmail: "Gmail",
   "google-chat": "Google Chat",
+  hubspot: "HubSpot",
 } as const;
 
 const workLocationOptions = dailyWorkLocationValues.map((value) => ({
@@ -163,6 +167,7 @@ const syncProviderSources: Record<SyncProviderKey, ActivitySource> = {
   "google-tasks": "GOOGLE_TASKS",
   gmail: "GMAIL",
   "google-chat": "GOOGLE_CHAT",
+  hubspot: "HUBSPOT",
 };
 
 type ReportPayload = {
@@ -943,7 +948,7 @@ export function DailyReportApp({
     const placement = anchoredFixedPlacement({
       anchorRect: rect,
       preferredWidth: 240,
-      preferredMaxHeight: 160,
+      preferredMaxHeight: 232,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
     });
@@ -1845,6 +1850,7 @@ export function DailyReportApp({
           activity.id,
           {
             href: activity.sourceUrl,
+            links: activity.sourceLinks,
             source: activity.source,
             title: activity.title,
           },
@@ -2203,6 +2209,15 @@ export function DailyReportApp({
                         Import Jira
                       </button>
                       <button
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+                        onClick={() => {
+                          setImportMenuOpen(false);
+                          sync("hubspot");
+                        }}
+                      >
+                        Import HubSpot hours
+                      </button>
+                      <button
                         className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
                         disabled={!canSyncGoogle}
                         title={
@@ -2538,7 +2553,7 @@ export function DailyReportApp({
           />
           <div
             ref={activityMenuRef}
-            className="fixed z-50 overflow-y-auto overscroll-contain rounded-[12px] bg-white p-2 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+            className="fixed z-50 overflow-y-auto overscroll-contain rounded-[12px] bg-white p-2 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
             style={{
               top: openActivityMenu.top,
               left: openActivityMenu.left,

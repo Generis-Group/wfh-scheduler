@@ -50,6 +50,7 @@ import {
   todayDateString,
 } from "@/lib/dates";
 import { defaultPaginationPageSize } from "@/lib/pagination";
+import type { ActivitySourceLink } from "@/lib/activity-source-links";
 import { workLocationLabel } from "@/lib/work-locations";
 import { cn, titleCase } from "@/lib/utils";
 
@@ -61,6 +62,7 @@ type HistoryActivity = {
   durationMinutes?: number | null;
   employeeNote?: string | null;
   sourceUrl?: string | null;
+  sourceLinks?: ActivitySourceLink[] | null;
 };
 
 type HistoryComment = {
@@ -1121,6 +1123,7 @@ function OpenedReportView({
           activity.id,
           {
             href: activity.sourceUrl,
+            links: activity.sourceLinks,
             source: activity.source,
             title: activity.title,
           },

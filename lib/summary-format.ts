@@ -1,3 +1,5 @@
+import type { ActivitySourceLink } from "@/lib/activity-source-links";
+
 export type SummaryLinkMatch = {
   label: string;
   href: string;
@@ -11,12 +13,14 @@ export type SummaryActivitySource =
   | "GOOGLE_TASKS"
   | "GMAIL"
   | "GOOGLE_CHAT"
+  | "HUBSPOT"
   | "MANUAL"
   | "UNKNOWN";
 
 export type SummaryActivityReferenceMeta = {
   title?: string | null;
   href?: string | null;
+  links?: ActivitySourceLink[] | null;
   source?: string | null;
 };
 
@@ -39,6 +43,7 @@ const summaryActivitySources = new Set<SummaryActivitySource>([
   "GOOGLE_TASKS",
   "GMAIL",
   "GOOGLE_CHAT",
+  "HUBSPOT",
   "MANUAL",
   "UNKNOWN",
 ]);
@@ -166,6 +171,10 @@ export function summaryActivityReferenceSource(
     lowerHref.includes("google.com/tasks")
   ) {
     return "GOOGLE_TASKS";
+  }
+
+  if (lowerHref.includes("hubspot")) {
+    return "HUBSPOT";
   }
 
   if (

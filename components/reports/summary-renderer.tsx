@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import type { ActivitySourceLink } from "@/lib/activity-source-links";
 import {
   normalizeSummaryActivitySource,
   normalizeSummaryLinkHref,
@@ -47,6 +48,47 @@ function resolvedActivityReferenceHref(
     : null;
 }
 
+function resolvedActivityReferenceLinks(
+  link: NonNullable<ReturnType<typeof summaryLinkAt>>,
+  activityReferences?: SummaryActivityReferenceMap,
+): ActivitySourceLink[] {
+  if (link.external) {
+    return [{ href: link.href, label: "Open source", source: null }];
+  }
+
+  const activityId = summaryActivityReferenceIdFromHref(link.href);
+  const meta = activityId ? activityReferences?.[activityId] : null;
+  const links = [
+    ...(meta?.links ?? []),
+    meta?.href
+      ? {
+          href: meta.href,
+          label: "Open source",
+          source: meta.source,
+        }
+      : null,
+  ];
+  const seen = new Set<string>();
+  const uniqueLinks: ActivitySourceLink[] = [];
+
+  for (const item of links) {
+    const href = normalizeSummaryLinkHref(item?.href);
+
+    if (!href || seen.has(href)) {
+      continue;
+    }
+
+    seen.add(href);
+    uniqueLinks.push({
+      href,
+      label: item?.label?.trim() || "Open source",
+      source: item?.source ?? null,
+    });
+  }
+
+  return uniqueLinks;
+}
+
 function resolvedActivityReferenceLabel(
   link: NonNullable<ReturnType<typeof summaryLinkAt>>,
   activityReferences?: SummaryActivityReferenceMap,
@@ -87,7 +129,7 @@ function renderActivityReference(
     label,
     activityReferences,
   );
-  const href = resolvedActivityReferenceHref(link, activityReferences);
+  const links = resolvedActivityReferenceLinks(link, activityReferences);
   const content = (
     <span className="summary-activity-reference-card" data-source={source}>
       <span className="summary-activity-reference-icon" aria-hidden="true">
@@ -96,6 +138,35 @@ function renderActivityReference(
       <span className="summary-activity-reference-label">{children}</span>
     </span>
   );
+
+  if (links.length > 1) {
+    return (
+      <details
+        key={key}
+        className="summary-activity-reference-picker relative inline-block align-baseline"
+      >
+        <summary className="summary-activity-reference cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+          {content}
+        </summary>
+        <span className="absolute left-0 top-full z-30 mt-1 flex w-56 flex-col rounded-[10px] bg-white p-1 text-sm shadow-[0_16px_38px_rgba(15,23,42,0.16)] ring-1 ring-[#dbe3ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+          {links.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-[7px] px-3 py-2 text-left font-medium text-[#334155] hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
+            >
+              {item.label}
+            </a>
+          ))}
+        </span>
+      </details>
+    );
+  }
+
+  const href =
+    links[0]?.href ?? resolvedActivityReferenceHref(link, activityReferences);
 
   return href ? (
     <a

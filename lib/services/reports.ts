@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import type { Prisma } from "@prisma/client";
 
+import { activitySourceLinks } from "@/lib/activity-source-links";
 import { activityMetadataWithLocalTitleState } from "@/lib/activity-title-overrides";
 import { addReportDateDays, parseReportDate } from "@/lib/dates";
 import { HttpError } from "@/lib/http";
@@ -93,6 +94,7 @@ type WeeklyDashboardReport = {
     durationMinutes: number | null;
     employeeNote: string | null;
     sourceUrl: string | null;
+    metadata: Prisma.JsonValue | null;
   }>;
   comments: Array<{
     id: string;
@@ -173,6 +175,40 @@ function reportWithNormalizedWorkLocation<T extends { workLocation: string }>(
   };
 }
 
+function withActivitySourceLinks<
+  T extends {
+    source?: string | null;
+    sourceUrl?: string | null;
+    metadata?: Prisma.JsonValue | null;
+  },
+>(activity: T) {
+  const { metadata, ...activityWithoutMetadata } = activity;
+
+  return {
+    ...activityWithoutMetadata,
+    sourceLinks: activitySourceLinks(activity),
+  };
+}
+
+function reportWithActivitySourceLinks<
+  T extends {
+    activities?: Array<{
+      source?: string | null;
+      sourceUrl?: string | null;
+      metadata?: Prisma.JsonValue | null;
+    }>;
+  },
+>(report: T) {
+  if (!Array.isArray(report.activities)) {
+    return report;
+  }
+
+  return {
+    ...report,
+    activities: report.activities.map(withActivitySourceLinks),
+  };
+}
+
 const userIdentitySelect = {
   id: true,
   name: true,
@@ -207,6 +243,7 @@ const reportActivitySelect = {
   durationMinutes: true,
   selected: true,
   employeeNote: true,
+  metadata: true,
 };
 
 const editorReportSelect = {
@@ -273,6 +310,7 @@ const reportHistoryInclude = {
       durationMinutes: true,
       employeeNote: true,
       sourceUrl: true,
+      metadata: true,
     },
   },
   comments: {
@@ -312,6 +350,7 @@ function dashboardReportInclude(scope?: ReviewScope) {
         durationMinutes: true,
         employeeNote: true,
         sourceUrl: true,
+        metadata: true,
       },
     },
     comments: {
@@ -366,7 +405,7 @@ export async function ensureDailyReport(userId: string, dateString: string) {
 export async function getDailyReport(userId: string, dateString: string) {
   const reportDate = parseReportDate(dateString);
 
-  return prisma.dailyReport.findUnique({
+  const report = await prisma.dailyReport.findUnique({
     where: {
       userId_reportDate: {
         userId,
@@ -375,6 +414,8 @@ export async function getDailyReport(userId: string, dateString: string) {
     },
     include: reportInclude,
   });
+
+  return report ? reportWithActivitySourceLinks(report) : null;
 }
 
 export async function getDailyReportEditorData(
@@ -400,9 +441,13 @@ export async function getDailyReportEditorData(
     },
   });
 
+  const normalizedReport = report
+    ? reportWithActivitySourceLinks(reportWithNormalizedWorkLocation(report))
+    : null;
+
   return {
-    report: report ? reportWithNormalizedWorkLocation(report) : null,
-    activities: report?.activities ?? [],
+    report: normalizedReport,
+    activities: normalizedReport?.activities ?? [],
   };
 }
 
@@ -416,7 +461,7 @@ export async function getReportById(reportId: string) {
     throw new HttpError(404, "Report not found.");
   }
 
-  return reportWithNormalizedWorkLocation(report);
+  return reportWithActivitySourceLinks(reportWithNormalizedWorkLocation(report));
 }
 
 export async function createReportRevision(
@@ -856,7 +901,10 @@ async function listReportsForDateForWhere(
       })
     : [];
   const reportsByUserId = new Map(
-    reports.map((report) => [report.userId, report]),
+    reports.map((report) => [
+      report.userId,
+      reportWithActivitySourceLinks(report),
+    ]),
   );
 
   return users.map((user) => ({
@@ -970,6 +1018,7 @@ function serializeWeeklyDashboardReport(report: WeeklyDashboardReport) {
       durationMinutes: activity.durationMinutes,
       employeeNote: activity.employeeNote,
       sourceUrl: activity.sourceUrl,
+      sourceLinks: activitySourceLinks(activity),
     })),
     comments: [],
     readReceipts: [],
@@ -1430,10 +1479,13 @@ export async function listReportHistory(
     !options.targetReportId ||
     reports.some((report) => report.id === options.targetReportId)
   ) {
+    const reportsWithLinks = reports.map(reportWithActivitySourceLinks);
+
     return {
-      reports,
+      reports: reportsWithLinks,
       targetReport:
-        reports.find((report) => report.id === options.targetReportId) ?? null,
+        reportsWithLinks.find((report) => report.id === options.targetReportId) ??
+        null,
       page: currentPage,
       pageSize: limit,
       totalCount,
@@ -1446,8 +1498,10 @@ export async function listReportHistory(
   });
 
   return {
-    reports,
-    targetReport,
+    reports: reports.map(reportWithActivitySourceLinks),
+    targetReport: targetReport
+      ? reportWithActivitySourceLinks(targetReport)
+      : null,
     page: currentPage,
     pageSize: limit,
     totalCount,
