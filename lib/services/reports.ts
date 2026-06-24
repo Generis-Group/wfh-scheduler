@@ -23,7 +23,10 @@ import {
   type ReviewScope,
 } from "@/lib/services/departments";
 import type { updateReportSchema } from "@/lib/validation";
-import { workLocationValues } from "@/lib/work-locations";
+import {
+  normalizeWorkLocationValue,
+  workLocationValues,
+} from "@/lib/work-locations";
 import type { z } from "zod";
 
 type UpdateReportInput = z.infer<typeof updateReportSchema>;
@@ -147,6 +150,28 @@ const defaultReportHistoryPageSize = defaultPaginationPageSize;
 const defaultAdminReportsPageSize = defaultPaginationPageSize;
 const maxPaginatedPageSize = maxPaginationPageSize;
 const workLocations = workLocationValues;
+
+function normalizeReportWorkLocation(value: string | null | undefined) {
+  return normalizeWorkLocationValue(value) ?? "UNKNOWN";
+}
+
+function normalizeReportInput(input: UpdateReportInput): UpdateReportInput {
+  return input.workLocation === undefined
+    ? input
+    : {
+        ...input,
+        workLocation: normalizeReportWorkLocation(input.workLocation),
+      };
+}
+
+function reportWithNormalizedWorkLocation<T extends { workLocation: string }>(
+  report: T,
+): T {
+  return {
+    ...report,
+    workLocation: normalizeReportWorkLocation(report.workLocation),
+  };
+}
 
 const userIdentitySelect = {
   id: true,
@@ -376,7 +401,7 @@ export async function getDailyReportEditorData(
   });
 
   return {
-    report,
+    report: report ? reportWithNormalizedWorkLocation(report) : null,
     activities: report?.activities ?? [],
   };
 }
@@ -391,7 +416,7 @@ export async function getReportById(reportId: string) {
     throw new HttpError(404, "Report not found.");
   }
 
-  return report;
+  return reportWithNormalizedWorkLocation(report);
 }
 
 export async function createReportRevision(
@@ -507,16 +532,17 @@ export async function updateReport(
   editedById: string,
   input: UpdateReportInput,
 ) {
+  const normalizedInput = normalizeReportInput(input);
   const report = await getReportById(reportId);
   const activityUpdates = await changedActivityUpdates(
     report,
-    input.activityUpdates ?? [],
+    normalizedInput.activityUpdates ?? [],
   );
-  const fieldChanges = reportFieldChanges(report, input);
+  const fieldChanges = reportFieldChanges(report, normalizedInput);
   const hasFieldChanges = Object.values(fieldChanges).some(Boolean);
   const hasActivityChanges = activityUpdates.length > 0;
-  const hasDeletedActivities = Boolean(input.deletedActivityIds?.length);
-  const hasManualActivities = Boolean(input.manualActivities?.length);
+  const hasDeletedActivities = Boolean(normalizedInput.deletedActivityIds?.length);
+  const hasManualActivities = Boolean(normalizedInput.manualActivities?.length);
 
   if (
     !hasFieldChanges &&
@@ -533,11 +559,11 @@ export async function updateReport(
     const reportData: Prisma.DailyReportUpdateInput = {};
 
     if (fieldChanges.summary) {
-      reportData.summary = input.summary;
+      reportData.summary = normalizedInput.summary;
     }
 
     if (fieldChanges.workLocation) {
-      reportData.workLocation = input.workLocation;
+      reportData.workLocation = normalizedInput.workLocation;
     }
 
     if (!hasFieldChanges) {
@@ -578,17 +604,17 @@ export async function updateReport(
       });
     }
 
-    if (input.deletedActivityIds?.length) {
+    if (normalizedInput.deletedActivityIds?.length) {
       await tx.activityItem.deleteMany({
         where: {
-          id: { in: input.deletedActivityIds },
+          id: { in: normalizedInput.deletedActivityIds },
           userId: report.userId,
           dailyReportId: report.id,
         },
       });
     }
 
-    for (const manual of input.manualActivities ?? []) {
+    for (const manual of normalizedInput.manualActivities ?? []) {
       const sourceId = `manual:${manual.id ?? crypto.randomUUID()}`;
       const activityData = manualActivityMutationData(manual);
 

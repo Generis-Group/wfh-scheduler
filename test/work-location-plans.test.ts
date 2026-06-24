@@ -116,6 +116,57 @@ describe("work location plans", () => {
     expect(mockPlannedWorkLocationUpsert).not.toHaveBeenCalled();
   });
 
+  it("normalizes legacy PTO plan writes to out of office", async () => {
+    mockPlannedWorkLocationUpsert.mockResolvedValue({
+      id: "plan-pto",
+      userId: "employee-1",
+      workDate: new Date("2026-05-13T00:00:00.000Z"),
+      workLocation: "OUT_OF_OFFICE",
+    });
+    const { setPlannedWorkLocation } =
+      await import("@/lib/services/work-location-plans");
+
+    await expect(
+      setPlannedWorkLocation({
+        userId: "employee-1",
+        dateString: "2026-05-13",
+        workLocation: "PTO" as never,
+      }),
+    ).resolves.toMatchObject({
+      workLocation: "OUT_OF_OFFICE",
+    });
+    expect(mockPlannedWorkLocationUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: { workLocation: "OUT_OF_OFFICE" },
+        create: expect.objectContaining({ workLocation: "OUT_OF_OFFICE" }),
+      }),
+    );
+  });
+
+  it("normalizes legacy PTO plan reads to out of office", async () => {
+    mockPlannedWorkLocationFindMany.mockResolvedValue([
+      {
+        id: "plan-pto",
+        userId: "employee-1",
+        workDate: new Date("2026-05-13T00:00:00.000Z"),
+        workLocation: "PTO",
+      },
+    ]);
+    const { listPlannedWorkLocations } =
+      await import("@/lib/services/work-location-plans");
+
+    await expect(
+      listPlannedWorkLocations("employee-1", "2026-05-11", "2026-05-17"),
+    ).resolves.toEqual([
+      {
+        id: "plan-pto",
+        userId: "employee-1",
+        date: "2026-05-13",
+        workLocation: "OUT_OF_OFFICE",
+      },
+    ]);
+  });
+
   it("deletes a plan when the location is cleared", async () => {
     const { setPlannedWorkLocation } =
       await import("@/lib/services/work-location-plans");

@@ -11,7 +11,10 @@ import {
 import { reportWorkWeekRange } from "@/lib/services/reports";
 import {
   isPlannedWorkLocation,
+  normalizePlannedWorkLocationValue,
+  normalizeWorkLocationValue,
   type PlannedWorkLocationValue,
+  type WorkLocationValue,
 } from "@/lib/work-locations";
 
 const calendarUserSelect = {
@@ -40,6 +43,79 @@ function weekDates(start: string, end: string) {
   return dates;
 }
 
+function monthDateRange(dateString: string) {
+  const date = parseReportDate(dateString);
+  const monthStart = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1),
+  );
+  const monthEnd = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0),
+  );
+
+  return {
+    start: dateToString(monthStart),
+    end: dateToString(monthEnd),
+  };
+}
+
+function calendarMonthDates(monthStart: string) {
+  const firstOfMonth = parseReportDate(monthStart);
+  const firstWeekday = firstOfMonth.getUTCDay();
+  const gridStart = addReportDateDays(monthStart, -firstWeekday);
+  const monthKey = monthStart.slice(0, 7);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = addReportDateDays(gridStart, index);
+
+    return {
+      date,
+      inCurrentMonth: date.slice(0, 7) === monthKey,
+    };
+  });
+}
+
+function calendarDaysForUser({
+  userId,
+  dates,
+  reportsByUserDate,
+  plansByUserDate,
+}: {
+  userId: string;
+  dates: string[];
+  reportsByUserDate: Map<
+    string,
+    { id: string; workLocation: WorkLocationValue | null }
+  >;
+  plansByUserDate: Map<string, { workLocation: WorkLocationValue | null }>;
+}) {
+  return dates.map((date) => {
+    const key = `${userId}:${date}`;
+    const report = reportsByUserDate.get(key);
+
+    if (report) {
+      return {
+        date,
+        source: "REPORT" as const,
+        workLocation: report.workLocation,
+        reportId: report.id,
+      };
+    }
+
+    const plan = plansByUserDate.get(key);
+
+    return {
+      date,
+      source: plan ? ("PLAN" as const) : ("NONE" as const),
+      workLocation: plan?.workLocation ?? null,
+      reportId: null,
+    };
+  });
+}
+
+function serializedPlanLocation(value: string | null) {
+  return normalizePlannedWorkLocationValue(value);
+}
+
 function uniqueIds(ids: string[]) {
   return [...new Set(ids)];
 }
@@ -62,12 +138,20 @@ export async function listPlannedWorkLocations(
     orderBy: { workDate: "asc" },
   });
 
-  return plans.map((plan) => ({
-    id: plan.id,
-    userId: plan.userId,
-    date: dateToString(plan.workDate),
-    workLocation: plan.workLocation as PlannedWorkLocationValue,
-  }));
+  return plans.flatMap((plan) => {
+    const workLocation = serializedPlanLocation(plan.workLocation);
+
+    return workLocation
+      ? [
+          {
+            id: plan.id,
+            userId: plan.userId,
+            date: dateToString(plan.workDate),
+            workLocation,
+          },
+        ]
+      : [];
+  });
 }
 
 export async function getPlannedWorkLocation(
@@ -83,12 +167,18 @@ export async function getPlannedWorkLocation(
     },
   });
 
-  return plan
+  if (!plan) {
+    return null;
+  }
+
+  const workLocation = serializedPlanLocation(plan.workLocation);
+
+  return workLocation
     ? {
         id: plan.id,
         userId: plan.userId,
         date: dateToString(plan.workDate),
-        workLocation: plan.workLocation as PlannedWorkLocationValue,
+        workLocation,
       }
     : null;
 }
@@ -115,7 +205,9 @@ export async function setPlannedWorkLocation({
     return null;
   }
 
-  if (!isPlannedWorkLocation(workLocation)) {
+  const normalizedWorkLocation = normalizePlannedWorkLocationValue(workLocation);
+
+  if (!normalizedWorkLocation || !isPlannedWorkLocation(normalizedWorkLocation)) {
     throw new HttpError(422, "Choose a valid planned work location.");
   }
 
@@ -127,12 +219,12 @@ export async function setPlannedWorkLocation({
       },
     },
     update: {
-      workLocation,
+      workLocation: normalizedWorkLocation,
     },
     create: {
       userId,
       workDate,
-      workLocation,
+      workLocation: normalizedWorkLocation,
     },
   });
 
@@ -140,7 +232,7 @@ export async function setPlannedWorkLocation({
     id: plan.id,
     userId: plan.userId,
     date: dateToString(plan.workDate),
-    workLocation: plan.workLocation as PlannedWorkLocationValue,
+    workLocation: normalizePlannedWorkLocationValue(plan.workLocation)!,
   };
 }
 
@@ -238,28 +330,36 @@ export async function getWorkLocationCalendarData({
   departmentId?: string | null;
 }) {
   const { start, end } = reportWorkWeekRange(dateString);
-  const startDate = parseReportDate(start);
-  const endDate = parseReportDate(end);
+  const monthRange = monthDateRange(dateString);
   const dates = weekDates(start, end);
+  const monthDates = calendarMonthDates(monthRange.start);
+  const monthDateValues = monthDates.map((day) => day.date);
+  const queryStart = [start, monthDateValues[0]].sort()[0];
+  const queryEnd = [end, monthDateValues[monthDateValues.length - 1]].sort()[1];
+  const queryStartDate = parseReportDate(queryStart);
+  const queryEndDate = parseReportDate(queryEnd);
+  const weekStartDate = parseReportDate(start);
+  const weekEndDate = parseReportDate(end);
   const viewerReviewerDepartmentIds = hasUserRole(scope, "REVIEWER")
     ? await departmentIdsForScope(scope, "REVIEWER")
     : undefined;
   const employeeWhere = await calendarEmployeeWhere({ scope, departmentId });
+  const canPlanOwnWeek = hasUserRole(scope, "EMPLOYEE");
   const users = await prisma.user.findMany({
     where: employeeWhere,
     orderBy: [{ name: "asc" }, { email: "asc" }],
     select: calendarUserSelect,
   });
   const userIds = users.map((user) => user.id);
-  const [reports, plans, departments] = await Promise.all([
+  const [reports, plans, ownPlans, departments] = await Promise.all([
     userIds.length
       ? prisma.dailyReport.findMany({
           where: {
             userId: { in: userIds },
             status: "SUBMITTED",
             reportDate: {
-              gte: startDate,
-              lte: endDate,
+              gte: queryStartDate,
+              lte: queryEndDate,
             },
           },
           select: {
@@ -276,10 +376,22 @@ export async function getWorkLocationCalendarData({
           where: {
             userId: { in: userIds },
             workDate: {
-              gte: startDate,
-              lte: endDate,
+              gte: queryStartDate,
+              lte: queryEndDate,
             },
           },
+        })
+      : [],
+    canPlanOwnWeek
+      ? prisma.plannedWorkLocation.findMany({
+          where: {
+            userId: scope.userId,
+            workDate: {
+              gte: weekStartDate,
+              lte: weekEndDate,
+            },
+          },
+          orderBy: { workDate: "asc" },
         })
       : [],
     prisma.department.findMany({
@@ -307,46 +419,65 @@ export async function getWorkLocationCalendarData({
   const reportsByUserDate = new Map(
     reports.map((report) => [
       `${report.userId}:${dateToString(report.reportDate)}`,
-      report,
+      {
+        id: report.id,
+        workLocation: normalizeWorkLocationValue(report.workLocation),
+      },
     ]),
   );
   const plansByUserDate = new Map(
     plans.map((plan) => [
       `${plan.userId}:${dateToString(plan.workDate)}`,
-      plan,
+      {
+        workLocation: normalizeWorkLocationValue(plan.workLocation),
+      },
     ]),
   );
 
   return {
+    viewerUserId: scope.userId,
+    canPlanOwnWeek,
     weekStart: start,
     weekEnd: end,
     dates,
     departments,
     selectedDepartmentId: departmentId ?? null,
+    myPlans: ownPlans.flatMap((plan) => {
+      const workLocation = serializedPlanLocation(plan.workLocation);
+
+      return workLocation
+        ? [
+            {
+              id: plan.id,
+              userId: plan.userId,
+              date: dateToString(plan.workDate),
+              workLocation,
+            },
+          ]
+        : [];
+    }),
     rows: users.map((user) => ({
       user,
-      days: dates.map((date) => {
-        const key = `${user.id}:${date}`;
-        const report = reportsByUserDate.get(key);
-
-        if (report) {
-          return {
-            date,
-            source: "REPORT" as const,
-            workLocation: report.workLocation,
-            reportId: report.id,
-          };
-        }
-
-        const plan = plansByUserDate.get(key);
-
-        return {
-          date,
-          source: plan ? ("PLAN" as const) : ("NONE" as const),
-          workLocation: plan?.workLocation ?? null,
-          reportId: null,
-        };
+      days: calendarDaysForUser({
+        userId: user.id,
+        dates,
+        reportsByUserDate,
+        plansByUserDate,
       }),
     })),
+    month: {
+      monthStart: monthRange.start,
+      monthEnd: monthRange.end,
+      dates: monthDates,
+      rows: users.map((user) => ({
+        user,
+        days: calendarDaysForUser({
+          userId: user.id,
+          dates: monthDateValues,
+          reportsByUserDate,
+          plansByUserDate,
+        }),
+      })),
+    },
   };
 }

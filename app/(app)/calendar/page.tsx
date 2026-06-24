@@ -14,6 +14,7 @@ export default async function WorkLocationCalendarPage({
   searchParams?: {
     date?: string;
     departmentId?: string;
+    view?: string;
   };
 }) {
   const session = await auth();
@@ -48,5 +49,12 @@ export default async function WorkLocationCalendarPage({
     { date },
   );
 
-  return <WorkLocationCalendar data={serialize(data)} />;
+  return (
+    <WorkLocationCalendar
+      data={serialize(data)}
+      initialView={
+        searchParams?.view === "wfh-calendar" ? "wfh-calendar" : "weekly-list"
+      }
+    />
+  );
 }

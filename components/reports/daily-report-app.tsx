@@ -53,6 +53,7 @@ import type {
   SummaryEditorHandle,
   SummarySnapshot,
 } from "@/components/reports/summary-editor";
+import { anchoredFixedPlacement } from "@/lib/anchored-position";
 import { dateOnlyString } from "@/lib/date-only";
 import {
   readServerSentEvents,
@@ -63,7 +64,6 @@ import {
   refreshStaleServerData,
 } from "@/lib/client-cache-invalidation";
 import {
-  addReportDateDays,
   clampReportDateToToday,
   todayDateString,
 } from "@/lib/dates";
@@ -84,9 +84,7 @@ import {
 } from "@/lib/report-submit-readiness";
 import {
   dailyWorkLocationValues,
-  plannedWorkLocationValues,
   workLocationLabel,
-  type PlannedWorkLocationValue,
   type WorkLocationValue,
 } from "@/lib/work-locations";
 import type { SyncProgressEvent } from "@/lib/services/sync";
@@ -132,7 +130,7 @@ type PlannedWorkLocation = {
   id?: string;
   userId?: string;
   date: string;
-  workLocation: PlannedWorkLocationValue;
+  workLocation: WorkLocationValue;
 };
 
 const emptyWeeklyPlannedLocations: PlannedWorkLocation[] = [];
@@ -151,11 +149,6 @@ const syncProviderLabels = {
 } as const;
 
 const workLocationOptions = dailyWorkLocationValues.map((value) => ({
-  value,
-  label: workLocationLabel(value),
-}));
-
-const weeklyPlanLocationOptions = plannedWorkLocationValues.map((value) => ({
   value,
   label: workLocationLabel(value),
 }));
@@ -299,29 +292,6 @@ function mergeSyncedActivities(
 
 function dateInputValue(value: string | Date) {
   return dateOnlyString(value);
-}
-
-function reportWeekDates(value: string) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  const weekday = date.getUTCDay();
-  const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
-  const start = addReportDateDays(value, mondayOffset);
-  const dates: string[] = [];
-
-  for (let index = 0; index < 7; index += 1) {
-    dates.push(addReportDateDays(start, index));
-  }
-
-  return dates;
-}
-
-function shortWeekdayLabel(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${value}T12:00:00.000Z`));
 }
 
 function statusTone(
@@ -587,8 +557,6 @@ export function DailyReportApp({
   const [workLocation, setWorkLocation] = useState<WorkLocation>(
     initialReport.workLocation,
   );
-  const [weeklyPlan, setWeeklyPlan] = useState(weeklyPlannedLocations);
-  const [savingPlanDate, setSavingPlanDate] = useState<string | null>(null);
   const [pendingLocationOverride, setPendingLocationOverride] =
     useState<WorkLocation | null>(null);
   const [activities, setActivities] = useState(initialReport.activities);
@@ -597,6 +565,8 @@ export function DailyReportApp({
     id: string;
     top: number;
     left: number;
+    width: number;
+    maxHeight: number;
   } | null>(null);
   const [renamingActivity, setRenamingActivity] = useState<{
     id: string;
@@ -679,8 +649,6 @@ export function DailyReportApp({
     setSummary(nextSummary);
     setSummaryEditorSeed(nextSummary);
     setWorkLocation(initialReport.workLocation);
-    setWeeklyPlan(weeklyPlannedLocations);
-    setSavingPlanDate(null);
     setPendingLocationOverride(null);
     setActivities(initialReport.activities);
     setDeletedActivityIds([]);
@@ -972,21 +940,23 @@ export function DailyReportApp({
     }
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const menuWidth = 240;
-    const menuHeight = 160;
-    const gap = 8;
-    const top = Math.min(
-      window.innerHeight - menuHeight - 12,
-      Math.max(12, rect.bottom + gap),
-    );
-    const left = Math.min(
-      window.innerWidth - menuWidth - 12,
-      Math.max(12, rect.right - menuWidth),
-    );
+    const placement = anchoredFixedPlacement({
+      anchorRect: rect,
+      preferredWidth: 240,
+      preferredMaxHeight: 160,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    });
 
     setImportMenuOpen(false);
     activityMenuOpenedAtRef.current = Date.now();
-    setOpenActivityMenu({ id: activityId, top, left });
+    setOpenActivityMenu({
+      id: activityId,
+      top: placement.top,
+      left: placement.left,
+      width: placement.width,
+      maxHeight: placement.maxHeight,
+    });
     setRenamingActivity(null);
   }
 
@@ -1824,13 +1794,9 @@ export function DailyReportApp({
   const dateNavigationPending = pendingDateControl !== null;
   const isBusy = busyAction !== null || isImporting || dateNavigationPending;
   const maxReportDate = todayDateString();
-  const planWeekDates = useMemo(
-    () => reportWeekDates(reportDate),
-    [reportDate],
-  );
   const weeklyPlanByDate = useMemo(
-    () => new Map(weeklyPlan.map((plan) => [plan.date, plan])),
-    [weeklyPlan],
+    () => new Map(weeklyPlannedLocations.map((plan) => [plan.date, plan])),
+    [weeklyPlannedLocations],
   );
   const plannedLocationForReport =
     weeklyPlanByDate.get(reportDate)?.workLocation ?? null;
@@ -1962,61 +1928,6 @@ export function DailyReportApp({
     }
 
     setPendingLocationOverride(null);
-  }
-
-  async function saveWeeklyPlan(
-    dateString: string,
-    nextLocation: PlannedWorkLocationValue | null,
-  ) {
-    if (savingPlanDate) {
-      return;
-    }
-
-    const previousPlan = weeklyPlanByDate.get(dateString)?.workLocation ?? null;
-    setSavingPlanDate(dateString);
-    setMessage(null);
-
-    try {
-      const response = await fetch("/api/work-location-plans", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: dateString,
-          workLocation: nextLocation,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          await responseErrorMessage(response, "Unable to update weekly plan."),
-        );
-      }
-
-      const body = (await response.json()) as {
-        plan?: PlannedWorkLocation | null;
-      };
-      setWeeklyPlan((current) => [
-        ...current.filter((plan) => plan.date !== dateString),
-        ...(body.plan ? [body.plan] : []),
-      ]);
-      markServerDataStale();
-
-      if (
-        dateString === reportDate &&
-        !reportRef.current.id &&
-        (workLocation === "UNKNOWN" || workLocation === previousPlan)
-      ) {
-        setWorkLocation(nextLocation ?? "UNKNOWN");
-      }
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to update weekly plan.",
-      );
-    } finally {
-      setSavingPlanDate(null);
-    }
   }
 
   function toggleLocationMenu() {
@@ -2183,47 +2094,14 @@ export function DailyReportApp({
             <div className="mt-2 text-xs font-medium text-[#667085] dark:text-muted-foreground">
               Different from weekly plan
             </div>
+          ) : plannedLocationForReport ? (
+            <div className="mt-2 text-xs font-medium text-[#667085] dark:text-muted-foreground">
+              Planned today:{" "}
+              <span className="font-semibold text-[#344054] dark:text-foreground">
+                {workLocationLabel(plannedLocationForReport)}
+              </span>
+            </div>
           ) : null}
-          <div className="mt-3 rounded-[8px] bg-[#f8fbff] p-2 ring-1 ring-[#dbe7ff] dark:bg-blue-400/5 dark:ring-blue-300/15">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
-              Weekly plan
-            </div>
-            <div className="grid gap-2 min-[720px]:grid-cols-7">
-              {planWeekDates.map((planDate) => {
-                const plan = weeklyPlanByDate.get(planDate);
-                const saving = savingPlanDate === planDate;
-
-                return (
-                  <label key={planDate} className="grid gap-1">
-                    <span className="text-[11px] font-semibold text-[#667085] dark:text-muted-foreground">
-                      {shortWeekdayLabel(planDate)}
-                    </span>
-                    <select
-                      className="h-8 min-w-0 rounded-[7px] bg-white px-2 text-xs font-medium text-[#111827] ring-1 ring-[#dfe4ee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:opacity-60 dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]"
-                      value={plan?.workLocation ?? ""}
-                      disabled={isBusy || saving}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        void saveWeeklyPlan(
-                          planDate,
-                          nextValue
-                            ? (nextValue as PlannedWorkLocationValue)
-                            : null,
-                        );
-                      }}
-                    >
-                      <option value="">No plan</option>
-                      {weeklyPlanLocationOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
         </ReportSurface>
 
         <div className="daily-report-layout grid gap-3 min-[1200px]:min-h-0 min-[1200px]:flex-1 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
@@ -2439,7 +2317,7 @@ export function DailyReportApp({
               aria-label="Search work items"
             />
 
-            <div className="daily-work-items-list mt-3 min-h-[320px] space-y-2 overflow-y-auto overscroll-contain p-1 [scrollbar-gutter:stable] min-[1200px]:min-h-0 min-[1200px]:flex-1">
+            <div className="daily-work-items-list reference-row-scroll mt-3 min-h-[320px] space-y-2 p-1 min-[1200px]:min-h-0 min-[1200px]:flex-1">
               {activities.length === 0 ? (
                 <EmptyReferenceState>
                   No activities yet. Add a work item or import from Jira,
@@ -2660,8 +2538,13 @@ export function DailyReportApp({
           />
           <div
             ref={activityMenuRef}
-            className="fixed z-50 w-60 rounded-[12px] bg-white p-2 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
-            style={{ top: openActivityMenu.top, left: openActivityMenu.left }}
+            className="fixed z-50 overflow-y-auto overscroll-contain rounded-[12px] bg-white p-2 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+            style={{
+              top: openActivityMenu.top,
+              left: openActivityMenu.left,
+              width: openActivityMenu.width,
+              maxHeight: openActivityMenu.maxHeight,
+            }}
             role="menu"
           >
             <button

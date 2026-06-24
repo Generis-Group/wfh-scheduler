@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { hasSubmitReadyContent } from "@/lib/report-submit-readiness";
+import {
+  hasRequiredWorkLocation,
+  hasSubmitReadyContent,
+} from "@/lib/report-submit-readiness";
 
 describe("hasSubmitReadyContent", () => {
   it("rejects a blank default report", () => {
@@ -75,6 +78,16 @@ describe("hasSubmitReadyContent", () => {
       hasSubmitReadyContent({
         summary: "",
         workLocation: "OUT_OF_OFFICE",
+      }),
+    ).toBe(true);
+  });
+
+  it("treats legacy PTO as out of office for existing reports", () => {
+    expect(hasRequiredWorkLocation("PTO")).toBe(true);
+    expect(
+      hasSubmitReadyContent({
+        summary: "",
+        workLocation: "PTO",
       }),
     ).toBe(true);
   });

@@ -73,6 +73,8 @@
       "rlig" 1,
       "calt" 1;
     overflow-x: hidden;
+    overflow-wrap: break-word;
+    word-break: normal;
     text-rendering: optimizeLegibility;
   }
 
@@ -91,6 +93,10 @@
   }
 
   p,
+  a,
+  button,
+  label,
+  span,
   h1,
   h2,
   h3,
@@ -102,7 +108,8 @@
   dt,
   td,
   th {
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    word-break: normal;
   }
 
   ::selection {
@@ -262,6 +269,20 @@
     overflow-x: clip;
   }
 
+  .reference-page-contained {
+    margin-inline: auto;
+    max-inline-size: min(100%, var(--reference-page-contained-width, 80rem));
+  }
+
+  .work-location-page {
+    --reference-page-contained-width: 96rem;
+    --work-location-person-column-size: clamp(12rem, 18vw, 15rem);
+    --work-location-day-column-size: 8rem;
+    --wfh-calendar-row-block-size: clamp(10rem, 16dvh, 11rem);
+    --wfh-calendar-min-inline-size: 42.5rem;
+    margin-inline: 0 auto;
+  }
+
   .reference-page-header {
     @apply flex min-h-10 flex-wrap items-start justify-between;
     gap: clamp(0.5rem, 0.9vw, 0.875rem);
@@ -332,8 +353,60 @@
     @apply flex min-h-0 min-w-0 flex-col overflow-hidden;
   }
 
+  .reference-row-scroll {
+    min-width: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .reference-table-scroll {
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .wfh-calendar-scroll {
+    inline-size: 100%;
+    max-inline-size: 100%;
+  }
+
+  .wfh-calendar-grid-frame {
+    inline-size: 100%;
+    min-inline-size: var(--wfh-calendar-min-inline-size);
+  }
+
+  .wfh-calendar-grid {
+    display: grid;
+    grid-template-rows: auto;
+    grid-auto-rows: var(--wfh-calendar-row-block-size);
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .work-location-weekly-table {
+    inline-size: 100%;
+    min-inline-size: calc(
+      var(--work-location-person-column-size) +
+        (var(--work-location-day-column-size) * 7)
+    );
+    table-layout: fixed;
+  }
+
+  .work-location-person-column {
+    inline-size: var(--work-location-person-column-size);
+  }
+
+  .work-location-day-column {
+    inline-size: var(--work-location-day-column-size);
+  }
+
   .reference-paginated-viewport {
-    @apply min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable];
+    @apply min-h-0 flex-1;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
   }
 
   [data-pagination-loading="true"] {

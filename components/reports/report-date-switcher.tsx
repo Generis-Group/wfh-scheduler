@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -12,6 +13,7 @@ import {
 import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
 import { addReportDateDays } from "@/lib/dates";
+import { anchoredFixedPlacement } from "@/lib/anchored-position";
 import { cn } from "@/lib/utils";
 
 export type ReportDateControl = "previous" | "next" | "picker" | "today";
@@ -23,6 +25,13 @@ type ReportDateSwitcherProps = {
   disabled?: boolean;
   className?: string;
   onChange: (date: string, control: ReportDateControl) => void;
+};
+
+type CalendarPosition = {
+  left: number;
+  top: number;
+  width: number;
+  maxHeight: number;
 };
 
 const dateNavButtonClassName =
@@ -112,15 +121,45 @@ export function ReportDateSwitcher({
   const [pickerMonth, setPickerMonth] = useState(() =>
     monthKeyFromDate(currentDate),
   );
+  const [calendarPosition, setCalendarPosition] =
+    useState<CalendarPosition | null>(null);
   const switcherRef = useRef<HTMLDivElement | null>(null);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
   const canGoToNextDate = currentDate < normalizedMaxDate;
   const calendarDays = calendarDaysForMonth(pickerMonth);
   const canGoToNextCalendarMonth =
     addCalendarMonths(pickerMonth, 1) <= monthKeyFromDate(normalizedMaxDate);
 
+  const updateCalendarPosition = useCallback(() => {
+    if (typeof window === "undefined" || !switcherRef.current) {
+      return;
+    }
+
+    const rect = switcherRef.current.getBoundingClientRect();
+    const placement = anchoredFixedPlacement({
+      anchorRect: rect,
+      preferredWidth: Math.max(rect.width, 300),
+      preferredMaxHeight: 372,
+      minHeight: 220,
+      flipHeight: 260,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      viewportPadding: 8,
+      gap: 6,
+      align: "start",
+    });
+
+    setCalendarPosition({
+      left: placement.left,
+      top: placement.top,
+      width: placement.width,
+      maxHeight: placement.maxHeight,
+    });
+  }, []);
+
   useDismissableLayer({
     open: pickerOpen,
-    refs: [switcherRef],
+    refs: [switcherRef, pickerRef],
     onDismiss: () => setPickerOpen(false),
   });
 
@@ -128,9 +167,29 @@ export function ReportDateSwitcher({
     setPickerMonth(monthKeyFromDate(currentDate));
   }, [currentDate]);
 
+  useEffect(() => {
+    if (!pickerOpen) {
+      setCalendarPosition(null);
+      return undefined;
+    }
+
+    window.addEventListener("resize", updateCalendarPosition);
+    window.addEventListener("scroll", updateCalendarPosition, true);
+    updateCalendarPosition();
+
+    return () => {
+      window.removeEventListener("resize", updateCalendarPosition);
+      window.removeEventListener("scroll", updateCalendarPosition, true);
+    };
+  }, [pickerOpen, updateCalendarPosition]);
+
   function openPicker() {
     if (disabled) {
       return;
+    }
+
+    if (!pickerOpen) {
+      updateCalendarPosition();
     }
 
     setPickerMonth(monthKeyFromDate(currentDate));
@@ -223,72 +282,87 @@ export function ReportDateSwitcher({
         className="pointer-events-none absolute left-1/2 top-1/2 h-px w-px -translate-x-1/2 -translate-y-1/2 border-0 p-0 opacity-0"
         aria-label="Select report date"
       />
-      {pickerOpen ? (
-        <div className="absolute left-0 top-11 z-30 w-[min(300px,calc(100vw-2rem))] min-w-0 rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[520px]:w-full">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              className="reference-menu-button"
-              aria-label="Previous month"
-              onClick={() =>
-                setPickerMonth((month) => addCalendarMonths(month, -1))
-              }
+      {pickerOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={pickerRef}
+              role="dialog"
+              aria-label="Report date picker"
+              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+              style={{
+                left: calendarPosition?.left ?? 0,
+                top: calendarPosition?.top ?? 0,
+                width: calendarPosition?.width,
+                maxHeight: calendarPosition?.maxHeight,
+                visibility: calendarPosition ? "visible" : "hidden",
+              }}
             >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <div className="text-sm font-semibold text-[#111827] dark:text-foreground">
-              {formatMonthLabel(pickerMonth)}
-            </div>
-            <button
-              type="button"
-              className="reference-menu-button"
-              aria-label="Next month"
-              disabled={!canGoToNextCalendarMonth}
-              onClick={() =>
-                setPickerMonth((month) => addCalendarMonths(month, 1))
-              }
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="grid grid-cols-7 gap-1 px-1 pb-1 text-center text-[11px] font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-              (weekday) => (
-                <span key={weekday}>{weekday}</span>
-              ),
-            )}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {calendarDays.map((calendarDay) => {
-              const isSelected = calendarDay.value === currentDate;
-              const isFuture = calendarDay.value > normalizedMaxDate;
-
-              return (
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <button
-                  key={calendarDay.value}
                   type="button"
-                  className={cn(
-                    "flex h-9 items-center justify-center rounded-[7px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]",
-                    calendarDay.inCurrentMonth
-                      ? "text-[#111827] hover:bg-[#eff6ff] dark:text-foreground dark:hover:bg-white/10"
-                      : "text-[#98a2b3] hover:bg-[#f8fafc] dark:text-muted-foreground/70 dark:hover:bg-white/5",
-                    isSelected &&
-                      "bg-[#2563eb] text-white hover:bg-[#1d4ed8] dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400",
-                    isFuture &&
-                      "cursor-not-allowed opacity-35 hover:bg-transparent dark:hover:bg-transparent",
-                  )}
-                  aria-label={`Select ${formatDate(calendarDay.value)}`}
-                  aria-current={isSelected ? "date" : undefined}
-                  disabled={isFuture || disabled}
-                  onClick={() => selectDate(calendarDay.value)}
+                  className="reference-menu-button"
+                  aria-label="Previous month"
+                  onClick={() =>
+                    setPickerMonth((month) => addCalendarMonths(month, -1))
+                  }
                 >
-                  {calendarDay.day}
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
+                <div className="text-sm font-semibold text-[#111827] dark:text-foreground">
+                  {formatMonthLabel(pickerMonth)}
+                </div>
+                <button
+                  type="button"
+                  className="reference-menu-button"
+                  aria-label="Next month"
+                  disabled={!canGoToNextCalendarMonth}
+                  onClick={() =>
+                    setPickerMonth((month) => addCalendarMonths(month, 1))
+                  }
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-7 gap-1 px-1 pb-1 text-center text-[11px] font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                  (weekday) => (
+                    <span key={weekday}>{weekday}</span>
+                  ),
+                )}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {calendarDays.map((calendarDay) => {
+                  const isSelected = calendarDay.value === currentDate;
+                  const isFuture = calendarDay.value > normalizedMaxDate;
+
+                  return (
+                    <button
+                      key={calendarDay.value}
+                      type="button"
+                      className={cn(
+                        "flex h-9 items-center justify-center rounded-[7px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]",
+                        calendarDay.inCurrentMonth
+                          ? "text-[#111827] hover:bg-[#eff6ff] dark:text-foreground dark:hover:bg-white/10"
+                          : "text-[#98a2b3] hover:bg-[#f8fafc] dark:text-muted-foreground/70 dark:hover:bg-white/5",
+                        isSelected &&
+                          "bg-[#2563eb] text-white hover:bg-[#1d4ed8] dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400",
+                        isFuture &&
+                          "cursor-not-allowed opacity-35 hover:bg-transparent dark:hover:bg-transparent",
+                      )}
+                      aria-label={`Select ${formatDate(calendarDay.value)}`}
+                      aria-current={isSelected ? "date" : undefined}
+                      disabled={isFuture || disabled}
+                      onClick={() => selectDate(calendarDay.value)}
+                    >
+                      {calendarDay.day}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

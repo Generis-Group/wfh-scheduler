@@ -353,7 +353,7 @@ export function AdminReportsManager({
                           <span>{departmentLabel(report)}</span>
                           <span>{workLocationLabel(report.workLocation)}</span>
                         </div>
-                        <p className="mt-2 line-clamp-2 break-words text-sm leading-5 text-[#475569] [overflow-wrap:anywhere] dark:text-muted-foreground">
+                        <p className="mt-2 line-clamp-2 break-words text-sm leading-5 text-[#475569] dark:text-muted-foreground">
                           {report.summary.trim() || "No summary recorded."}
                         </p>
                       </div>

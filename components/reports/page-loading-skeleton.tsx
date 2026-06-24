@@ -127,7 +127,7 @@ function DailySkeleton() {
             </div>
           </div>
           <LoadingBar className="mt-3 h-9 rounded-[7px]" />
-          <div className="daily-work-items-list mt-3 min-h-[320px] space-y-2 overflow-hidden p-1 min-[1200px]:min-h-0 min-[1200px]:flex-1">
+          <div className="daily-work-items-list reference-row-scroll mt-3 min-h-[320px] space-y-2 p-1 min-[1200px]:min-h-0 min-[1200px]:flex-1">
             {Array.from({ length: 5 }).map((_, index) => (
               <div
                 key={index}
@@ -182,7 +182,7 @@ function ReportsSkeleton() {
         </div>
       </LoadingCard>
       <section className="reference-card reference-paginated-surface min-[1024px]:flex-1">
-        <div className="reference-paginated-viewport overflow-x-hidden">
+        <div className="reference-paginated-viewport">
           <div
             className={`sticky top-0 z-10 hidden border-b border-[#e8ecf3] bg-white px-4 py-3 dark:border-[#263a55] dark:bg-[#0f1b2a] ${reportHistorySkeletonGridClass}`}
           >

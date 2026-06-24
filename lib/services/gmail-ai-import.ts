@@ -22,6 +22,7 @@ export type GmailMessageEvidence = {
   date: Date;
   subject: string | null;
   text: string;
+  isSentByUser?: boolean;
   senderDomains: string[];
   recipientDomains: string[];
 };
@@ -62,9 +63,9 @@ type GmailImportReason =
   | "coordination"
   | "blocker";
 
-const maxPromptChars = 22000;
+const maxPromptChars = 32000;
 const maxThreadsPerBatch = 8;
-const maxMessageTextLength = 1800;
+const maxMessageTextLength = 2400;
 const maxExtractedTitleLength = 160;
 const maxExtractedDescriptionLength = 360;
 const maxExtractedStatusLength = 80;
@@ -251,6 +252,9 @@ function messageEvidence(
     date,
     subject: cleanText(headerValue(headers, "Subject"), 180),
     text,
+    isSentByUser: Boolean(
+      message.labelIds?.some((label) => label.toUpperCase() === "SENT"),
+    ),
     senderDomains: domainsFromHeader(headerValue(headers, "From")),
     recipientDomains: [
       ...domainsFromHeader(headerValue(headers, "To")),
@@ -439,11 +443,21 @@ function normalizeExtractionItems(
       continue;
     }
 
-    seen.add(dedupeKey);
     const referencedMessages = thread.messages.filter((message) =>
       uniqueMessageIds.includes(message.id),
     );
+    const hasSentMarkers = thread.messages.some(
+      (message) => message.isSentByUser === true,
+    );
 
+    if (
+      hasSentMarkers &&
+      !referencedMessages.some((message) => message.isSentByUser === true)
+    ) {
+      continue;
+    }
+
+    seen.add(dedupeKey);
     items.push({
       threadId,
       messageIds: uniqueMessageIds,
@@ -469,6 +483,9 @@ function threadPromptBlock(thread: GmailThreadEvidence) {
       [
         `Message ${index + 1}: id=${message.id}`,
         `date=${message.date.toISOString()}`,
+        message.isSentByUser
+          ? "author=current_user_sent"
+          : "author=other_participant",
         message.senderDomains.length
           ? `fromDomains=${message.senderDomains.join(",")}`
           : null,
@@ -497,6 +514,9 @@ function buildExtractionPrompt(
     "",
     "Report-worthy items include actual work performed, deliverables, meaningful follow-ups, decisions, client/internal coordination with an outcome, or true blockers.",
     "Exclude newsletters, FYIs, automated mail, calendar notifications, small acknowledgements, pure scheduling chatter, personal content, and vague items.",
+    "Use messages marked author=current_user_sent as the user's work evidence. Other-participant messages are context only.",
+    "Every item should reference at least one current_user_sent message id when the evidence includes sent-message markers.",
+    "Use same-thread replies to understand what the user's sent message accomplished, but do not turn another participant's request or reply into the user's work unless the user responded with concrete work, a decision, or a follow-up commitment.",
     'Titles must be short, specific, and sentence case, like "Fix disappearing sponsor info" or "Update ESC26 delegate list". Preserve Jira keys, acronyms, product names, and event names. Do not use generic titles like "Task completed", "Work update", "Status update", or "Noted".',
     'Use status only when it adds useful information such as "complete", "blocked", or "in progress"; otherwise use null.',
     "Use confidence 0 to 1. Use 0.75+ only when the email clearly shows reportable work.",
@@ -754,6 +774,9 @@ function activityFromItem(
       referencedMessages.flatMap((message) => message.recipientDomains),
     ),
   ].slice(0, 8);
+  const sentMessageIds = referencedMessages
+    .filter((message) => message.isSentByUser === true)
+    .map((message) => message.id);
 
   return {
     source: "GMAIL",
@@ -770,6 +793,7 @@ function activityFromItem(
       importBatch: "gmail-ai-v1",
       threadId: item.threadId,
       messageIds: item.messageIds,
+      sentMessageIds,
       messageDates: referencedMessages.map((message) =>
         message.date.toISOString(),
       ),

@@ -376,6 +376,25 @@ describe("authenticated app shell loading boundaries", () => {
     expect(uniqueLinkHrefs("Settings")).toEqual(["/settings"]);
   });
 
+  it("renders the profile menu outside clipped shell containers", () => {
+    render(
+      React.createElement(
+        "div",
+        { className: "overflow-hidden" },
+        referenceShellElement(),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Test User/ }));
+
+    const menu = screen.getByRole("menu", { name: "Profile menu" });
+
+    expect(menu.parentElement).toBe(document.body);
+    expect(
+      within(menu).getByRole("link", { name: "Account settings" }),
+    ).toBeTruthy();
+  });
+
   it("carries the current page into bug report navigation", () => {
     mockPathname.current = "/reports";
     mockSearchParams.current = "date=2026-05-27";

@@ -1913,7 +1913,7 @@ function TemporaryCredentialsPopup({
                 <div className="text-xs font-medium uppercase tracking-wide text-[#64748b] dark:text-muted-foreground">
                   Email
                 </div>
-                <div className="mt-1 break-all font-mono text-[#111827] dark:text-foreground">
+                <div className="mt-1 break-words font-mono text-[#111827] dark:text-foreground">
                   {credential.email || "-"}
                 </div>
               </div>
@@ -1921,7 +1921,7 @@ function TemporaryCredentialsPopup({
                 <div className="text-xs font-medium uppercase tracking-wide text-[#64748b] dark:text-muted-foreground">
                   Password
                 </div>
-                <div className="mt-1 break-all font-mono text-[#111827] dark:text-foreground">
+                <div className="mt-1 break-words font-mono text-[#111827] dark:text-foreground">
                   {credential.password}
                 </div>
               </div>

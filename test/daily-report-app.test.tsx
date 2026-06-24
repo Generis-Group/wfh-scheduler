@@ -1233,41 +1233,20 @@ describe("DailyReportApp drafts", () => {
     expect(locationPicker.textContent).toContain("Office AM / WFH PM");
   });
 
-  it("saves a weekly plan and applies it to an unsaved daily report", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input) === "/api/work-location-plans") {
-        return Response.json({
-          plan: {
-            id: "plan-1",
-            userId: "user-1",
-            date: "2026-05-20",
-            workLocation: "OFFICE",
-          },
-        });
-      }
+  it("shows today's weekly plan without exposing the full planner", () => {
+    renderDailyReportApp(
+      { ...emptyReport, workLocation: "OFFICE" as const },
+      "2026-05-20",
+      {
+      weeklyPlannedLocations: [{ date: "2026-05-20", workLocation: "OFFICE" }],
+      },
+    );
 
-      return Response.json({ error: "Unexpected request." }, { status: 500 });
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderDailyReportApp();
-
-    fireEvent.change(screen.getByRole("combobox", { name: "Wed, May 20" }), {
-      target: { value: "OFFICE" },
-    });
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/work-location-plans",
-        expect.objectContaining({
-          method: "PUT",
-          body: expect.stringContaining('"workLocation":"OFFICE"'),
-        }),
-      );
-    });
     expect(
       screen.getByRole("combobox", { name: "Work location" }).textContent,
     ).toContain("Office");
+    expect(screen.getByText(/Planned today:/)).toBeTruthy();
+    expect(screen.queryByText("Weekly plan")).toBeNull();
   });
 
   it("confirms changing a daily location away from the weekly plan", async () => {
@@ -2009,21 +1988,24 @@ describe("DailyReportApp drafts", () => {
     ).toBeTruthy();
   });
 
-  it("allows submitting a PTO report without work items or summary", async () => {
-    const ptoDraft = { ...savedDraft, workLocation: "PTO" as const };
-    const ptoSubmittedReport = {
+  it("allows submitting an out-of-office report without work items or summary", async () => {
+    const outOfOfficeDraft = {
+      ...savedDraft,
+      workLocation: "OUT_OF_OFFICE" as const,
+    };
+    const outOfOfficeSubmittedReport = {
       ...submittedReport,
-      workLocation: "PTO" as const,
+      workLocation: "OUT_OF_OFFICE" as const,
     };
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
 
       if (url === "/api/reports") {
-        return Response.json({ report: ptoDraft }, { status: 201 });
+        return Response.json({ report: outOfOfficeDraft }, { status: 201 });
       }
 
       if (url === "/api/reports/report-1/submit") {
-        return Response.json({ report: ptoSubmittedReport });
+        return Response.json({ report: outOfOfficeSubmittedReport });
       }
 
       return Response.json({ error: "Unexpected request." }, { status: 500 });
@@ -2032,7 +2014,7 @@ describe("DailyReportApp drafts", () => {
 
     renderDailyReportApp();
 
-    chooseDailyWorkLocation("PTO");
+    chooseDailyWorkLocation("Out of office");
     fireEvent.click(screen.getByRole("button", { name: "Submit update" }));
 
     await waitFor(() => {
@@ -2040,7 +2022,7 @@ describe("DailyReportApp drafts", () => {
         "/api/reports",
         expect.objectContaining({
           method: "POST",
-          body: expect.stringContaining('"workLocation":"PTO"'),
+          body: expect.stringContaining('"workLocation":"OUT_OF_OFFICE"'),
         }),
       );
       expect(fetchMock).toHaveBeenCalledWith(
@@ -2048,6 +2030,22 @@ describe("DailyReportApp drafts", () => {
         expect.objectContaining({ method: "POST" }),
       );
     });
+  });
+
+  it("does not offer PTO as a daily work location", () => {
+    renderDailyReportApp();
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Work location" }));
+
+    const locationOptions = screen.getByRole("listbox", {
+      name: "Work location options",
+    });
+    expect(
+      within(locationOptions).queryByRole("option", { name: "PTO" }),
+    ).toBeNull();
+    expect(
+      within(locationOptions).getByRole("option", { name: "Out of office" }),
+    ).toBeTruthy();
   });
 
   it("manually saves submitted report edits through the update route", async () => {

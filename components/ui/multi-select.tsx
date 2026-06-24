@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 
 import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
+import { anchoredFixedPlacement } from "@/lib/anchored-position";
 import { cn } from "@/lib/utils";
 
 export type MultiSelectOption = {
@@ -24,6 +26,13 @@ type MultiSelectProps = {
   "aria-label"?: string;
 };
 
+type MenuPosition = {
+  left: number;
+  top: number;
+  width: number;
+  maxHeight: number;
+};
+
 export function MultiSelect({
   options,
   value,
@@ -39,6 +48,9 @@ export function MultiSelect({
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const listboxRef = React.useRef<HTMLDivElement>(null);
   const [open, setOpen] = React.useState(false);
+  const [menuPosition, setMenuPosition] = React.useState<MenuPosition | null>(
+    null,
+  );
   const selectedOptions = options.filter((option) =>
     value.includes(option.value),
   );
@@ -46,29 +58,57 @@ export function MultiSelect({
   const triggerId = `multi-select-${generatedId}`;
   const listboxId = `${triggerId}-listbox`;
 
+  const updateMenuPosition = React.useCallback(() => {
+    if (typeof window === "undefined" || !wrapperRef.current) {
+      return;
+    }
+
+    const rect = wrapperRef.current.getBoundingClientRect();
+    const margin = 8;
+    const gap = 6;
+    const menuWidth = Math.max(rect.width, 192);
+    const placement = anchoredFixedPlacement({
+      anchorRect: rect,
+      preferredWidth: menuWidth,
+      preferredMaxHeight: 288,
+      minHeight: 80,
+      flipHeight: 180,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      viewportPadding: margin,
+      gap,
+      align: "start",
+    });
+
+    setMenuPosition({
+      left: placement.left,
+      top: placement.top,
+      width: placement.width,
+      maxHeight: placement.maxHeight,
+    });
+  }, []);
+
   useDismissableLayer({
     open,
-    refs: [wrapperRef],
+    refs: [wrapperRef, listboxRef],
     onDismiss: () => setOpen(false),
   });
 
   React.useEffect(() => {
     if (!open) {
-      return;
+      setMenuPosition(null);
+      return undefined;
     }
 
-    const timeout = window.setTimeout(() => {
-      if (typeof listboxRef.current?.scrollIntoView === "function") {
-        listboxRef.current.scrollIntoView({
-          block: "nearest",
-          inline: "nearest",
-          behavior: "smooth",
-        });
-      }
-    }, 0);
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    updateMenuPosition();
 
-    return () => window.clearTimeout(timeout);
-  }, [open]);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [open, updateMenuPosition]);
 
   function orderedValues(nextValues: string[]) {
     const nextValueSet = new Set(nextValues);
@@ -111,7 +151,15 @@ export function MultiSelect({
         aria-expanded={open}
         aria-controls={listboxId}
         disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (open) {
+            setOpen(false);
+            return;
+          }
+
+          updateMenuPosition();
+          setOpen(true);
+        }}
         onKeyDown={(event) => {
           if (
             event.key === "ArrowDown" ||
@@ -119,6 +167,7 @@ export function MultiSelect({
             event.key === " "
           ) {
             event.preventDefault();
+            updateMenuPosition();
             setOpen(true);
           }
         }}
@@ -141,42 +190,54 @@ export function MultiSelect({
         />
       </button>
 
-      {open ? (
-        <div
-          ref={listboxRef}
-          id={listboxId}
-          role="listbox"
-          aria-labelledby={triggerId}
-          aria-multiselectable="true"
-          className="absolute left-0 top-[calc(100%+0.375rem)] z-[90] max-h-72 w-full min-w-[12rem] scroll-mb-3 scroll-mt-3 overflow-y-auto rounded-[8px] border border-[#dfe5ef] bg-white p-1.5 text-sm shadow-[var(--surface-shadow-strong)] dark:border-[#263a55] dark:bg-[#0f1b2a]"
-        >
-          {options.map((option) => {
-            const selected = value.includes(option.value);
-            const locked =
-              selected && value.length <= minSelected && minSelected > 0;
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={listboxRef}
+              id={listboxId}
+              role="listbox"
+              aria-labelledby={triggerId}
+              aria-multiselectable="true"
+              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] border border-[#dfe5ef] bg-white p-1.5 text-sm shadow-[var(--surface-shadow-strong)] [scrollbar-gutter:stable] dark:border-[#263a55] dark:bg-[#0f1b2a]"
+              style={{
+                left: menuPosition?.left ?? 0,
+                top: menuPosition?.top ?? 0,
+                width: menuPosition?.width,
+                maxHeight: menuPosition?.maxHeight,
+                visibility: menuPosition ? "visible" : "hidden",
+              }}
+            >
+              {options.map((option) => {
+                const selected = value.includes(option.value);
+                const locked =
+                  selected && value.length <= minSelected && minSelected > 0;
 
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                disabled={disabled || option.disabled || locked}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-[7px] px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-45",
-                  selected
-                    ? "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-blue-100"
-                    : "text-[#344054] hover:bg-[#f6f8fb] dark:text-foreground dark:hover:bg-white/[0.055]",
-                )}
-                onClick={() => toggleValue(option.value)}
-              >
-                <span className="min-w-0 truncate">{option.label}</span>
-                {selected ? <Check className="h-4 w-4 shrink-0" /> : null}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    disabled={disabled || option.disabled || locked}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded-[7px] px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-45",
+                      selected
+                        ? "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-blue-100"
+                        : "text-[#344054] hover:bg-[#f6f8fb] dark:text-foreground dark:hover:bg-white/[0.055]",
+                    )}
+                    onClick={() => toggleValue(option.value)}
+                  >
+                    <span className="min-w-0 truncate">{option.label}</span>
+                    {selected ? (
+                      <Check className="h-4 w-4 shrink-0" />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

@@ -202,12 +202,21 @@ vi.mock("@/lib/services/work-location-plans", () => ({
       dateString: string;
       departmentId?: string | null;
     }) => ({
+      viewerUserId: "user-1",
+      canPlanOwnWeek: true,
       weekStart: "2026-05-11",
       weekEnd: "2026-05-17",
       dates: [dateString],
       departments: [],
       selectedDepartmentId: departmentId ?? null,
+      myPlans: [],
       rows: [],
+      month: {
+        monthStart: "2026-05-01",
+        monthEnd: "2026-05-31",
+        dates: [{ date: dateString, inCurrentMonth: true }],
+        rows: [],
+      },
     }),
   ),
 }));

@@ -1,9 +1,12 @@
-import { isRealWorkLocation } from "@/lib/work-locations";
+import {
+  isRealWorkLocation,
+  normalizeWorkLocationValue,
+} from "@/lib/work-locations";
 
-const submittableNonWorkLocations = new Set(["PTO", "OUT_OF_OFFICE"]);
+const submittableNonWorkLocations = new Set(["OUT_OF_OFFICE"]);
 
 export const emptyReportSubmitMessage =
-  "Add work items, a summary, or choose PTO/out of office before submitting.";
+  "Add work items, a summary, or choose out of office before submitting.";
 
 export const missingWorkLocationSubmitMessage =
   "Choose where you are working before submitting.";
@@ -23,9 +26,11 @@ export function hasSubmitReadyContent({
   activities?: Array<{ selected?: boolean | null }>;
   manualActivities?: Array<unknown>;
 }) {
+  const normalizedWorkLocation = normalizeWorkLocationValue(workLocation);
+
   return Boolean(
     summary?.trim() ||
-    submittableNonWorkLocations.has(workLocation ?? "") ||
+    submittableNonWorkLocations.has(normalizedWorkLocation ?? "") ||
     activities.some((activity) => activity.selected !== false) ||
     manualActivities.length > 0,
   );

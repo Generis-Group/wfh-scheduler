@@ -2,6 +2,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 
+import { anchoredFixedPlacement } from "@/lib/anchored-position";
 import { cn } from "@/lib/utils";
 
 type SelectOption = {
@@ -108,46 +109,28 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
       }
 
       const rect = wrapperRef.current.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      const viewportWidth = window.innerWidth;
       const margin = 8;
       const gap = 6;
       const menuWidth = Math.max(rect.width, 192);
-      const left = Math.min(
-        Math.max(margin, rect.left),
-        Math.max(margin, viewportWidth - margin - menuWidth),
-      );
-      const spaceBelow = viewportHeight - rect.bottom - margin - gap;
-      const spaceAbove = rect.top - margin - gap;
-      let placement = menuPlacement;
-
-      if (
-        placement === "bottom" &&
-        spaceBelow < 180 &&
-        spaceAbove > spaceBelow
-      ) {
-        placement = "top";
-      }
-
-      if (placement === "top" && spaceAbove < 180 && spaceBelow > spaceAbove) {
-        placement = "bottom";
-      }
-
-      const availableSpace = Math.max(
-        80,
-        placement === "top" ? spaceAbove : spaceBelow,
-      );
-      const maxHeight = Math.min(256, availableSpace);
-      const top =
-        placement === "top"
-          ? Math.max(margin, rect.top - gap - maxHeight)
-          : Math.min(rect.bottom + gap, viewportHeight - margin - maxHeight);
+      const placement = anchoredFixedPlacement({
+        anchorRect: rect,
+        preferredWidth: menuWidth,
+        preferredMaxHeight: 256,
+        minHeight: 80,
+        flipHeight: 180,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        viewportPadding: margin,
+        gap,
+        placement: menuPlacement,
+        align: "start",
+      });
 
       setMenuPosition({
-        left,
-        top,
-        width: menuWidth,
-        maxHeight,
+        left: placement.left,
+        top: placement.top,
+        width: placement.width,
+        maxHeight: placement.maxHeight,
       });
     }, [menuPlacement]);
 

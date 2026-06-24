@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import type { ElementType, MouseEvent, ReactNode } from "react";
 import {
   BarChart3,
@@ -39,6 +39,7 @@ import {
   serverDataFreshEvent,
   serverDataStaleEvent,
 } from "@/lib/client-cache-invalidation";
+import { anchoredFixedPlacement } from "@/lib/anchored-position";
 import { clampReportDateToToday, todayDateString } from "@/lib/dates";
 import { startClientTiming } from "@/lib/performance";
 import { cn, initials } from "@/lib/utils";
@@ -210,6 +211,12 @@ export function ReferenceAppShell({
   );
   const active = activeNavKey(pathname);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileMenuPosition, setProfileMenuPosition] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [lastReportDate, setLastReportDate] = useState<string | null>(null);
   const [lastReviewDate, setLastReviewDate] = useState<string | null>(null);
@@ -219,6 +226,7 @@ export function ReferenceAppShell({
   const [freshServerDataVersion, setFreshServerDataVersion] = useState(0);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const profileMenuPanelRef = useRef<HTMLDivElement | null>(null);
   const mobileNavButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileNavRef = useRef<HTMLDivElement | null>(null);
   const prefetchedHrefsRef = useRef<Set<string>>(new Set());
@@ -252,7 +260,7 @@ export function ReferenceAppShell({
 
   useDismissableLayer({
     open: profileOpen,
-    refs: [profileMenuRef],
+    refs: [profileMenuRef, profileMenuPanelRef],
     onDismiss: () => setProfileOpen(false),
   });
 
@@ -261,6 +269,32 @@ export function ReferenceAppShell({
     refs: [mobileNavButtonRef, mobileNavRef],
     onDismiss: () => setMobileNavOpen(false),
   });
+
+  const updateProfileMenuPosition = useCallback(() => {
+    if (typeof window === "undefined" || !profileMenuRef.current) {
+      return;
+    }
+
+    const placement = anchoredFixedPlacement({
+      anchorRect: profileMenuRef.current.getBoundingClientRect(),
+      preferredWidth: 288,
+      preferredMaxHeight: 320,
+      minHeight: 120,
+      flipHeight: 220,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      viewportPadding: 8,
+      gap: 6,
+      align: "end",
+    });
+
+    setProfileMenuPosition({
+      left: placement.left,
+      top: placement.top,
+      width: placement.width,
+      maxHeight: placement.maxHeight,
+    });
+  }, []);
 
   const prefetchRoute = useCallback(
     (href: string) => {
@@ -275,6 +309,22 @@ export function ReferenceAppShell({
     },
     [router],
   );
+
+  useEffect(() => {
+    if (!profileOpen) {
+      setProfileMenuPosition(null);
+      return undefined;
+    }
+
+    window.addEventListener("resize", updateProfileMenuPosition);
+    window.addEventListener("scroll", updateProfileMenuPosition, true);
+    updateProfileMenuPosition();
+
+    return () => {
+      window.removeEventListener("resize", updateProfileMenuPosition);
+      window.removeEventListener("scroll", updateProfileMenuPosition, true);
+    };
+  }, [profileOpen, updateProfileMenuPosition]);
 
   const refreshDestinationAfterStaleNavigation = useCallback(() => {
     const refreshHref = refreshAfterNavigationHrefRef.current;
@@ -707,6 +757,9 @@ export function ReferenceAppShell({
                   <button
                     className="flex min-w-0 items-center gap-2 rounded-[8px] px-1 py-0.5 transition-colors hover:bg-[#f3f6fb] dark:hover:bg-white/[0.06] sm:px-1.5"
                     onClick={() => {
+                      if (!profileOpen) {
+                        updateProfileMenuPosition();
+                      }
                       setProfileOpen((open) => !open);
                     }}
                     aria-expanded={profileOpen}
@@ -735,48 +788,63 @@ export function ReferenceAppShell({
                     />
                   </button>
                 )}
-                {!profileLoading && profileOpen ? (
-                  <div
-                    className="absolute right-0 top-10 z-30 w-72 overflow-hidden rounded-[10px] border border-[#dfe5ef] bg-[#ffffff] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.14)] dark:border-[#24354c] dark:bg-[#0f1b2a] dark:shadow-[0_18px_45px_rgba(0,0,0,0.42)]"
-                    role="menu"
-                  >
-                    <div className="rounded-[8px] bg-[#f6f8fb] px-3 py-2 dark:bg-[#0b1523]">
-                      <div className="truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0]">
-                        {displayName}
-                      </div>
-                      <div className="text-xs text-[#64748b] dark:text-[#94a3b8]">
-                        {userEmail ?? (displayName ? "Signed in" : "Account")}
-                      </div>
-                    </div>
-                    <Link
-                      href="/settings#account"
-                      {...routeLinkProps("/settings#account", "settings")}
-                      className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#344054] transition-colors hover:bg-[#f6f8fb] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
-                    >
-                      <CircleUser className="h-4 w-4" />
-                      Account settings
-                    </Link>
-                    {mustChangePassword ? (
-                      <Link
-                        href="/change-password"
-                        {...routeLinkProps("/change-password")}
-                        className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#344054] transition-colors hover:bg-[#f6f8fb] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                {!profileLoading && profileOpen && typeof document !== "undefined"
+                  ? createPortal(
+                      <div
+                        ref={profileMenuPanelRef}
+                        className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[10px] border border-[#dfe5ef] bg-[#ffffff] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.14)] [scrollbar-gutter:stable] dark:border-[#24354c] dark:bg-[#0f1b2a] dark:shadow-[0_18px_45px_rgba(0,0,0,0.42)]"
+                        role="menu"
+                        aria-label="Profile menu"
+                        style={{
+                          left: profileMenuPosition?.left ?? 0,
+                          top: profileMenuPosition?.top ?? 0,
+                          width: profileMenuPosition?.width,
+                          maxHeight: profileMenuPosition?.maxHeight,
+                          visibility: profileMenuPosition
+                            ? "visible"
+                            : "hidden",
+                        }}
                       >
-                        <KeyRound className="h-4 w-4" />
-                        Change password
-                      </Link>
-                    ) : null}
-                    <button
-                      className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#344054] transition-colors hover:bg-[#f6f8fb] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
-                      onClick={() => {
-                        signOut({ callbackUrl: "/login" });
-                      }}
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Sign out
-                    </button>
-                  </div>
-                ) : null}
+                        <div className="rounded-[8px] bg-[#f6f8fb] px-3 py-2 dark:bg-[#0b1523]">
+                          <div className="truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0]">
+                            {displayName}
+                          </div>
+                          <div className="text-xs text-[#64748b] dark:text-[#94a3b8]">
+                            {userEmail ??
+                              (displayName ? "Signed in" : "Account")}
+                          </div>
+                        </div>
+                        <Link
+                          href="/settings#account"
+                          {...routeLinkProps("/settings#account", "settings")}
+                          className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#344054] transition-colors hover:bg-[#f6f8fb] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                        >
+                          <CircleUser className="h-4 w-4" />
+                          Account settings
+                        </Link>
+                        {mustChangePassword ? (
+                          <Link
+                            href="/change-password"
+                            {...routeLinkProps("/change-password")}
+                            className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#344054] transition-colors hover:bg-[#f6f8fb] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                            Change password
+                          </Link>
+                        ) : null}
+                        <button
+                          className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#344054] transition-colors hover:bg-[#f6f8fb] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                          onClick={() => {
+                            signOut({ callbackUrl: "/login" });
+                          }}
+                        >
+                          <LogOut className="h-4 w-4" />
+                          Sign out
+                        </button>
+                      </div>,
+                      document.body,
+                    )
+                  : null}
               </div>
             </div>
           </div>

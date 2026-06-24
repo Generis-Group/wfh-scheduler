@@ -17,7 +17,6 @@ export const realWorkLocationValues = [
   "HYBRID",
   "OFFICE_AM_WFH_PM",
   "WFH_AM_OFFICE_PM",
-  "PTO",
   "OUT_OF_OFFICE",
 ] as const;
 
@@ -26,7 +25,6 @@ export const plannedWorkLocationValues = [
   "WFH",
   "OFFICE_AM_WFH_PM",
   "WFH_AM_OFFICE_PM",
-  "PTO",
   "OUT_OF_OFFICE",
 ] as const;
 
@@ -38,19 +36,45 @@ export const dailyWorkLocationValues = [
 export type PlannedWorkLocationValue =
   (typeof plannedWorkLocationValues)[number];
 
+export function normalizeWorkLocationValue(
+  value?: string | null,
+): WorkLocationValue | null {
+  if (value === "PTO") {
+    return "OUT_OF_OFFICE";
+  }
+
+  return workLocationValues.includes(value as WorkLocationValue)
+    ? (value as WorkLocationValue)
+    : null;
+}
+
+export function normalizePlannedWorkLocationValue(
+  value?: string | null,
+): PlannedWorkLocationValue | null {
+  const normalized = normalizeWorkLocationValue(value);
+
+  return plannedWorkLocationValues.includes(
+    normalized as PlannedWorkLocationValue,
+  )
+    ? (normalized as PlannedWorkLocationValue)
+    : null;
+}
+
 const workLocationLabels: Record<WorkLocationValue, string> = {
   OFFICE: "Office",
   WFH: "WFH",
   HYBRID: "Hybrid",
   OFFICE_AM_WFH_PM: "Office AM / WFH PM",
   WFH_AM_OFFICE_PM: "WFH AM / Office PM",
-  PTO: "PTO",
+  PTO: "Out of office",
   OUT_OF_OFFICE: "Out of office",
   UNKNOWN: "Unspecified",
 };
 
 export function workLocationLabel(value?: string | null) {
-  return workLocationLabels[value as WorkLocationValue] ?? "Unspecified";
+  const normalized = normalizeWorkLocationValue(value);
+
+  return normalized ? workLocationLabels[normalized] : "Unspecified";
 }
 
 export function isWorkLocationValue(
@@ -60,8 +84,10 @@ export function isWorkLocationValue(
 }
 
 export function isRealWorkLocation(value?: string | null) {
+  const normalized = normalizeWorkLocationValue(value);
+
   return realWorkLocationValues.includes(
-    value as (typeof realWorkLocationValues)[number],
+    normalized as (typeof realWorkLocationValues)[number],
   );
 }
 

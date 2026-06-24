@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import {
   ArrowLeft,
   ArrowUpDown,
@@ -42,6 +42,7 @@ import {
   fetchJsonWithClientCache,
   writeClientJsonCache,
 } from "@/lib/client-request-cache";
+import { anchoredFixedPlacement } from "@/lib/anchored-position";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
 import {
   clampReportDateToToday,
@@ -252,10 +253,18 @@ export function ReportHistory({
   const [fromDate, setFromDate] = useState("");
   const [toDateValue, setToDateValue] = useState("");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [datePickerPosition, setDatePickerPosition] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const [rowMenu, setRowMenu] = useState<{
     id: string;
     top: number;
     left: number;
+    width: number;
+    maxHeight: number;
   } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pendingReportAction, setPendingReportAction] =
@@ -264,6 +273,7 @@ export function ReportHistory({
     string | null
   >(null);
   const datePickerRef = useRef<HTMLDivElement | null>(null);
+  const datePickerPanelRef = useRef<HTMLDivElement | null>(null);
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
   const filterReadyRef = useRef(false);
   const cacheSeededRef = useRef(false);
@@ -273,7 +283,7 @@ export function ReportHistory({
 
   useDismissableLayer({
     open: datePickerOpen,
-    refs: [datePickerRef],
+    refs: [datePickerRef, datePickerPanelRef],
     onDismiss: () => setDatePickerOpen(false),
   });
 
@@ -282,6 +292,49 @@ export function ReportHistory({
     refs: [rowMenuRef],
     onDismiss: () => setRowMenu(null),
   });
+
+  const updateDatePickerPosition = useCallback(() => {
+    if (typeof window === "undefined" || !datePickerRef.current) {
+      return;
+    }
+
+    const rect = datePickerRef.current.getBoundingClientRect();
+    const placement = anchoredFixedPlacement({
+      anchorRect: rect,
+      preferredWidth: Math.max(rect.width, 320),
+      preferredMaxHeight: 336,
+      minHeight: 220,
+      flipHeight: 260,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      viewportPadding: 8,
+      gap: 6,
+      align: "end",
+    });
+
+    setDatePickerPosition({
+      top: placement.top,
+      left: placement.left,
+      width: placement.width,
+      maxHeight: placement.maxHeight,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!datePickerOpen) {
+      setDatePickerPosition(null);
+      return undefined;
+    }
+
+    window.addEventListener("resize", updateDatePickerPosition);
+    window.addEventListener("scroll", updateDatePickerPosition, true);
+    updateDatePickerPosition();
+
+    return () => {
+      window.removeEventListener("resize", updateDatePickerPosition);
+      window.removeEventListener("scroll", updateDatePickerPosition, true);
+    };
+  }, [datePickerOpen, updateDatePickerPosition]);
 
   const reportPageCount = Math.max(1, Math.ceil(totalCount / reportPageSize));
   const currentReportPage = Math.min(reportPage, reportPageCount);
@@ -651,19 +704,21 @@ export function ReportHistory({
     }
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const menuWidth = 220;
-    const menuHeight = report.status === "DRAFT" ? 220 : 132;
+    const placement = anchoredFixedPlacement({
+      anchorRect: rect,
+      preferredWidth: 220,
+      preferredMaxHeight: report.status === "DRAFT" ? 220 : 132,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    });
+
     setDatePickerOpen(false);
     setRowMenu({
       id: report.id,
-      top: Math.min(
-        window.innerHeight - menuHeight - 12,
-        Math.max(12, rect.bottom + 8),
-      ),
-      left: Math.min(
-        window.innerWidth - menuWidth - 12,
-        Math.max(12, rect.right - menuWidth),
-      ),
+      top: placement.top,
+      left: placement.left,
+      width: placement.width,
+      maxHeight: placement.maxHeight,
     });
   }
 
@@ -743,9 +798,13 @@ export function ReportHistory({
               </Select>
               <div ref={datePickerRef} className="relative">
                 <button
+                  type="button"
                   className="flex h-11 w-full items-center gap-3 rounded-[8px] bg-white px-4 text-left text-sm font-medium text-[#111827] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]"
                   onClick={() => {
                     setRowMenu(null);
+                    if (!datePickerOpen) {
+                      updateDatePickerPosition();
+                    }
                     setDatePickerOpen((open) => !open);
                   }}
                 >
@@ -755,58 +814,75 @@ export function ReportHistory({
                   </span>
                   <ChevronDown className="h-4 w-4 text-[#667085]" />
                 </button>
-                {datePickerOpen ? (
-                  <div className="absolute right-0 top-[3.25rem] z-30 w-[320px] rounded-[12px] bg-white p-3 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
-                    <div className="grid gap-3">
-                      <label className="text-xs font-medium text-[#667085]">
-                        From
-                        <Input
-                          type="date"
-                          value={fromDate}
-                          max={maxReportDate}
-                          onChange={(event) => {
-                            setReportPage(1);
-                            setFromDate(
-                              event.target.value
-                                ? clampReportDateToToday(event.target.value)
-                                : "",
-                            );
-                          }}
-                          className="mt-1 h-10"
-                        />
-                      </label>
-                      <label className="text-xs font-medium text-[#667085]">
-                        To
-                        <Input
-                          type="date"
-                          value={toDateValue}
-                          max={maxReportDate}
-                          onChange={(event) => {
-                            setReportPage(1);
-                            setToDateValue(
-                              event.target.value
-                                ? clampReportDateToToday(event.target.value)
-                                : "",
-                            );
-                          }}
-                          className="mt-1 h-10"
-                        />
-                      </label>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setFromDate("");
-                          setToDateValue("");
-                          setReportPage(1);
-                          setDatePickerOpen(false);
+                {datePickerOpen && typeof document !== "undefined"
+                  ? createPortal(
+                      <div
+                        ref={datePickerPanelRef}
+                        role="dialog"
+                        aria-label="Report history date range"
+                        className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[12px] bg-white p-3 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                        style={{
+                          top: datePickerPosition?.top ?? 0,
+                          left: datePickerPosition?.left ?? 0,
+                          width: datePickerPosition?.width,
+                          maxHeight: datePickerPosition?.maxHeight,
+                          visibility: datePickerPosition
+                            ? "visible"
+                            : "hidden",
                         }}
                       >
-                        Clear dates
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
+                        <div className="grid gap-3">
+                          <label className="text-xs font-medium text-[#667085]">
+                            From
+                            <Input
+                              type="date"
+                              value={fromDate}
+                              max={maxReportDate}
+                              onChange={(event) => {
+                                setReportPage(1);
+                                setFromDate(
+                                  event.target.value
+                                    ? clampReportDateToToday(event.target.value)
+                                    : "",
+                                );
+                              }}
+                              className="mt-1 h-10"
+                            />
+                          </label>
+                          <label className="text-xs font-medium text-[#667085]">
+                            To
+                            <Input
+                              type="date"
+                              value={toDateValue}
+                              max={maxReportDate}
+                              onChange={(event) => {
+                                setReportPage(1);
+                                setToDateValue(
+                                  event.target.value
+                                    ? clampReportDateToToday(event.target.value)
+                                    : "",
+                                );
+                              }}
+                              className="mt-1 h-10"
+                            />
+                          </label>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setFromDate("");
+                              setToDateValue("");
+                              setReportPage(1);
+                              setDatePickerOpen(false);
+                            }}
+                          >
+                            Clear dates
+                          </Button>
+                        </div>
+                      </div>,
+                      document.body,
+                    )
+                  : null}
               </div>
               <Button
                 className="h-11 rounded-[8px] bg-[#2563eb] text-sm font-semibold hover:bg-[#1d4ed8]"
@@ -820,7 +896,7 @@ export function ReportHistory({
 
           <section className="reference-paginated-surface rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43] min-[1024px]:flex-1">
             <div
-              className="reference-paginated-viewport overflow-x-hidden"
+              className="reference-paginated-viewport"
               data-pagination-loading={
                 isRefreshing && items.length > 0 ? "true" : undefined
               }
@@ -937,8 +1013,13 @@ export function ReportHistory({
               />
               <div
                 ref={rowMenuRef}
-                className="fixed z-50 w-[220px] rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
-                style={{ top: rowMenu.top, left: rowMenu.left }}
+                className="fixed z-50 overflow-y-auto overscroll-contain rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-[#e1e6ef] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                style={{
+                  top: rowMenu.top,
+                  left: rowMenu.left,
+                  width: rowMenu.width,
+                  maxHeight: rowMenu.maxHeight,
+                }}
                 role="menu"
               >
                 <MenuButton

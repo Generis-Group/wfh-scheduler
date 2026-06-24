@@ -89,6 +89,7 @@ describe("Gmail AI import helpers", () => {
           {
             id: "message-1",
             threadId: "thread-1",
+            labelIds: ["SENT"],
             internalDate: String(
               new Date("2026-05-14T14:00:00.000Z").getTime(),
             ),
@@ -131,6 +132,7 @@ describe("Gmail AI import helpers", () => {
     expect(evidence?.messages[0]).toMatchObject({
       id: "message-1",
       subject: "Launch follow-up",
+      isSentByUser: true,
       senderDomains: ["generisgp.com"],
       recipientDomains: ["example.com"],
     });
@@ -402,6 +404,145 @@ describe("Gmail AI import helpers", () => {
     });
   });
 
+  it("marks sent Gmail messages as user evidence and rejects reply-only candidates", async () => {
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          threadId: "thread-1",
+          messageIds: ["message-sent"],
+          title: "Update ESC26 delegate list",
+          description: "Sent the delegate list update for review.",
+          confidence: 0.88,
+          reason: "work_performed",
+        },
+        {
+          threadId: "thread-1",
+          messageIds: ["message-reply"],
+          title: "Review ESC26 delegate list",
+          description: "The reply asked for another review.",
+          confidence: 0.91,
+          reason: "follow_up",
+        },
+      ]),
+    );
+
+    const activities = await extractGmailActivitiesWithAI(
+      "user-1",
+      "2026-05-14",
+      [
+        {
+          threadId: "thread-1",
+          subject: "ESC26 delegates",
+          messages: [
+            {
+              id: "message-sent",
+              threadId: "thread-1",
+              date: new Date("2026-05-14T14:00:00.000Z"),
+              subject: "ESC26 delegates",
+              text: "I updated the ESC26 delegate list and sent it over.",
+              isSentByUser: true,
+              senderDomains: ["generisgp.com"],
+              recipientDomains: ["example.com"],
+            },
+            {
+              id: "message-reply",
+              threadId: "thread-1",
+              date: new Date("2026-05-14T14:05:00.000Z"),
+              subject: "ESC26 delegates",
+              text: "Can you also check the late additions?",
+              isSentByUser: false,
+              senderDomains: ["example.com"],
+              recipientDomains: ["generisgp.com"],
+            },
+          ],
+        },
+      ],
+      start,
+      end,
+    );
+
+    const prompt = String(generateContentMock.mock.calls[0][0].contents);
+    expect(prompt).toContain("author=current_user_sent");
+    expect(prompt).toContain("author=other_participant");
+    expect(prompt).toContain("Other-participant messages are context only");
+    expect(activities.map((activity) => activity.title)).toEqual([
+      "Update ESC26 delegate list",
+    ]);
+    expect(activities[0].metadata).toEqual(
+      expect.objectContaining({
+        sentMessageIds: ["message-sent"],
+      }),
+    );
+  });
+
+  it("does not let a rejected reply-only candidate hide a valid sent candidate", async () => {
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          threadId: "thread-1",
+          messageIds: ["message-reply"],
+          title: "Update ESC26 delegate list",
+          description: "The reply asked for the delegate list update.",
+          confidence: 0.91,
+          reason: "follow_up",
+        },
+        {
+          threadId: "thread-1",
+          messageIds: ["message-sent"],
+          title: "Update ESC26 delegate list",
+          description: "Sent the delegate list update for review.",
+          confidence: 0.88,
+          reason: "work_performed",
+        },
+      ]),
+    );
+
+    const activities = await extractGmailActivitiesWithAI(
+      "user-1",
+      "2026-05-14",
+      [
+        {
+          threadId: "thread-1",
+          subject: "ESC26 delegates",
+          messages: [
+            {
+              id: "message-sent",
+              threadId: "thread-1",
+              date: new Date("2026-05-14T14:00:00.000Z"),
+              subject: "ESC26 delegates",
+              text: "I updated the ESC26 delegate list and sent it over.",
+              isSentByUser: true,
+              senderDomains: ["generisgp.com"],
+              recipientDomains: ["example.com"],
+            },
+            {
+              id: "message-reply",
+              threadId: "thread-1",
+              date: new Date("2026-05-14T14:05:00.000Z"),
+              subject: "ESC26 delegates",
+              text: "Can you also check the late additions?",
+              isSentByUser: false,
+              senderDomains: ["example.com"],
+              recipientDomains: ["generisgp.com"],
+            },
+          ],
+        },
+      ],
+      start,
+      end,
+    );
+
+    expect(activities.map((activity) => activity.title)).toEqual([
+      "Update ESC26 delegate list",
+    ]);
+    expect(activities[0].metadata).toEqual(
+      expect.objectContaining({
+        messageIds: ["message-sent"],
+        sentMessageIds: ["message-sent"],
+      }),
+    );
+  });
+
   it("fails instead of returning partial items when a single-thread AI response is truncated", async () => {
     generateContentMock.mockResolvedValue({
       text: "",
@@ -539,7 +680,7 @@ describe("Gmail AI import helpers", () => {
 
     expect(generateContentMock.mock.calls.length).toBeGreaterThan(1);
     for (const [call] of generateContentMock.mock.calls) {
-      expect(call.contents.length).toBeLessThanOrEqual(22_000);
+      expect(call.contents.length).toBeLessThanOrEqual(32_000);
     }
   });
 

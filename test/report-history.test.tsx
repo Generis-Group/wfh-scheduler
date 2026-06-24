@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { ReportHistory } from "@/components/reports/report-history";
@@ -91,5 +91,23 @@ describe("ReportHistory review notes", () => {
     expect(screen.queryByText("Status")).toBeNull();
     expect(screen.queryByText("Summary")).toBeNull();
     expect(screen.queryByText("Actions")).toBeNull();
+  });
+
+  it("renders the date range picker outside clipped filter containers", () => {
+    render(
+      <div className="overflow-hidden">
+        <ReportHistory reports={[]} />
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "All dates" }));
+
+    const dateRangeDialog = screen.getByRole("dialog", {
+      name: "Report history date range",
+    });
+
+    expect(dateRangeDialog.parentElement).toBe(document.body);
+    expect(within(dateRangeDialog).getByLabelText("From")).toBeTruthy();
+    expect(within(dateRangeDialog).getByLabelText("To")).toBeTruthy();
   });
 });

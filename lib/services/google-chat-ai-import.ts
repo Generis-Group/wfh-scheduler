@@ -32,6 +32,7 @@ export type GoogleChatConversationEvidence = {
   spaceDisplayName: string | null;
   spaceUri: string | null;
   threadName: string | null;
+  contextType?: "thread" | "space_window";
   messages: GoogleChatMessageEvidence[];
 };
 
@@ -65,15 +66,17 @@ type GoogleChatImportReason =
   | "coordination"
   | "blocker";
 
-const maxPromptChars = 22000;
+const maxPromptChars = 32000;
 const maxConversationsPerBatch = 12;
-const maxMessageTextLength = 1600;
+const maxMessageTextLength = 2200;
 const maxExtractedTitleLength = 160;
 const maxExtractedDescriptionLength = 360;
 const maxExtractedStatusLength = 80;
 const maxExtractedReasonLength = 40;
 const minLeakCheckChars = 18;
 const minLeakCheckWords = 4;
+const unthreadedContextWindowMs = 30 * 60 * 1000;
+const maxUnthreadedContextMessagesPerSide = 6;
 const selectedConfidenceThreshold = 0.75;
 const minimumConfidenceThreshold = 0.5;
 const allowedReasons = new Set<GoogleChatImportReason>([
@@ -180,6 +183,10 @@ function conversationIdForMessage(message: chat_v1.Schema$Message) {
   return message.thread?.name ?? message.name ?? null;
 }
 
+function isThreadConversationId(spaceName: string, conversationId: string) {
+  return conversationId.startsWith(`${spaceName}/threads/`);
+}
+
 function normalizedSenderName(value?: string | null) {
   const normalized = value?.trim().toLowerCase();
 
@@ -244,49 +251,131 @@ export function googleChatConversationEvidence(
     return [];
   }
 
-  const groups = new Map<string, GoogleChatMessageEvidence[]>();
+  const evidenceMessages = messages
+    .map((message) =>
+      messageEvidence(space, message, start, end, currentUserNames),
+    )
+    .filter((item): item is GoogleChatMessageEvidence => Boolean(item))
+    .sort((left, right) => left.date.getTime() - right.date.getTime());
+  const threadedGroups = new Map<string, GoogleChatMessageEvidence[]>();
+  const unthreadedMessages: GoogleChatMessageEvidence[] = [];
 
-  for (const message of messages) {
-    const evidence = messageEvidence(
-      space,
-      message,
-      start,
-      end,
-      currentUserNames,
-    );
-
-    if (!evidence) {
+  for (const evidence of evidenceMessages) {
+    if (isThreadConversationId(space.name, evidence.conversationId)) {
+      threadedGroups.set(evidence.conversationId, [
+        ...(threadedGroups.get(evidence.conversationId) ?? []),
+        evidence,
+      ]);
       continue;
     }
 
-    groups.set(evidence.conversationId, [
-      ...(groups.get(evidence.conversationId) ?? []),
-      evidence,
-    ]);
+    unthreadedMessages.push(evidence);
   }
 
-  return [...groups.entries()]
+  const threadedConversations = [...threadedGroups.entries()]
     .filter(([, groupedMessages]) =>
       groupedMessages.some((message) => message.isCurrentUser),
     )
-    .map(([conversationId, groupedMessages]) => ({
-      conversationId,
-      spaceName: space.name!,
-      spaceDisplayName: cleanText(space.displayName, 128),
-      spaceUri: normalizeHttpsUrl(space.spaceUri),
-      threadName: conversationId.startsWith(`${space.name}/threads/`)
-        ? conversationId
-        : null,
-      messages: groupedMessages.sort(
-        (left, right) => left.date.getTime() - right.date.getTime(),
-      ),
-    }))
-    .sort((left, right) => {
-      const leftDate = left.messages[0]?.date.getTime() ?? 0;
-      const rightDate = right.messages[0]?.date.getTime() ?? 0;
+    .map(([conversationId, groupedMessages]) =>
+      conversationFromMessages(space, conversationId, groupedMessages, "thread"),
+    );
 
-      return leftDate - rightDate;
-    });
+  return [
+    ...threadedConversations,
+    ...unthreadedContextConversations(space, unthreadedMessages),
+  ].sort((left, right) => {
+    const leftDate = left.messages[0]?.date.getTime() ?? 0;
+    const rightDate = right.messages[0]?.date.getTime() ?? 0;
+
+    return leftDate - rightDate;
+  });
+}
+
+function conversationFromMessages(
+  space: chat_v1.Schema$Space,
+  conversationId: string,
+  messages: GoogleChatMessageEvidence[],
+  contextType: "thread" | "space_window",
+): GoogleChatConversationEvidence {
+  return {
+    conversationId,
+    spaceName: space.name!,
+    spaceDisplayName: cleanText(space.displayName, 128),
+    spaceUri: normalizeHttpsUrl(space.spaceUri),
+    threadName: contextType === "thread" ? conversationId : null,
+    contextType,
+    messages: messages.sort(
+      (left, right) => left.date.getTime() - right.date.getTime(),
+    ),
+  };
+}
+
+function unthreadedContextRange(
+  messages: GoogleChatMessageEvidence[],
+  anchorIndex: number,
+) {
+  const anchor = messages[anchorIndex];
+  let rangeStart = anchorIndex;
+  let rangeEnd = anchorIndex;
+
+  while (
+    rangeStart > 0 &&
+    anchor.date.getTime() - messages[rangeStart - 1].date.getTime() <=
+      unthreadedContextWindowMs &&
+    anchorIndex - (rangeStart - 1) <= maxUnthreadedContextMessagesPerSide
+  ) {
+    rangeStart -= 1;
+  }
+
+  while (
+    rangeEnd < messages.length - 1 &&
+    messages[rangeEnd + 1].date.getTime() - anchor.date.getTime() <=
+      unthreadedContextWindowMs &&
+    rangeEnd + 1 - anchorIndex <= maxUnthreadedContextMessagesPerSide
+  ) {
+    rangeEnd += 1;
+  }
+
+  return { start: rangeStart, end: rangeEnd };
+}
+
+function unthreadedContextConversations(
+  space: chat_v1.Schema$Space,
+  messages: GoogleChatMessageEvidence[],
+) {
+  const ranges = messages
+    .map((message, index) =>
+      message.isCurrentUser ? unthreadedContextRange(messages, index) : null,
+    )
+    .filter((range): range is { start: number; end: number } =>
+      Boolean(range),
+    );
+  const mergedRanges: Array<{ start: number; end: number }> = [];
+
+  for (const range of ranges) {
+    const previous = mergedRanges.at(-1);
+
+    if (previous && range.start <= previous.end + 1) {
+      previous.end = Math.max(previous.end, range.end);
+      continue;
+    }
+
+    mergedRanges.push({ ...range });
+  }
+
+  return mergedRanges.map((range) => {
+    const groupedMessages = messages.slice(range.start, range.end + 1);
+    const anchor =
+      groupedMessages.find((message) => message.isCurrentUser) ??
+      groupedMessages[0];
+
+    return conversationFromMessages(
+      space,
+      anchor.conversationId,
+      groupedMessages,
+      "space_window",
+    );
+  });
 }
 
 function responseText(response: GenerateContentResponse) {
@@ -484,7 +573,6 @@ function normalizeExtractionItems(
       continue;
     }
 
-    seen.add(dedupeKey);
     const referencedMessages = conversation.messages.filter((message) =>
       uniqueMessageIds.includes(message.id),
     );
@@ -493,6 +581,7 @@ function normalizeExtractionItems(
       continue;
     }
 
+    seen.add(dedupeKey);
     items.push({
       conversationId,
       messageIds: uniqueMessageIds,
@@ -511,9 +600,20 @@ function normalizeExtractionItems(
 }
 
 function conversationPromptBlock(conversation: GoogleChatConversationEvidence) {
+  const currentUserMessageIds = conversation.messages
+    .filter((message) => message.isCurrentUser)
+    .map((message) => message.id);
   const lines = [
     `CONVERSATION ${conversation.conversationId}`,
     `Space: ${conversation.spaceDisplayName ?? conversation.spaceName}`,
+    `Context: ${
+      conversation.contextType === "space_window"
+        ? "nearby same-day messages in the same space"
+        : "same-thread replies"
+    }`,
+    currentUserMessageIds.length
+      ? `Current-user message ids: ${currentUserMessageIds.join(", ")}`
+      : null,
     ...conversation.messages.map((message, index) =>
       [
         `Message ${index + 1}: id=${message.id}`,
@@ -544,6 +644,9 @@ function buildExtractionPrompt(
     "Exclude small acknowledgements, FYIs, automated app noise, personal content, pure scheduling chatter, vague status chatter, and messages that only mention a task without evidence of work.",
     "Extract work only for messages marked author=current_user. Other-user messages are context only.",
     "Every item must reference at least one current_user message id.",
+    "If other-user context is used to identify the task, include those context message ids in messageIds too.",
+    "Use nearby other-user context to understand short current_user messages, but do not create an item from a bare acknowledgement such as noted, ok, thanks, or sounds good unless the current_user message also shows a concrete action, decision, or follow-up commitment.",
+    "If a current_user message is short or ambiguous, use surrounding context to produce a specific task title. If the surrounding context still does not identify reportable work, omit it.",
     'Titles must be short, specific, and sentence case, like "Fix disappearing sponsor info" or "Update ESC26 delegate list". Preserve Jira keys, acronyms, product names, and event names. Do not use generic titles like "Task completed", "Work update", "Status update", or "Noted".',
     "Do not infer that a user created, completed, or blocked a task unless the Chat messages explicitly say so.",
     'Use status only when it adds useful information such as "complete", "blocked", or "in progress"; otherwise use null.',
@@ -935,8 +1038,16 @@ function sourceTextForActivity(
     return "";
   }
 
-  return conversation.messages
-    .filter((message) => messageIds.has(message.id))
+  const referencedMessages = conversation.messages.filter((message) =>
+    messageIds.has(message.id),
+  );
+  const messagesForDedupe =
+    conversation.contextType === "space_window" &&
+    !referencedMessages.some((message) => !message.isCurrentUser)
+      ? conversation.messages
+      : referencedMessages;
+
+  return messagesForDedupe
     .map((message) => message.text)
     .join(" ");
 }

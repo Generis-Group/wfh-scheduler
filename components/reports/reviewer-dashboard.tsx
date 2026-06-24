@@ -53,6 +53,7 @@ import { FixedToast } from "@/components/ui/fixed-toast";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { anchoredFixedPlacement } from "@/lib/anchored-position";
 import { markServerDataStale } from "@/lib/client-cache-invalidation";
 import { dateOnlyDisplayDate, dateOnlyString } from "@/lib/date-only";
 import {
@@ -356,6 +357,10 @@ const wfhWarningPercent = 50;
 const wfhCriticalPercent = 70;
 
 function normalizedWorkLocation(value?: string | null): WorkLocationKey {
+  if (value === "PTO") {
+    return "OUT_OF_OFFICE";
+  }
+
   return workLocationKeys.includes(value as WorkLocationKey)
     ? (value as WorkLocationKey)
     : "UNKNOWN";
@@ -978,6 +983,8 @@ export function ReviewerDashboard({
     userId: string;
     top: number;
     left: number;
+    width: number;
+    maxHeight: number;
   } | null>(null);
   const [blockedOpenUserId, setBlockedOpenUserId] = useState<string | null>(
     null,
@@ -1552,23 +1559,22 @@ export function ReviewerDashboard({
       (hasReviewerReportAction ? 44 : 0) +
       (hasReminderAction ? 44 : 0) +
       (hasAdminReportActions ? 116 : 0);
-    const viewportPadding = 12;
-    const left = Math.min(
-      Math.max(viewportPadding, rect.right - menuWidth),
-      Math.max(
-        viewportPadding,
-        window.innerWidth - menuWidth - viewportPadding,
-      ),
-    );
-    const openBelow =
-      window.innerHeight - rect.bottom - viewportPadding >= menuHeight;
+    const placement = anchoredFixedPlacement({
+      anchorRect: rect,
+      preferredWidth: menuWidth,
+      preferredMaxHeight: menuHeight,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      flipHeight: menuHeight,
+      gap: 6,
+    });
 
     setRowActionMenu({
       userId: row.user.id,
-      left,
-      top: openBelow
-        ? rect.bottom + 6
-        : Math.max(viewportPadding, rect.top - menuHeight - 6),
+      left: placement.left,
+      top: placement.top,
+      width: placement.width,
+      maxHeight: placement.maxHeight,
     });
   }
 
@@ -2285,8 +2291,13 @@ export function ReviewerDashboard({
           />
           <div
             ref={rowActionMenuRef}
-            className="fixed z-50 max-h-[calc(100dvh-1.5rem)] w-[220px] overflow-y-auto overscroll-contain rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-[#e1e6ef] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
-            style={{ top: rowActionMenu.top, left: rowActionMenu.left }}
+            className="fixed z-50 overflow-y-auto overscroll-contain rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-[#e1e6ef] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+            style={{
+              top: rowActionMenu.top,
+              left: rowActionMenu.left,
+              width: rowActionMenu.width,
+              maxHeight: rowActionMenu.maxHeight,
+            }}
             role="menu"
           >
             {canReviewReport(menuRow) ? (
@@ -2512,7 +2523,7 @@ function WorkLocationBreakdown({
     breakdown.missing ? `${breakdown.missing} missing` : null,
   ].filter(Boolean);
   const secondaryLocations = (
-    ["HYBRID", "PTO", "OUT_OF_OFFICE", "UNKNOWN"] as WorkLocationKey[]
+    ["HYBRID", "OUT_OF_OFFICE", "UNKNOWN"] as WorkLocationKey[]
   ).filter((location) => breakdown.counts[location] > 0);
   const primaryLocations: Array<{
     location: WorkLocationKey;
@@ -2610,7 +2621,7 @@ function WeeklyWorkLocationBreakdown({
       : null,
   ].filter(Boolean);
   const secondaryLocations = (
-    ["HYBRID", "PTO", "OUT_OF_OFFICE", "UNKNOWN"] as WorkLocationKey[]
+    ["HYBRID", "OUT_OF_OFFICE", "UNKNOWN"] as WorkLocationKey[]
   ).filter((location) => breakdown.counts[location] > 0);
   const primaryLocations: Array<{
     location: WorkLocationKey;
@@ -3175,8 +3186,8 @@ function WeeklyReportReviewPage({
   );
 
   return (
-    <main className="reference-page report-pdf-page weekly-report-pdf bg-[#f6f9fd] dark:bg-background min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
-      <div className="mx-auto max-w-[1280px] min-[1024px]:min-h-0 min-[1024px]:w-full min-[1024px]:flex-1 min-[1024px]:overflow-y-auto min-[1024px]:overscroll-contain min-[1024px]:pr-1 min-[1024px]:[scrollbar-gutter:stable]">
+    <main className="reference-page reference-page-contained report-pdf-page weekly-report-pdf bg-[#f6f9fd] dark:bg-background min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
+      <div className="reference-row-scroll min-[1024px]:min-h-0 min-[1024px]:w-full min-[1024px]:flex-1 min-[1024px]:pr-1">
         <button
           className="report-pdf-back mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
           onClick={onBack}

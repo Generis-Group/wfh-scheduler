@@ -1647,7 +1647,7 @@ function BugReportList({
                         ) : null}
                       </div>
                     ) : null}
-                    <div className="mt-1 line-clamp-2 break-words text-xs leading-5 text-[#475569] [overflow-wrap:anywhere] dark:text-muted-foreground">
+                    <div className="mt-1 line-clamp-2 break-words text-xs leading-5 text-[#475569] dark:text-muted-foreground">
                       {report.body}
                     </div>
                     {report.attachments.length > 0 ? (
@@ -1795,7 +1795,7 @@ function BugReportDetail({
           ) : null}
         </div>
 
-        <div className="break-words whitespace-pre-wrap rounded-[8px] bg-[#f8fafc] p-3 text-sm leading-6 text-[#0f172a] ring-1 ring-[#dbe5f4] [overflow-wrap:anywhere] dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55]">
+        <div className="break-words whitespace-pre-wrap rounded-[8px] bg-[#f8fafc] p-3 text-sm leading-6 text-[#0f172a] ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55]">
           {report.body}
         </div>
 

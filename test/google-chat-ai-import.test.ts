@@ -124,6 +124,116 @@ describe("Google Chat AI import helpers", () => {
     ]);
   });
 
+  it("adds nearby context for unthreaded current-user Chat messages", () => {
+    const conversations = googleChatConversationEvidence(
+      space,
+      [
+        {
+          name: "spaces/AAA/messages/msg-1",
+          createTime: "2026-05-14T14:00:00.000Z",
+          text: "Can you update the ESC26 delegate list before the review?",
+          sender: { name: "users/coworker", type: "HUMAN" },
+        },
+        {
+          name: "spaces/AAA/messages/msg-2",
+          createTime: "2026-05-14T14:02:00.000Z",
+          text: "Done, I updated it.",
+          sender: { name: "users/current", type: "HUMAN" },
+        },
+        {
+          name: "spaces/AAA/messages/msg-3",
+          createTime: "2026-05-14T14:04:00.000Z",
+          text: "Thanks, that works.",
+          sender: { name: "users/coworker", type: "HUMAN" },
+        },
+      ],
+      start,
+      end,
+      currentUserNames,
+    );
+
+    expect(conversations).toEqual([
+      expect.objectContaining({
+        conversationId: "spaces/AAA/messages/msg-2",
+        contextType: "space_window",
+        threadName: null,
+        messages: [
+          expect.objectContaining({
+            id: "spaces/AAA/messages/msg-1",
+            isCurrentUser: false,
+          }),
+          expect.objectContaining({
+            id: "spaces/AAA/messages/msg-2",
+            isCurrentUser: true,
+          }),
+          expect.objectContaining({
+            id: "spaces/AAA/messages/msg-3",
+            isCurrentUser: false,
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it("prompts Gemini with nearby unthreaded context for specific Chat titles", async () => {
+    const conversations = googleChatConversationEvidence(
+      space,
+      [
+        {
+          name: "spaces/AAA/messages/msg-1",
+          createTime: "2026-05-14T14:00:00.000Z",
+          text: "Can you update the ESC26 delegate list before the review?",
+          sender: { name: "users/coworker", type: "HUMAN" },
+        },
+        {
+          name: "spaces/AAA/messages/msg-2",
+          createTime: "2026-05-14T14:02:00.000Z",
+          text: "Done, I updated it.",
+          sender: { name: "users/current", type: "HUMAN" },
+        },
+      ],
+      start,
+      end,
+      currentUserNames,
+    );
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          conversationId: "spaces/AAA/messages/msg-2",
+          messageIds: ["spaces/AAA/messages/msg-2"],
+          title: "Update ESC26 delegate list",
+          description: "Updated the delegate list for review.",
+          confidence: 0.86,
+          reason: "work_performed",
+        },
+      ]),
+    );
+
+    const activities = await extractGoogleChatActivitiesWithAI(
+      "user-1",
+      "2026-05-14",
+      conversations,
+      start,
+      end,
+    );
+
+    const prompt = String(generateContentMock.mock.calls[0][0].contents);
+    expect(prompt).toContain(
+      "Context: nearby same-day messages in the same space",
+    );
+    expect(prompt).toContain(
+      "Current-user message ids: spaces/AAA/messages/msg-2",
+    );
+    expect(prompt).toContain(
+      "include those context message ids in messageIds too",
+    );
+    expect(prompt).toContain("Can you update the ESC26 delegate list");
+    expect(prompt).toContain("bare acknowledgement");
+    expect(activities.map((activity) => activity.title)).toEqual([
+      "Update ESC26 delegate list",
+    ]);
+  });
+
   it("normalizes AI candidates without storing raw Chat body text", async () => {
     const conversations = googleChatConversationEvidence(
       space,
@@ -320,5 +430,57 @@ describe("Google Chat AI import helpers", () => {
         conversations,
       ).map((activity) => activity.sourceId),
     ).toEqual(["chat-2"]);
+  });
+
+  it("dedupes unthreaded Chat candidates against Jira keys in nearby context", () => {
+    const conversations = googleChatConversationEvidence(
+      space,
+      [
+        {
+          name: "spaces/AAA/messages/msg-1",
+          createTime: "2026-05-14T14:00:00.000Z",
+          text: "Can you update IT-5000 before the review?",
+          sender: { name: "users/coworker", type: "HUMAN" },
+        },
+        {
+          name: "spaces/AAA/messages/msg-2",
+          createTime: "2026-05-14T14:02:00.000Z",
+          text: "Done, I updated it.",
+          sender: { name: "users/current", type: "HUMAN" },
+        },
+      ],
+      start,
+      end,
+      currentUserNames,
+    );
+    const activities: NormalizedActivity[] = [
+      {
+        source: "GOOGLE_CHAT",
+        sourceId: "chat-context",
+        sourceContainerId: "spaces/AAA/messages/msg-2",
+        title: "Update review item",
+        description: null,
+        sourceUrl: null,
+        selected: true,
+        metadata: { messageIds: ["spaces/AAA/messages/msg-2"] },
+      },
+    ];
+
+    expect(
+      dedupeGoogleChatActivities(
+        activities,
+        [
+          {
+            source: "JIRA",
+            sourceId: "jira-1",
+            sourceUrl: "https://jira.example/browse/IT-5000",
+            title: "IT-5000: Review item",
+            description: null,
+            staleAt: null,
+          },
+        ],
+        conversations,
+      ),
+    ).toEqual([]);
   });
 });
