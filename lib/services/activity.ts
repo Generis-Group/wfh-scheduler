@@ -156,6 +156,186 @@ function normalizedTaskKeyText(value?: string | null) {
     .replace(/\s+/g, " ");
 }
 
+function metadataRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function importText(item: NormalizedActivity) {
+  const metadata = metadataRecord(item.metadata);
+
+  return [
+    item.title,
+    item.description,
+    item.sourceId,
+    item.sourceUrl,
+    item.sourceContainerId,
+    metadata?.jiraKey,
+    metadata?.taskKey,
+    metadata?.issueKey,
+    metadata?.threadId,
+    metadata?.conversationId,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+}
+
+function jiraKeys(value: string) {
+  return Array.from(value.matchAll(/\b[A-Z][A-Z0-9]+-\d+\b/g)).map((match) =>
+    match[0].toUpperCase(),
+  );
+}
+
+function normalizedTaskUrl(value?: string | null) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmed);
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+
+    url.hash = "";
+    url.search = "";
+
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function importReferenceKeys(item: NormalizedActivity) {
+  const keys = new Set<string>();
+  const text = importText(item);
+
+  for (const key of jiraKeys(text)) {
+    keys.add(`jira:${key}`);
+  }
+
+  if (item.source === "GOOGLE_TASKS") {
+    keys.add(`google-task:${item.sourceId}`);
+
+    const sourceUrl = normalizedTaskUrl(item.sourceUrl);
+
+    if (sourceUrl) {
+      keys.add(`google-task-url:${sourceUrl}`);
+    }
+  }
+
+  return keys;
+}
+
+function metadataStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function messageIdsKey(item: NormalizedActivity) {
+  const messageIds = metadataStringArray(
+    metadataRecord(item.metadata)?.messageIds,
+  );
+
+  return [...new Set(messageIds)].sort().join("\u0000");
+}
+
+function sourceContainerKey(item: NormalizedActivity) {
+  const metadata = metadataRecord(item.metadata);
+  const container =
+    item.sourceContainerId ??
+    metadata?.threadId ??
+    metadata?.conversationId ??
+    null;
+
+  return typeof container === "string" && container.trim()
+    ? container.trim()
+    : null;
+}
+
+const weakTaskTitleWords = new Set([
+  "activity",
+  "complete",
+  "completed",
+  "done",
+  "item",
+  "items",
+  "noted",
+  "status",
+  "task",
+  "tasks",
+  "update",
+  "updated",
+  "work",
+]);
+
+function comparableTaskTitle(value?: string | null) {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/\b[a-z][a-z0-9]+-\d+\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function meaningfulTitleTokens(value?: string | null) {
+  return new Set(
+    comparableTaskTitle(value)
+      .split(" ")
+      .filter(
+        (word) =>
+          word.length > 2 &&
+          !/^\d+$/.test(word) &&
+          !weakTaskTitleWords.has(word),
+      ),
+  );
+}
+
+function titleSimilarity(first?: string | null, second?: string | null) {
+  const firstTitle = comparableTaskTitle(first);
+  const secondTitle = comparableTaskTitle(second);
+
+  if (!firstTitle || !secondTitle) {
+    return false;
+  }
+
+  if (firstTitle === secondTitle) {
+    return true;
+  }
+
+  const firstTokens = meaningfulTitleTokens(firstTitle);
+  const secondTokens = meaningfulTitleTokens(secondTitle);
+  const smallerSize = Math.min(firstTokens.size, secondTokens.size);
+
+  if (smallerSize < 2) {
+    return false;
+  }
+
+  const shared = [...firstTokens].filter((token) => secondTokens.has(token));
+  const unionSize = new Set([...firstTokens, ...secondTokens]).size;
+
+  if (shared.length >= smallerSize && smallerSize <= 3) {
+    return true;
+  }
+
+  return shared.length >= 2 && shared.length / unionSize >= 0.6;
+}
+
+function hasSharedReferenceKey(first: Set<string>, second: Set<string>) {
+  for (const key of first) {
+    if (second.has(key)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function importTaskKey(item: NormalizedActivity) {
   if (item.source === "HUBSPOT") {
     const titleKey = normalizedTaskKeyText(item.title);
@@ -166,6 +346,67 @@ function importTaskKey(item: NormalizedActivity) {
   }
 
   return `${item.source}:source:${item.sourceId}`;
+}
+
+function isDuplicateImportTask(
+  first: NormalizedActivity,
+  second: NormalizedActivity,
+) {
+  if (first.source !== second.source) {
+    return false;
+  }
+
+  const firstReferenceKeys = importReferenceKeys(first);
+  const secondReferenceKeys = importReferenceKeys(second);
+
+  if (
+    firstReferenceKeys.size > 0 &&
+    hasSharedReferenceKey(firstReferenceKeys, secondReferenceKeys)
+  ) {
+    return true;
+  }
+
+  const firstContainer = sourceContainerKey(first);
+  const secondContainer = sourceContainerKey(second);
+
+  return Boolean(
+    firstContainer &&
+      secondContainer &&
+      firstContainer === secondContainer &&
+      titleSimilarity(first.title, second.title),
+  );
+}
+
+function stableImportKeys(item: NormalizedActivity) {
+  const referenceKeys = [...importReferenceKeys(item)].sort();
+
+  if (referenceKeys.length > 0) {
+    return referenceKeys.map((key) => `reference:${key}`);
+  }
+
+  const container = sourceContainerKey(item);
+  const messageKey = messageIdsKey(item);
+
+  if (container && messageKey) {
+    return [`${item.source}:container:${container}:messages:${messageKey}`];
+  }
+
+  const titleKey = [...meaningfulTitleTokens(item.title)].sort().join("\u0000");
+
+  if (container && titleKey) {
+    return [`${item.source}:container:${container}:title:${titleKey}`];
+  }
+
+  return [`${item.source}:source:${item.sourceId}`];
+}
+
+function mergedImportKey(group: {
+  activity: NormalizedActivity;
+  stableKeys: string[];
+}) {
+  const keys = [...new Set(group.stableKeys)].sort();
+
+  return `${group.activity.source}:${keys.join("\u0001")}`;
 }
 
 function mergedSourceId(source: ActivitySource, key: string) {
@@ -231,26 +472,31 @@ function mergedMetadata(
 }
 
 function mergeDuplicateImportActivities(activities: NormalizedActivity[]) {
-  const grouped = new Map<
-    string,
-    {
-      activity: NormalizedActivity;
-      links: ReturnType<typeof uniqueActivitySourceLinks>;
-      sourceIds: string[];
-      count: number;
-    }
-  >();
+  const groups: Array<{
+    key: string;
+    activity: NormalizedActivity;
+    links: ReturnType<typeof uniqueActivitySourceLinks>;
+    sourceIds: string[];
+    stableKeys: string[];
+    count: number;
+  }> = [];
 
   for (const item of activities) {
     const key = importTaskKey(item);
-    const group = grouped.get(key);
+    const group = groups.find(
+      (candidate) =>
+        candidate.key === key ||
+        isDuplicateImportTask(candidate.activity, item),
+    );
     const sourceLink = sourceLinkForActivity(item);
 
     if (!group) {
-      grouped.set(key, {
+      groups.push({
+        key,
         activity: { ...item },
         links: uniqueActivitySourceLinks([sourceLink]),
         sourceIds: [item.sourceId],
+        stableKeys: stableImportKeys(item),
         count: 1,
       });
       continue;
@@ -258,6 +504,7 @@ function mergeDuplicateImportActivities(activities: NormalizedActivity[]) {
 
     group.count += 1;
     group.sourceIds.push(item.sourceId);
+    group.stableKeys.push(...stableImportKeys(item));
     group.links = uniqueActivitySourceLinks([...group.links, sourceLink]);
     group.activity = {
       ...group.activity,
@@ -278,19 +525,19 @@ function mergeDuplicateImportActivities(activities: NormalizedActivity[]) {
     };
   }
 
-  return [...grouped.entries()].map(([key, group]) => {
+  return groups.map((group) => {
     if (group.count === 1) {
       return group.activity;
     }
 
     const metadata = {
       ...(group.activity.metadata ?? {}),
-      mergedSourceIds: [...new Set(group.sourceIds)],
+      mergedSourceIds: [...new Set(group.sourceIds)].sort(),
     };
 
     return {
       ...group.activity,
-      sourceId: mergedSourceId(group.activity.source, key),
+      sourceId: mergedSourceId(group.activity.source, mergedImportKey(group)),
       metadata: metadataWithRelatedSourceLinks(
         metadata as Prisma.JsonValue,
         group.links,

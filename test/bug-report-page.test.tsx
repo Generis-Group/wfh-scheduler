@@ -144,6 +144,25 @@ describe("BugReportPage", () => {
     );
   });
 
+  it("shows a readable source page instead of a raw date route", () => {
+    render(
+      <BugReportPage
+        initialReports={[
+          {
+            ...openReport,
+            pagePath: "/?date=2026-06-24",
+          },
+        ]}
+        canReviewAll
+        currentUserName="Admin"
+        initialSelectedReportId={openReport.id}
+      />,
+    );
+
+    expect(screen.getByText("Daily update, Jun 24, 2026")).toBeTruthy();
+    expect(screen.queryByText("/?date=2026-06-24")).toBeNull();
+  });
+
   it("keeps a dismissed direct-linked report closed after screenshots load", async () => {
     const reportWithPendingAttachment = {
       ...openReport,

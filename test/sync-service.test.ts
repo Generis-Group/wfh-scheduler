@@ -153,6 +153,7 @@ describe("sync service pagination", () => {
       durationProperty: "hours",
       durationUnit: "hours",
       userEmailProperty: "user_email",
+      userMatchMode: "emailProperty",
       titleProperties: ["task_name"],
       descriptionProperties: ["notes"],
       pageLimit: 100,

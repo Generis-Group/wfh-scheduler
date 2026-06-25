@@ -1781,8 +1781,11 @@ function BugReportDetail({
             {formatFullDate(report.createdAt)}
           </span>
           {report.pagePath ? (
-            <span className="rounded-[7px] bg-[#f4f7fb] px-2 py-1 font-medium dark:bg-white/[0.04]">
-              {report.pagePath}
+            <span
+              className="rounded-[7px] bg-[#f4f7fb] px-2 py-1 font-medium dark:bg-white/[0.04]"
+              title={report.pagePath}
+            >
+              {formatBugReportPagePath(report.pagePath)}
             </span>
           ) : null}
           {isSolved && report.solvedAt ? (
@@ -1964,6 +1967,90 @@ function formatFullDate(value: string | Date) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function formatBugReportPagePath(value: string) {
+  const path = value.trim();
+
+  if (!path) {
+    return "Unknown page";
+  }
+
+  let url: URL;
+
+  try {
+    url = new URL(path, "https://reports.generis.local");
+  } catch {
+    return humanizePathSegment(path);
+  }
+
+  const label = bugReportPageLabel(url.pathname);
+  const date = formatRouteDate(url.searchParams.get("date"));
+
+  return date ? `${label}, ${date}` : label;
+}
+
+function bugReportPageLabel(pathname: string) {
+  const segments = pathname.split("/").filter(Boolean);
+  const section = segments[0] ?? "";
+
+  switch (section) {
+    case "":
+      return "Daily update";
+    case "reports":
+      return "My reports";
+    case "review":
+      return "Team review";
+    case "calendar":
+      return "Locations";
+    case "admin":
+      return "Admin";
+    case "settings":
+      return "Settings";
+    case "change-password":
+      return "Change password";
+    default:
+      return humanizePathSegment(section);
+  }
+}
+
+function formatRouteDate(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function humanizePathSegment(value: string) {
+  const cleaned = value
+    .replace(/^\/+/, "")
+    .split(/[/?#]/)[0]
+    .replace(/[-_]+/g, " ")
+    .trim();
+
+  if (!cleaned) {
+    return "Unknown page";
+  }
+
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 
 async function standardizeBugReportImage(file: File) {

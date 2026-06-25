@@ -218,6 +218,83 @@ describe("Gmail AI import helpers", () => {
     );
   });
 
+  it("collapses repeated generated Gmail items into one counted activity", async () => {
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          threadId: "thread-1",
+          messageIds: ["message-1"],
+          title: "Send finance automation alert for invoice BIO5555",
+          description: "Sent an automated invoice processing alert.",
+          confidence: 0.91,
+          reason: "work_performed",
+        },
+        {
+          threadId: "thread-2",
+          messageIds: ["message-2"],
+          title: "Send finance automation alert for invoice BIO5556",
+          description: "Sent an automated invoice processing alert.",
+          confidence: 0.9,
+          reason: "work_performed",
+        },
+        {
+          threadId: "thread-3",
+          messageIds: ["message-3"],
+          title: "Send finance automation alert for invoice BIO5557",
+          description: "Sent an automated invoice processing alert.",
+          confidence: 0.89,
+          reason: "work_performed",
+        },
+      ]),
+    );
+
+    const threads = [1, 2, 3].map((index) => ({
+      threadId: `thread-${index}`,
+      subject: `Finance automation alert ${index}`,
+      messages: [
+        {
+          id: `message-${index}`,
+          threadId: `thread-${index}`,
+          date: new Date(`2026-05-14T14:0${index}:00.000Z`),
+          subject: `Finance automation alert ${index}`,
+          text: `Sent automated invoice alert ${index}.`,
+          isSentByUser: true,
+          senderDomains: ["generisgp.com"],
+          recipientDomains: ["generisgp.com"],
+        },
+      ],
+    }));
+
+    const activities = await extractGmailActivitiesWithAI(
+      "user-1",
+      "2026-05-14",
+      threads,
+      start,
+      end,
+    );
+
+    expect(generateContentMock.mock.calls[0][0].contents).toContain(
+      "return one item with all relevant messageIds",
+    );
+    expect(activities).toHaveLength(1);
+    expect(activities[0]).toEqual(
+      expect.objectContaining({
+        source: "GMAIL",
+        sourceId: expect.stringMatching(/^repeated:gmail:/),
+        description:
+          "Sent an automated invoice processing alert. Repeated 3 similar Gmail messages.",
+      }),
+    );
+    expect(activities[0].metadata).toEqual(
+      expect.objectContaining({
+        repeatedEmailCount: 3,
+        threadIds: ["thread-1", "thread-2", "thread-3"],
+        messageIds: ["message-1", "message-2", "message-3"],
+        sentMessageIds: ["message-1", "message-2", "message-3"],
+      }),
+    );
+  });
+
   it("scrubs verbatim body excerpts and email addresses from generated fields", async () => {
     const rawDescription =
       "Prepared the client launch follow-up for stakeholder review.";

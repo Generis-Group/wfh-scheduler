@@ -444,4 +444,157 @@ describe("activity service", () => {
       }),
     );
   });
+
+  it("merges duplicate AI imports for the same task in one source container", async () => {
+    const importedActivity = {
+      id: "activity-merged",
+      source: "GOOGLE_CHAT",
+      sourceId: "merged:google_chat",
+    };
+
+    mockActivityUpdateMany.mockResolvedValue({ count: 0 });
+    mockActivityFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([importedActivity]);
+
+    const { upsertImportedActivities } =
+      await import("@/lib/services/activity");
+    const result = await upsertImportedActivities(
+      "GOOGLE_CHAT",
+      "user-1",
+      "2026-05-14",
+      [
+        {
+          source: "GOOGLE_CHAT",
+          sourceId: "chat:spaces/AAA/threads/thread-1:candidate:first",
+          sourceContainerId: "spaces/AAA/threads/thread-1",
+          sourceUrl: "https://chat.google.com/room/AAA/thread-1",
+          title: "Update ESC26 delegate list",
+          description: "Shared progress on IT-4347.",
+          metadata: { messageIds: ["msg-1"] },
+        },
+        {
+          source: "GOOGLE_CHAT",
+          sourceId: "chat:spaces/AAA/threads/thread-1:candidate:second",
+          sourceContainerId: "spaces/AAA/threads/thread-1",
+          sourceUrl: "https://chat.google.com/room/AAA/thread-1?msg=2",
+          title: "ESC26 delegate list update",
+          description: "Confirmed the same IT-4347 update.",
+          metadata: { messageIds: ["msg-2"] },
+        },
+      ],
+    );
+
+    expect(result.importedCount).toBe(1);
+    expect(mockActivityCreateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [
+          expect.objectContaining({
+            source: "GOOGLE_CHAT",
+            sourceId: expect.stringMatching(/^merged:google_chat:/),
+            sourceContainerId: "spaces/AAA/threads/thread-1",
+            title: "Update ESC26 delegate list",
+            metadata: expect.objectContaining({
+              mergedSourceIds: [
+                "chat:spaces/AAA/threads/thread-1:candidate:first",
+                "chat:spaces/AAA/threads/thread-1:candidate:second",
+              ],
+              relatedSourceLinks: [
+                {
+                  href: "https://chat.google.com/room/AAA/thread-1",
+                  label: "Google Chat",
+                  source: "GOOGLE_CHAT",
+                },
+                {
+                  href: "https://chat.google.com/room/AAA/thread-1?msg=2",
+                  label: "Google Chat",
+                  source: "GOOGLE_CHAT",
+                },
+              ],
+            }),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("keeps merged duplicate AI import ids stable across order and title hash changes", async () => {
+    const importedActivity = {
+      id: "activity-merged",
+      source: "GOOGLE_CHAT",
+      sourceId: "merged:google_chat",
+    };
+
+    mockActivityUpdateMany.mockResolvedValue({ count: 0 });
+    mockActivityFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([importedActivity])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([importedActivity]);
+
+    const { upsertImportedActivities } =
+      await import("@/lib/services/activity");
+    const firstImport = [
+      {
+        source: "GOOGLE_CHAT" as const,
+        sourceId: "chat:spaces/AAA/threads/thread-1:candidate:title-a",
+        sourceContainerId: "spaces/AAA/threads/thread-1",
+        sourceUrl: "https://chat.google.com/room/AAA/thread-1?msg=1",
+        title: "Update ESC26 delegate list",
+        description: "Shared the delegate list update.",
+        metadata: { messageIds: ["msg-1"] },
+      },
+      {
+        source: "GOOGLE_CHAT" as const,
+        sourceId: "chat:spaces/AAA/threads/thread-1:candidate:title-b",
+        sourceContainerId: "spaces/AAA/threads/thread-1",
+        sourceUrl: "https://chat.google.com/room/AAA/thread-1?msg=2",
+        title: "ESC26 delegate list update",
+        description: "Confirmed the delegate list update.",
+        metadata: { messageIds: ["msg-2"] },
+      },
+    ];
+    const secondImport = [
+      {
+        ...firstImport[1],
+        sourceId: "chat:spaces/AAA/threads/thread-1:candidate:new-title-b",
+        title: "Delegate list update for ESC26",
+      },
+      {
+        ...firstImport[0],
+        sourceId: "chat:spaces/AAA/threads/thread-1:candidate:new-title-a",
+        title: "Update the ESC26 delegate list",
+      },
+    ];
+
+    await upsertImportedActivities(
+      "GOOGLE_CHAT",
+      "user-1",
+      "2026-05-14",
+      firstImport,
+    );
+    await upsertImportedActivities(
+      "GOOGLE_CHAT",
+      "user-1",
+      "2026-05-14",
+      secondImport,
+    );
+
+    const firstCreated = mockActivityCreateMany.mock.calls[0]?.[0]?.data?.[0];
+    const secondCreated = mockActivityCreateMany.mock.calls[1]?.[0]?.data?.[0];
+
+    expect(firstCreated.sourceId).toMatch(/^merged:google_chat:/);
+    expect(secondCreated.sourceId).toBe(firstCreated.sourceId);
+    expect(secondCreated.metadata).toEqual(
+      expect.objectContaining({
+        mergedSourceIds: [
+          "chat:spaces/AAA/threads/thread-1:candidate:new-title-a",
+          "chat:spaces/AAA/threads/thread-1:candidate:new-title-b",
+        ],
+      }),
+    );
+  });
 });

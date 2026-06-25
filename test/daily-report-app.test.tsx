@@ -1425,6 +1425,58 @@ describe("DailyReportApp drafts", () => {
     ).toBe("false");
   });
 
+  it("lets users choose between multiple source links for a work item", () => {
+    const multiSourceTask: DailyReportProps["initialReport"]["activities"][number] =
+      {
+        ...linkedJiraTask,
+        sourceLinks: [
+          {
+            href: "https://generisgp.atlassian.net/browse/IT-3027",
+            label: "Jira",
+            source: "JIRA",
+          },
+          {
+            href: "https://mail.google.com/mail/u/0/#inbox/thread-1",
+            label: "Gmail thread",
+            source: "GMAIL",
+          },
+        ],
+      };
+
+    renderDailyReportApp({
+      ...savedDraft,
+      activities: [multiSourceTask],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Choose source link for IT-3027: Improve website loading speed and performance",
+      }),
+    );
+
+    expect(
+      screen.getByRole("menuitem", { name: "Jira" }).getAttribute("href"),
+    ).toBe("https://generisgp.atlassian.net/browse/IT-3027");
+    expect(
+      screen
+        .getByRole("menuitem", { name: "Gmail thread" })
+        .getAttribute("href"),
+    ).toBe("https://mail.google.com/mail/u/0/#inbox/thread-1");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "More actions for IT-3027: Improve website loading speed and performance",
+      }),
+    );
+
+    expect(screen.getAllByRole("menuitem", { name: "Jira" }).length).toBe(1);
+    expect(
+      screen.getAllByRole("menuitem", { name: "Gmail thread" }).length,
+    ).toBe(1);
+  });
+
   it("renames work items locally from the item menu", async () => {
     const renamedTask = {
       ...manualGoogleTask,

@@ -42,18 +42,31 @@ function parseHubSpotDate(value?: string | null) {
 }
 
 function parseDurationText(value: string) {
+  const millisecondsMatch = value.match(/(\d+(?:\.\d+)?)\s*ms/i);
   const hoursMatch = value.match(/(\d+(?:\.\d+)?)\s*h(?:ours?)?/i);
   const minutesMatch = value.match(/(\d+(?:\.\d+)?)\s*m(?:in(?:ute)?s?)?/i);
+  const secondsMatch = value.match(/(\d+(?:\.\d+)?)\s*s(?:ec(?:ond)?s?)?/i);
   const decimalMatch = value.match(/^\d+(?:\.\d+)?$/);
 
-  if (hoursMatch || minutesMatch) {
+  if (millisecondsMatch) {
+    return Number(millisecondsMatch[1]) / 60_000;
+  }
+
+  if (hoursMatch || minutesMatch || secondsMatch) {
     const hours = hoursMatch ? Number(hoursMatch[1]) : 0;
     const minutes = minutesMatch ? Number(minutesMatch[1]) : 0;
+    const seconds = secondsMatch ? Number(secondsMatch[1]) : 0;
 
-    return hours * 60 + minutes;
+    return hours * 60 + minutes + seconds / 60;
   }
 
   return decimalMatch ? Number(decimalMatch[0]) : null;
+}
+
+function hasDurationUnitSuffix(value: string) {
+  return /(\d+(?:\.\d+)?)\s*(?:ms|h(?:ours?)?|m(?:in(?:ute)?s?)?|s(?:ec(?:ond)?s?)?)\b/i.test(
+    value,
+  );
 }
 
 function parseDurationMinutes(
@@ -72,7 +85,7 @@ function parseDurationMinutes(
     return null;
   }
 
-  if (/[hm]/i.test(trimmed)) {
+  if (hasDurationUnitSuffix(trimmed)) {
     return Math.max(0, Math.round(textDuration));
   }
 
@@ -84,14 +97,27 @@ function parseDurationMinutes(
     return Math.max(0, Math.round(textDuration / 60));
   }
 
+  if (unit === "milliseconds") {
+    return Math.max(0, Math.round(textDuration / 60_000));
+  }
+
   return Math.max(0, Math.round(textDuration * 60));
+}
+
+function plainText(value: string | null) {
+  return (
+    value
+      ?.replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() || null
+  );
 }
 
 function objectTitle(
   properties: Record<string, string | null | undefined>,
   config: HubSpotLoggedHoursConfig,
 ) {
-  const title = firstProperty(properties, config.titleProperties);
+  const title = plainText(firstProperty(properties, config.titleProperties));
 
   if (!title) {
     return "HubSpot logged hours";
@@ -128,7 +154,9 @@ export function normalizeHubSpotLoggedHours(
   const status = config.statusProperty
     ? properties[config.statusProperty]?.trim() || null
     : null;
-  const description = firstProperty(properties, config.descriptionProperties);
+  const description = plainText(
+    firstProperty(properties, config.descriptionProperties),
+  );
 
   return {
     source: "HUBSPOT",

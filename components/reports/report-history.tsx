@@ -1138,6 +1138,8 @@ function OpenedReportView({
       id: activity.id,
       title: activity.title,
       source: activity.source,
+      sourceUrl: activity.sourceUrl,
+      sourceLinks: activity.sourceLinks,
       duration: formatDuration(activity.durationMinutes),
       note: activity.employeeNote,
       status:

@@ -4,7 +4,9 @@ import type { gmail_v1 } from "googleapis";
 
 import {
   metadataWithRelatedActivity,
+  metadataWithRelatedSourceLinks,
   sourceLinkForActivity,
+  uniqueActivitySourceLinks,
 } from "@/lib/activity-source-links";
 import { HttpError } from "@/lib/http";
 import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
@@ -79,6 +81,7 @@ const minLeakCheckChars = 18;
 const minLeakCheckWords = 4;
 const selectedConfidenceThreshold = 0.75;
 const minimumConfidenceThreshold = 0.5;
+const minRepeatedEmailClusterSize = 3;
 const allowedReasons = new Set<GmailImportReason>([
   "work_performed",
   "deliverable",
@@ -387,6 +390,36 @@ function latestMessageDate(messages: GmailMessageEvidence[]) {
   );
 }
 
+function earliestDate(
+  first: Date | null | undefined,
+  second: Date | null | undefined,
+) {
+  if (!first) {
+    return second ?? null;
+  }
+
+  if (!second) {
+    return first;
+  }
+
+  return first.getTime() <= second.getTime() ? first : second;
+}
+
+function latestDate(
+  first: Date | null | undefined,
+  second: Date | null | undefined,
+) {
+  if (!first) {
+    return second ?? null;
+  }
+
+  if (!second) {
+    return first;
+  }
+
+  return first.getTime() >= second.getTime() ? first : second;
+}
+
 function normalizeExtractionItems(
   response: GenerateContentResponse,
   threads: GmailThreadEvidence[],
@@ -522,6 +555,7 @@ function buildExtractionPrompt(
     "Use messages marked author=current_user_sent as the user's work evidence. Other-participant messages are context only.",
     "Every item should reference at least one current_user_sent message id when the evidence includes sent-message markers.",
     "Use same-thread replies to understand what the user's sent message accomplished, but do not turn another participant's request or reply into the user's work unless the user responded with concrete work, a decision, or a follow-up commitment.",
+    "If several sent messages are the same recurring, generated, or automated email for the same task, return one item with all relevant messageIds and mention the repeated count in the concise description instead of creating one item per email.",
     'Titles must be short, specific, and sentence case, like "Fix disappearing sponsor info" or "Update ESC26 delegate list". Preserve Jira keys, acronyms, product names, and event names. Do not use generic titles like "Task completed", "Work update", "Status update", or "Noted".',
     'Use status only when it adds useful information such as "complete", "blocked", or "in progress"; otherwise use null.',
     "Use confidence 0 to 1. Use 0.75+ only when the email clearly shows reportable work.",
@@ -958,6 +992,290 @@ function normalizedComparableTitle(value: string) {
     .replace(/\s+/g, " ");
 }
 
+const weakRepeatedEmailTokens = new Set([
+  "a",
+  "an",
+  "and",
+  "for",
+  "from",
+  "mail",
+  "message",
+  "of",
+  "send",
+  "sent",
+  "the",
+  "to",
+]);
+
+function comparableTokenSet(value?: string | null) {
+  return new Set(
+    normalizedComparableTitle(value ?? "")
+      .split(" ")
+      .filter(
+        (token) =>
+          token.length > 1 &&
+          !/^\d+$/.test(token) &&
+          !weakRepeatedEmailTokens.has(token),
+      ),
+  );
+}
+
+function tokenSetsAreSimilar(
+  first: Set<string>,
+  second: Set<string>,
+  minimumShared = 3,
+) {
+  const smallerSize = Math.min(first.size, second.size);
+
+  if (smallerSize < minimumShared) {
+    return false;
+  }
+
+  const shared = [...first].filter((token) => second.has(token));
+  const unionSize = new Set([...first, ...second]).size;
+
+  return shared.length >= minimumShared && shared.length / unionSize >= 0.6;
+}
+
+function comparableGeneratedText(value?: string | null) {
+  return normalizedComparableTitle(value ?? "");
+}
+
+function generatedTextsAreSimilar(
+  first?: string | null,
+  second?: string | null,
+) {
+  const firstText = comparableGeneratedText(first);
+  const secondText = comparableGeneratedText(second);
+
+  if (!firstText || !secondText) {
+    return true;
+  }
+
+  if (firstText === secondText) {
+    return true;
+  }
+
+  return tokenSetsAreSimilar(
+    comparableTokenSet(firstText),
+    comparableTokenSet(secondText),
+    4,
+  );
+}
+
+function activityMetadataStringArray(
+  activity: NormalizedActivity,
+  key: string,
+) {
+  const value = metadataRecord(activity.metadata)?.[key];
+
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function sortedUnique(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))]
+    .sort();
+}
+
+function metadataDomainsKey(activity: NormalizedActivity) {
+  return [
+    activityMetadataStringArray(activity, "senderDomains").join(","),
+    activityMetadataStringArray(activity, "recipientDomains").join(","),
+  ].join("|");
+}
+
+function activityThreadIds(activity: NormalizedActivity) {
+  const metadata = metadataRecord(activity.metadata);
+  const metadataThreadIds = Array.isArray(metadata?.threadIds)
+    ? metadata.threadIds.filter((id): id is string => typeof id === "string")
+    : [];
+  const metadataThreadId =
+    typeof metadata?.threadId === "string" ? metadata.threadId : null;
+
+  return sortedUnique([
+    activity.sourceContainerId,
+    metadataThreadId,
+    ...metadataThreadIds,
+  ]);
+}
+
+function repeatedGmailCandidateMatch(
+  first: NormalizedActivity,
+  second: NormalizedActivity,
+) {
+  if (first.source !== "GMAIL" || second.source !== "GMAIL") {
+    return false;
+  }
+
+  if (
+    importedActivityStatusOrNull(first.status) !==
+    importedActivityStatusOrNull(second.status)
+  ) {
+    return false;
+  }
+
+  const firstDomains = metadataDomainsKey(first);
+  const secondDomains = metadataDomainsKey(second);
+
+  if (firstDomains !== "|" && secondDomains !== "|" && firstDomains !== secondDomains) {
+    return false;
+  }
+
+  return (
+    tokenSetsAreSimilar(
+      comparableTokenSet(first.title),
+      comparableTokenSet(second.title),
+    ) && generatedTextsAreSimilar(first.description, second.description)
+  );
+}
+
+function commonTokens(activities: NormalizedActivity[], field: "title") {
+  const tokenSets = activities.map((activity) => comparableTokenSet(activity[field]));
+  const [firstSet] = tokenSets;
+
+  if (!firstSet) {
+    return [];
+  }
+
+  return [...firstSet]
+    .filter((token) => tokenSets.every((set) => set.has(token)))
+    .sort();
+}
+
+function repeatedGmailGroupSourceId(activities: NormalizedActivity[]) {
+  const titleTokens = commonTokens(activities, "title");
+  const titleKey =
+    titleTokens.length >= 3
+      ? titleTokens.join(" ")
+      : normalizedComparableTitle(activities[0]?.title ?? "");
+  const domainKeys = sortedUnique(activities.map(metadataDomainsKey)).join("\u0000");
+  const hash = createHash("sha256")
+    .update(`${titleKey}\u0001${domainKeys}`)
+    .digest("hex")
+    .slice(0, 24);
+
+  return `repeated:gmail:${hash}`;
+}
+
+function repeatedGmailNote(count: number) {
+  return `Repeated ${count} similar Gmail messages.`;
+}
+
+function descriptionWithRepeatedGmailNote(
+  description: string | null | undefined,
+  count: number,
+) {
+  const note = repeatedGmailNote(count);
+  const trimmed = description?.trim();
+
+  if (!trimmed) {
+    return note;
+  }
+
+  if (trimmed.includes(note)) {
+    return trimmed;
+  }
+
+  const separator = /[.!?]$/.test(trimmed) ? " " : ". ";
+
+  return `${trimmed}${separator}${note}`;
+}
+
+function averageConfidence(activities: NormalizedActivity[]) {
+  const values = activities
+    .map((activity) => metadataRecord(activity.metadata)?.confidence)
+    .filter((value): value is number => typeof value === "number");
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function collapseRepeatedGmailActivities(activities: NormalizedActivity[]) {
+  const groups: Array<{ activities: NormalizedActivity[] }> = [];
+
+  for (const activity of activities) {
+    const group = groups.find((candidate) =>
+      repeatedGmailCandidateMatch(candidate.activities[0], activity),
+    );
+
+    if (!group) {
+      groups.push({ activities: [activity] });
+      continue;
+    }
+
+    group.activities.push(activity);
+  }
+
+  return groups.flatMap((group) => {
+    if (group.activities.length < minRepeatedEmailClusterSize) {
+      return group.activities;
+    }
+
+    const [baseActivity] = group.activities;
+    const sourceLinks = uniqueActivitySourceLinks(
+      group.activities.map(sourceLinkForActivity),
+    );
+    const messageIds = sortedUnique(group.activities.flatMap(activityMessageIds));
+    const sentMessageIds = sortedUnique(
+      group.activities.flatMap((activity) =>
+        activityMetadataStringArray(activity, "sentMessageIds"),
+      ),
+    );
+    const messageDates = sortedUnique(
+      group.activities.flatMap((activity) =>
+        activityMetadataStringArray(activity, "messageDates"),
+      ),
+    );
+    const threadIds = sortedUnique(group.activities.flatMap(activityThreadIds));
+    const mergedSourceIds = sortedUnique(
+      group.activities.map((activity) => activity.sourceId),
+    );
+    const confidence = averageConfidence(group.activities);
+    const metadata = metadataWithRelatedSourceLinks(
+      {
+        ...(baseActivity.metadata ?? {}),
+        repeatedEmailCount: group.activities.length,
+        mergedSourceIds,
+        threadIds,
+        messageIds,
+        sentMessageIds,
+        messageDates,
+        ...(confidence == null ? {} : { confidence }),
+      },
+      sourceLinks,
+    ) as Record<string, unknown>;
+
+    return [
+      {
+        ...baseActivity,
+        sourceId: repeatedGmailGroupSourceId(group.activities),
+        sourceContainerId: threadIds[0] ?? baseActivity.sourceContainerId,
+        description: descriptionWithRepeatedGmailNote(
+          baseActivity.description,
+          group.activities.length,
+        ),
+        startedAt: group.activities.reduce(
+          (date, activity) => earliestDate(date, activity.startedAt),
+          baseActivity.startedAt ?? null,
+        ),
+        endedAt: group.activities.reduce(
+          (date, activity) => latestDate(date, activity.endedAt),
+          baseActivity.endedAt ?? null,
+        ),
+        selected: group.activities.some(
+          (activity) => activity.selected !== false,
+        ),
+        metadata,
+      },
+    ];
+  });
+}
+
 function isActiveExistingActivity(activity: ExistingActivityForDedupe) {
   return activity.staleAt == null;
 }
@@ -1120,7 +1438,9 @@ export async function extractGmailActivitiesWithAI(
 
   const threadsById = threadEvidenceById(threads);
 
-  return items
+  const activities = items
     .map((item) => activityFromItem(item, threadsById))
     .filter((activity): activity is NormalizedActivity => Boolean(activity));
+
+  return collapseRepeatedGmailActivities(activities);
 }

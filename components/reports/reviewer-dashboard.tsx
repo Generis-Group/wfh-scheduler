@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import type { FormEvent, MouseEvent, ReactNode } from "react";
 
+import { ActivitySourceLinkPicker } from "@/components/reports/activity-source-link-picker";
 import { EmptyReferenceState } from "@/components/reports/reference-shell";
 import {
   ReportDateSwitcher,
@@ -2900,7 +2901,15 @@ function WeeklyDayActivities({
                     />
                     <div className="min-w-0">
                       <p className="truncate text-[15px] font-semibold leading-5 text-[#0f172a] dark:text-foreground">
-                        {activity.title || "Untitled activity"}
+                        <ActivitySourceLinkPicker
+                          source={activity.source}
+                          sourceUrl={activity.sourceUrl}
+                          sourceLinks={activity.sourceLinks}
+                          className="max-w-full hover:text-[#2563eb]"
+                          menuLabel={`Choose source link for ${activity.title || "Untitled activity"}`}
+                        >
+                          {activity.title || "Untitled activity"}
+                        </ActivitySourceLinkPicker>
                       </p>
                       <p className="mt-0.5 truncate text-[13px] leading-5 text-[#52647a] dark:text-muted-foreground">
                         {reportActivitySourceLabel(activity.source)}
@@ -3319,6 +3328,8 @@ function ReportReviewPage({
     id: activity.id,
     title: activity.title,
     source: activity.source,
+    sourceUrl: activity.sourceUrl,
+    sourceLinks: activity.sourceLinks,
     sourceLabel: reportActivitySourceLabel(activity.source),
     duration: formatReportDuration(activity.durationMinutes),
     note: activity.employeeNote,

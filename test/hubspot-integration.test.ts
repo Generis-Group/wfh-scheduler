@@ -12,6 +12,7 @@ const baseConfig: HubSpotLoggedHoursConfig = {
   durationProperty: "hours",
   durationUnit: "hours",
   userEmailProperty: "user_email",
+  userMatchMode: "emailProperty",
   titleProperties: ["task_name"],
   descriptionProperties: ["notes"],
   pageLimit: 2,
@@ -113,5 +114,58 @@ describe("HubSpot integration", () => {
     ).rejects.toThrow(
       "HubSpot logged-hours import needs access to the configured HubSpot data. Ask an admin to check the private app permissions.",
     );
+  });
+
+  it("can resolve a reporting user's email to a HubSpot owner filter", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            results: [{ id: "owner-123", email: "employee@generisgp.com" }],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ results: [] }), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await searchHubSpotLoggedHours(
+      {
+        ...baseConfig,
+        userEmailProperty: "hubspot_owner_id",
+        userMatchMode: "ownerEmail",
+      },
+      "employee@generisgp.com",
+      new Date("2026-06-18T04:00:00.000Z"),
+      new Date("2026-06-19T04:00:00.000Z"),
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.hubapi.com/crm/v3/owners?email=employee%40generisgp.com&archived=false",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer hubspot-token",
+        }),
+      }),
+    );
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)),
+    ).toMatchObject({
+      filterGroups: [
+        {
+          filters: expect.arrayContaining([
+            {
+              propertyName: "hubspot_owner_id",
+              operator: "EQ",
+              value: "owner-123",
+            },
+          ]),
+        },
+      ],
+    });
   });
 });

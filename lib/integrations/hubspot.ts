@@ -8,8 +8,9 @@ export type HubSpotLoggedHoursConfig = {
   objectType: string;
   dateProperty: string;
   durationProperty: string;
-  durationUnit: "hours" | "minutes" | "seconds";
+  durationUnit: "hours" | "minutes" | "seconds" | "milliseconds";
   userEmailProperty: string;
+  userMatchMode: "emailProperty" | "ownerEmail";
   titleProperties: string[];
   descriptionProperties: string[];
   statusProperty?: string;
@@ -33,6 +34,14 @@ type HubSpotSearchResponse = {
       after?: string;
     };
   };
+};
+
+type HubSpotOwnersResponse = {
+  results?: Array<{
+    id?: string;
+    email?: string | null;
+    archived?: boolean;
+  }>;
 };
 
 type HubSpotSearchFilter = {
@@ -68,13 +77,35 @@ function configuredDurationUnit(): HubSpotLoggedHoursConfig["durationUnit"] {
     return "hours";
   }
 
-  if (value === "hours" || value === "minutes" || value === "seconds") {
+  if (
+    value === "hours" ||
+    value === "minutes" ||
+    value === "seconds" ||
+    value === "milliseconds"
+  ) {
     return value;
   }
 
   throw new HttpError(
     409,
-    "HubSpot logged-hours import is misconfigured. HUBSPOT_LOGGED_HOURS_DURATION_UNIT must be hours, minutes, or seconds.",
+    "HubSpot logged-hours import is misconfigured. HUBSPOT_LOGGED_HOURS_DURATION_UNIT must be hours, minutes, seconds, or milliseconds.",
+  );
+}
+
+function configuredUserMatchMode(): HubSpotLoggedHoursConfig["userMatchMode"] {
+  const value = getOptionalEnv("HUBSPOT_LOGGED_HOURS_USER_MATCH_MODE");
+
+  if (!value) {
+    return "emailProperty";
+  }
+
+  if (value === "emailProperty" || value === "ownerEmail") {
+    return value;
+  }
+
+  throw new HttpError(
+    409,
+    "HubSpot logged-hours import is misconfigured. HUBSPOT_LOGGED_HOURS_USER_MATCH_MODE must be emailProperty or ownerEmail.",
   );
 }
 
@@ -142,6 +173,7 @@ export function getHubSpotLoggedHoursConfig(): HubSpotLoggedHoursConfig {
     durationProperty: required.HUBSPOT_LOGGED_HOURS_DURATION_PROPERTY!,
     durationUnit: configuredDurationUnit(),
     userEmailProperty: required.HUBSPOT_LOGGED_HOURS_USER_EMAIL_PROPERTY!,
+    userMatchMode: configuredUserMatchMode(),
     titleProperties: commaSeparatedEnv("HUBSPOT_LOGGED_HOURS_TITLE_PROPERTIES", [
       "task_name",
       "project_name",
@@ -234,6 +266,42 @@ function loggedHoursProperties(config: HubSpotLoggedHoursConfig) {
   ].filter((property): property is string => Boolean(property));
 }
 
+async function hubSpotOwnerIdForEmail(
+  config: HubSpotLoggedHoursConfig,
+  userEmail: string,
+) {
+  const response = await hubSpotRequest<HubSpotOwnersResponse>(
+    config,
+    `/crm/v3/owners?email=${encodeURIComponent(userEmail)}&archived=false`,
+  );
+  const owner = response.results?.find(
+    (item) =>
+      item.id &&
+      !item.archived &&
+      item.email?.toLowerCase() === userEmail.toLowerCase(),
+  );
+
+  if (!owner?.id) {
+    throw new HttpError(
+      409,
+      `No active HubSpot owner matches ${userEmail}. Ask an admin to confirm this reporting user exists as a HubSpot owner.`,
+    );
+  }
+
+  return owner.id;
+}
+
+async function hubSpotUserFilterValue(
+  config: HubSpotLoggedHoursConfig,
+  userEmail: string,
+) {
+  if (config.userMatchMode === "ownerEmail") {
+    return hubSpotOwnerIdForEmail(config, userEmail);
+  }
+
+  return userEmail;
+}
+
 export async function searchHubSpotLoggedHours(
   config: HubSpotLoggedHoursConfig,
   userEmail: string,
@@ -241,11 +309,12 @@ export async function searchHubSpotLoggedHours(
   end: Date,
 ) {
   const email = userEmail.trim().toLowerCase();
+  const userFilterValue = await hubSpotUserFilterValue(config, email);
   const filters: HubSpotSearchFilter[] = [
     {
       propertyName: config.userEmailProperty,
       operator: "EQ",
-      value: email,
+      value: userFilterValue,
     },
     {
       propertyName: config.dateProperty,

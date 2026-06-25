@@ -164,6 +164,17 @@ export function activitySourceLinks(activity: {
   ]);
 }
 
+export function activitySourceLinkOptions(activity: {
+  source?: string | null;
+  sourceUrl?: string | null;
+  sourceLinks?: Array<Partial<ActivitySourceLink> | null | undefined> | null;
+}) {
+  return uniqueActivitySourceLinks([
+    ...(activity.sourceLinks ?? []),
+    sourceLinkForActivity(activity),
+  ]);
+}
+
 export function metadataWithRelatedSourceLinks(
   metadata: Prisma.JsonValue | null | undefined,
   links: Array<Partial<ActivitySourceLink> | null | undefined>,

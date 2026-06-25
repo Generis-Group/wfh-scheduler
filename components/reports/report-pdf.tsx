@@ -2,10 +2,12 @@
 
 import type { ReactNode } from "react";
 
+import { ActivitySourceLinkPicker } from "@/components/reports/activity-source-link-picker";
 import {
   reportActivitySourceLabel,
   ReportActivitySourceIcon,
 } from "@/components/reports/report-ui";
+import type { ActivitySourceLink } from "@/lib/activity-source-links";
 import { cn } from "@/lib/utils";
 
 export type ReportPdfStatusTone =
@@ -28,6 +30,8 @@ export type ReportPdfActivity = {
   duration: string;
   note?: string | null;
   status?: string | null;
+  sourceUrl?: string | null;
+  sourceLinks?: ActivitySourceLink[] | null;
 };
 
 function displayActivityStatus(status?: string | null) {
@@ -251,7 +255,15 @@ export function ReportPdfDocument({
                                   />
                                   <div className="min-w-0">
                                     <div className="font-semibold leading-5 text-[#111827] dark:text-foreground">
-                                      {activity.title || "Untitled activity"}
+                                      <ActivitySourceLinkPicker
+                                        source={activity.source}
+                                        sourceUrl={activity.sourceUrl}
+                                        sourceLinks={activity.sourceLinks}
+                                        className="max-w-full hover:text-[#2563eb]"
+                                        menuLabel={`Choose source link for ${activity.title || "Untitled activity"}`}
+                                      >
+                                        {activity.title || "Untitled activity"}
+                                      </ActivitySourceLinkPicker>
                                     </div>
                                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#667085] dark:text-muted-foreground min-[740px]:hidden">
                                       <span>

@@ -5,6 +5,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -32,6 +33,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FixedToast } from "@/components/ui/fixed-toast";
 import { Input } from "@/components/ui/input";
 import { useDismissableLayer } from "@/components/ui/use-dismissable-layer";
+import { ActivitySourceLinkPicker } from "@/components/reports/activity-source-link-picker";
 import {
   EmptyReferenceState,
   ReferenceBadge,
@@ -71,7 +73,10 @@ import {
   removeSummaryActivityReferences,
   summaryActivityReferenceHref,
 } from "@/lib/summary-format";
-import type { ActivitySourceLink } from "@/lib/activity-source-links";
+import {
+  activitySourceLinkOptions,
+  type ActivitySourceLink,
+} from "@/lib/activity-source-links";
 import {
   summaryActivityReferenceDragType,
   type SummaryActivityReferenceDragPayload,
@@ -115,6 +120,11 @@ type Activity = {
   isNew?: boolean;
 };
 
+type ActivityMenuAnchorRect = Pick<
+  DOMRect,
+  "bottom" | "left" | "right" | "top" | "width"
+>;
+
 type Report = {
   id: string;
   reportDate: string | Date;
@@ -137,6 +147,16 @@ type PlannedWorkLocation = {
 };
 
 const emptyWeeklyPlannedLocations: PlannedWorkLocation[] = [];
+
+function activityMenuAnchorRect(rect: DOMRect): ActivityMenuAnchorRect {
+  return {
+    bottom: rect.bottom,
+    left: rect.left,
+    right: rect.right,
+    top: rect.top,
+    width: rect.width,
+  };
+}
 
 type IntegrationStatus = {
   google: boolean;
@@ -568,6 +588,7 @@ export function DailyReportApp({
   const [deletedActivityIds, setDeletedActivityIds] = useState<string[]>([]);
   const [openActivityMenu, setOpenActivityMenu] = useState<{
     id: string;
+    anchorRect: ActivityMenuAnchorRect;
     top: number;
     left: number;
     width: number;
@@ -934,6 +955,25 @@ export function DailyReportApp({
     );
   }
 
+  const placeActivityMenu = useCallback(
+    (anchorRect: ActivityMenuAnchorRect, preferredMaxHeight = 256) => {
+      const menuHeight = Math.max(1, Math.min(preferredMaxHeight, 320));
+
+      return anchoredFixedPlacement({
+        anchorRect,
+        preferredWidth: 240,
+        preferredMaxHeight: menuHeight,
+        minHeight: Math.min(80, menuHeight),
+        flipHeight: menuHeight,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        viewportPadding: 8,
+        gap: 6,
+      });
+    },
+    [],
+  );
+
   function toggleActivityMenu(
     activityId: string,
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -944,19 +984,16 @@ export function DailyReportApp({
       return;
     }
 
-    const rect = event.currentTarget.getBoundingClientRect();
-    const placement = anchoredFixedPlacement({
-      anchorRect: rect,
-      preferredWidth: 240,
-      preferredMaxHeight: 232,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
-    });
+    const anchorRect = activityMenuAnchorRect(
+      event.currentTarget.getBoundingClientRect(),
+    );
+    const placement = placeActivityMenu(anchorRect);
 
     setImportMenuOpen(false);
     activityMenuOpenedAtRef.current = Date.now();
     setOpenActivityMenu({
       id: activityId,
+      anchorRect,
       top: placement.top,
       left: placement.left,
       width: placement.width,
@@ -1768,13 +1805,21 @@ export function DailyReportApp({
   );
 
   function openActivitySource(activity: Activity) {
-    if (!activity.sourceUrl || activity.sourceUrl === "#") {
+    const links = activitySourceLinkOptions(activity);
+
+    if (links.length === 0) {
       setMessage("This activity does not have a source link.");
       setOpenActivityMenu(null);
       return;
     }
 
-    window.open(activity.sourceUrl, "_blank", "noopener,noreferrer");
+    if (links.length > 1) {
+      setMessage("Choose a source link from the work item title or menu.");
+      setOpenActivityMenu(null);
+      return;
+    }
+
+    window.open(links[0].href, "_blank", "noopener,noreferrer");
     setOpenActivityMenu(null);
   }
 
@@ -1947,6 +1992,57 @@ export function DailyReportApp({
   const menuActivity = openActivityMenu
     ? activities.find((activity) => activity.id === openActivityMenu.id)
     : null;
+  const menuActivityLinks = menuActivity
+    ? activitySourceLinkOptions(menuActivity)
+    : [];
+
+  useLayoutEffect(() => {
+    const currentMenu = openActivityMenu;
+
+    if (!currentMenu || !activityMenuRef.current) {
+      return;
+    }
+
+    const contentHeight = Math.ceil(activityMenuRef.current.scrollHeight);
+
+    if (contentHeight <= 0) {
+      return;
+    }
+
+    const placement = placeActivityMenu(currentMenu.anchorRect, contentHeight);
+
+    setOpenActivityMenu((latestMenu) => {
+      if (
+        !latestMenu ||
+        latestMenu.id !== currentMenu.id ||
+        latestMenu.anchorRect !== currentMenu.anchorRect
+      ) {
+        return latestMenu;
+      }
+
+      if (
+        latestMenu.top === placement.top &&
+        latestMenu.left === placement.left &&
+        latestMenu.width === placement.width &&
+        latestMenu.maxHeight === placement.maxHeight
+      ) {
+        return latestMenu;
+      }
+
+      return {
+        ...latestMenu,
+        top: placement.top,
+        left: placement.left,
+        width: placement.width,
+        maxHeight: placement.maxHeight,
+      };
+    });
+  }, [
+    menuActivityLinks.length,
+    openActivityMenu,
+    placeActivityMenu,
+  ]);
+
   return (
     <>
       <main className="reference-page daily-report-page min-[1200px]:flex min-[1200px]:h-full min-[1200px]:min-h-0 min-[1200px]:flex-col">
@@ -2428,19 +2524,16 @@ export function DailyReportApp({
                                 aria-label="Task title"
                                 className="h-7 rounded-[6px] bg-white px-2 text-sm font-semibold shadow-none ring-1 ring-[#93c5fd] focus-visible:ring-2 dark:bg-[#101d2e] dark:ring-[#3a506d]"
                               />
-                            ) : activity.sourceUrl &&
-                              activity.sourceUrl !== "#" ? (
-                              <a
-                                href={activity.sourceUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                draggable={false}
-                                className="hover:text-[#2563eb]"
+                            ) : (
+                              <ActivitySourceLinkPicker
+                                source={activity.source}
+                                sourceUrl={activity.sourceUrl}
+                                sourceLinks={activity.sourceLinks}
+                                className="max-w-full hover:text-[#2563eb]"
+                                menuLabel={`Choose source link for ${activity.title || "Untitled activity"}`}
                               >
                                 {activity.title || "Untitled activity"}
-                              </a>
-                            ) : (
-                              activity.title || "Untitled activity"
+                              </ActivitySourceLinkPicker>
                             )}
                           </div>
                           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#667085] dark:text-muted-foreground min-[900px]:flex-nowrap">
@@ -2562,15 +2655,37 @@ export function DailyReportApp({
             }}
             role="menu"
           >
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] transition-colors hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
-              onClick={() => openActivitySource(menuActivity)}
-            >
-              <ExternalLink className="h-4 w-4" />
-              Open source
-            </button>
+            {menuActivityLinks.length > 1 ? (
+              <div className="mb-1 border-b border-[#e1e6ef] pb-1 dark:border-[#263a55]">
+                <div className="px-3 pb-1 pt-1 text-xs font-semibold text-[#667085] dark:text-muted-foreground">
+                  Open source
+                </div>
+                {menuActivityLinks.map((link) => (
+                  <a
+                    key={link.href}
+                    role="menuitem"
+                    href={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] transition-colors hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
+                    onClick={() => setOpenActivityMenu(null)}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    <span className="min-w-0 truncate">{link.label}</span>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] transition-colors hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
+                onClick={() => openActivitySource(menuActivity)}
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open source
+              </button>
+            )}
             <button
               type="button"
               role="menuitem"
