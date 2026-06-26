@@ -227,6 +227,7 @@ describe("Google Chat AI import helpers", () => {
     expect(prompt).toContain(
       "include those context message ids in messageIds too",
     );
+    expect(prompt).toContain("Always return status:null");
     expect(prompt).toContain("Can you update the ESC26 delegate list");
     expect(prompt).toContain("bare acknowledgement");
     expect(activities.map((activity) => activity.title)).toEqual([
@@ -271,7 +272,7 @@ describe("Google Chat AI import helpers", () => {
           messageIds: ["spaces/AAA/messages/msg-1"],
           title: "Advance launch review",
           description: "Prepared review material.",
-          status: "noted",
+          status: "complete",
           confidence: 0.82,
           reason: "deliverable",
           startedAt: "2026-05-14T14:00:00.000Z",
@@ -335,6 +336,7 @@ describe("Google Chat AI import helpers", () => {
         source: "GOOGLE_CHAT",
         title: "Advance launch review",
         selected: true,
+        status: null,
         metadata: expect.objectContaining({
           importBatch: "google-chat-ai-v1",
           messageIds: ["spaces/AAA/messages/msg-1"],
@@ -347,7 +349,7 @@ describe("Google Chat AI import helpers", () => {
         source: "GOOGLE_CHAT",
         title: "Coordinate rollout timing",
         selected: false,
-        status: "needs review",
+        status: null,
         metadata: expect.objectContaining({
           reviewRequired: true,
         }),

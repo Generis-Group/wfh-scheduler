@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { ActivitySourceLinkPicker } from "@/components/reports/activity-source-link-picker";
 import {
   reportActivitySourceLabel,
+  reportActivityStatusLabel,
   ReportActivitySourceIcon,
 } from "@/components/reports/report-ui";
 import type { ActivitySourceLink } from "@/lib/activity-source-links";
@@ -35,9 +36,7 @@ export type ReportPdfActivity = {
 };
 
 function displayActivityStatus(status?: string | null) {
-  const trimmed = status?.trim();
-
-  return trimmed && trimmed.toLowerCase() !== "noted" ? trimmed : null;
+  return reportActivityStatusLabel(status);
 }
 
 function displayActivityNote(note?: string | null) {

@@ -45,6 +45,7 @@ import {
 import {
   formatReportDuration,
   reportActivitySourceLabel,
+  reportActivityStatusLabel,
   ReportActivitySourceIcon,
   ReportPageHeader,
   ReportSearchField,
@@ -348,22 +349,9 @@ function statusTone(
 }
 
 function activityStatusLabel(activity: Activity) {
-  const status = activity.status?.trim();
-  const normalizedStatus = status?.toLowerCase();
-
-  if (activity.source === "MANUAL" && normalizedStatus === "noted") {
-    return "Noted";
-  }
-
-  if (!status || normalizedStatus === "noted") {
-    return null;
-  }
-
-  if (activity.source === "GOOGLE_TASKS" && normalizedStatus === "completed") {
-    return "Done";
-  }
-
-  return status;
+  return reportActivityStatusLabel(activity.status, {
+    showNoted: activity.source === "MANUAL",
+  });
 }
 
 function setTransparentDragImage(dataTransfer: DataTransfer) {

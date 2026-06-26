@@ -33,6 +33,7 @@ import {
   type ReportPdfActivity,
   type ReportPdfComment,
 } from "@/components/reports/report-pdf";
+import { reportActivityStatusLabel } from "@/components/reports/report-ui";
 import {
   SummaryRenderer,
   summaryPlainText,
@@ -1142,11 +1143,7 @@ function OpenedReportView({
       sourceLinks: activity.sourceLinks,
       duration: formatDuration(activity.durationMinutes),
       note: activity.employeeNote,
-      status:
-        activity.source === "GOOGLE_TASKS" &&
-        activity.status?.toLowerCase() === "completed"
-          ? "Done"
-          : activity.status,
+      status: reportActivityStatusLabel(activity.status),
     }),
   );
   const pdfComments: ReportPdfComment[] = comments.map((comment) => ({

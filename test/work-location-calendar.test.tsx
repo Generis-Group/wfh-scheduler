@@ -381,8 +381,113 @@ describe("WorkLocationCalendar", () => {
         }),
       );
     });
-    expect(await screen.findByText("Weekly plan saved.")).toBeTruthy();
-    expect(screen.getAllByText("Planned")).toHaveLength(1);
+    await waitFor(() => {
+      expect(screen.getAllByText("Planned")).toHaveLength(1);
+    });
+    expect(screen.queryByText("Weekly plan saved.")).toBeNull();
+  });
+
+  it("renders my weekday planner without a horizontal scroll strip", () => {
+    renderCalendar();
+
+    const myWeek = screen.getByRole("region", { name: "Weekday plan" });
+
+    expect(
+      within(myWeek).getAllByRole("button", { name: /^Plan for/ }),
+    ).toHaveLength(5);
+    expect(
+      within(myWeek).queryByRole("button", { name: "Plan for Sat, May 23" }),
+    ).toBeNull();
+    expect(
+      within(myWeek).queryByRole("button", { name: "Plan for Sun, May 24" }),
+    ).toBeNull();
+    expect(myWeek.querySelector(".reference-table-scroll")).toBeNull();
+  });
+
+  it("keeps other weekday plan controls enabled while one day is saving", async () => {
+    let resolveWednesdaySave!: (response: Response) => void;
+    const pendingWednesdaySave = new Promise<Response>((resolve) => {
+      resolveWednesdaySave = resolve;
+    });
+    const fetchMock = vi.fn(
+      async (_url: string, init?: RequestInit): Promise<Response> => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          date: string;
+          workLocation: string;
+        };
+
+        if (body.date === "2026-05-20") {
+          return pendingWednesdaySave;
+        }
+
+        return Response.json({
+          plan: {
+            id: `plan-${body.date}`,
+            userId: "user-1",
+            date: body.date,
+            workLocation: body.workLocation,
+          },
+        });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderCalendar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Plan for Wed, May 20" }));
+    fireEvent.click(
+      within(screen.getByRole("listbox")).getByRole("option", {
+        name: "Office",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    expect(
+      (screen.getByRole("button", {
+        name: "Plan for Wed, May 20",
+      }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", {
+        name: "Plan for Tue, May 19",
+      }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Plan for Tue, May 19" }));
+    fireEvent.click(
+      within(screen.getByRole("listbox")).getByRole("option", {
+        name: "WFH",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+    expect(fetchMock.mock.calls[1][1]).toEqual(
+      expect.objectContaining({
+        body: expect.stringContaining('"date":"2026-05-19"'),
+      }),
+    );
+
+    resolveWednesdaySave(
+      Response.json({
+        plan: {
+          id: "plan-2026-05-20",
+          userId: "user-1",
+          date: "2026-05-20",
+          workLocation: "OFFICE",
+        },
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        (screen.getByRole("button", {
+          name: "Plan for Wed, May 20",
+        }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+    });
   });
 
   it("searches people rows without leaving the locations page", () => {

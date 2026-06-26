@@ -41,6 +41,7 @@ import {
 import {
   formatReportDuration,
   reportActivitySourceLabel,
+  reportActivityStatusLabel,
   ReportActivitySourceIcon,
   ReportPageHeader,
   ReportSearchField,
@@ -2731,9 +2732,9 @@ function Avatar({ name }: { name?: string | null }) {
 }
 
 function weeklyActivityStatusLabel(activity: DashboardActivity) {
-  const status = activity.status?.trim();
+  const status = reportActivityStatusLabel(activity.status);
 
-  if (!status || status.toLowerCase() === "noted") {
+  if (!status) {
     return null;
   }
 

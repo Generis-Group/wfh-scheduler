@@ -11,7 +11,6 @@ import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
 import type { NormalizedActivity } from "@/lib/normalizers";
 import {
   formatImportedActivityTitle,
-  importedActivityStatusOrNull,
   isDescriptiveImportedActivityTitle,
 } from "@/lib/services/ai-import-quality";
 
@@ -45,7 +44,6 @@ type GoogleChatExtractionItem = {
   messageIds: string[];
   title: string;
   description: string | null;
-  status: string | null;
   confidence: number;
   reason: GoogleChatImportReason;
   startedAt: Date;
@@ -76,7 +74,6 @@ const maxConversationsPerBatch = 12;
 const maxMessageTextLength = 2200;
 const maxExtractedTitleLength = 160;
 const maxExtractedDescriptionLength = 360;
-const maxExtractedStatusLength = 80;
 const maxExtractedReasonLength = 40;
 const minLeakCheckChars = 18;
 const minLeakCheckWords = 4;
@@ -592,7 +589,6 @@ function normalizeExtractionItems(
       messageIds: uniqueMessageIds,
       title,
       description: cleanText(item.description, maxExtractedDescriptionLength),
-      status: cleanText(item.status, maxExtractedStatusLength),
       confidence,
       reason: parsedReason(item.reason),
       startedAt:
@@ -654,7 +650,7 @@ function buildExtractionPrompt(
     "If a current_user message is short or ambiguous, use surrounding context to produce a specific task title. If the surrounding context still does not identify reportable work, omit it.",
     'Titles must be short, specific, and sentence case, like "Fix disappearing sponsor info" or "Update ESC26 delegate list". Preserve Jira keys, acronyms, product names, and event names. Do not use generic titles like "Task completed", "Work update", "Status update", or "Noted".',
     "Do not infer that a user created, completed, or blocked a task unless the Chat messages explicitly say so.",
-    'Use status only when it adds useful information such as "complete", "blocked", or "in progress"; otherwise use null.',
+    "Always return status:null. Do not assign completion, progress, or blocker statuses from Google Chat evidence.",
     "Use confidence 0 to 1. Use 0.75+ only when the messages clearly show reportable work.",
     "The reason must be one of: work_performed, deliverable, follow_up, decision, coordination, blocker.",
     "Do not quote chat text. Do not include raw URLs, raw email addresses, markdown, HTML, or unknown message ids.",
@@ -868,9 +864,6 @@ function activityFromItem(
     item.description,
     conversation.messages,
   );
-  const status = importedActivityStatusOrNull(
-    generatedFieldWithoutBodyLeak(item.status, conversation.messages),
-  );
   const selected = item.confidence >= selectedConfidenceThreshold;
   const senderTypes = [
     ...new Set(referencedMessages.map((message) => message.senderType)),
@@ -884,7 +877,7 @@ function activityFromItem(
     sourceContainerId: item.conversationId,
     title,
     description,
-    status: status ?? (selected ? null : "needs review"),
+    status: null,
     sourceUrl: conversation.spaceUri,
     startedAt: item.startedAt,
     endedAt: latestMessageDate(referencedMessages),

@@ -991,9 +991,10 @@ export function WorkLocationCalendar({
   const [myPlans, setMyPlans] = useState(data.myPlans);
   const [rows, setRows] = useState(data.rows);
   const [monthRows, setMonthRows] = useState(data.month.rows);
-  const [savingPlanDate, setSavingPlanDate] = useState<string | null>(null);
+  const [savingPlanDates, setSavingPlanDates] = useState<string[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const savingPlanDatesRef = useRef<Set<string>>(new Set());
   const isWfhCalendar = view === "wfh-calendar";
   const previousWeek = addReportDateDays(data.weekStart, -7);
   const nextWeek = addReportDateDays(data.weekStart, 7);
@@ -1015,6 +1016,19 @@ export function WorkLocationCalendar({
   const myPlanByDate = useMemo(
     () => new Map(myPlans.map((plan) => [plan.date, plan])),
     [myPlans],
+  );
+  const savingPlanDateSet = useMemo(
+    () => new Set(savingPlanDates),
+    [savingPlanDates],
+  );
+  const weekdayPlanDates = useMemo(
+    () =>
+      data.dates.filter((date) => {
+        const weekday = utcDate(date).getUTCDay();
+
+        return weekday >= 1 && weekday <= 5;
+      }),
+    [data.dates],
   );
   const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase();
   const filteredRows = useMemo(
@@ -1044,7 +1058,8 @@ export function WorkLocationCalendar({
     setMyPlans(data.myPlans);
     setRows(data.rows);
     setMonthRows(data.month.rows);
-    setSavingPlanDate(null);
+    savingPlanDatesRef.current.clear();
+    setSavingPlanDates([]);
     setEmployeeSearch("");
     setMessage(null);
   }, [data]);
@@ -1080,11 +1095,12 @@ export function WorkLocationCalendar({
     dateString: string,
     nextLocation: PlannedWorkLocationValue | null,
   ) {
-    if (savingPlanDate) {
+    if (savingPlanDatesRef.current.has(dateString)) {
       return;
     }
 
-    setSavingPlanDate(dateString);
+    savingPlanDatesRef.current.add(dateString);
+    setSavingPlanDates(Array.from(savingPlanDatesRef.current));
     setMessage(null);
 
     try {
@@ -1149,7 +1165,6 @@ export function WorkLocationCalendar({
         ),
       );
       markServerDataStale();
-      setMessage("Weekly plan saved.");
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -1157,7 +1172,8 @@ export function WorkLocationCalendar({
           : "Unable to update weekly plan.",
       );
     } finally {
-      setSavingPlanDate(null);
+      savingPlanDatesRef.current.delete(dateString);
+      setSavingPlanDates(Array.from(savingPlanDatesRef.current));
     }
   }
 
@@ -1235,78 +1251,72 @@ export function WorkLocationCalendar({
       </div>
 
       {view === "weekly-list" && data.canPlanOwnWeek ? (
-        <section className="reference-card px-4 py-3">
-          <div className="grid gap-3 min-[1080px]:grid-cols-[minmax(150px,220px)_minmax(0,1fr)] min-[1080px]:items-center">
-            <div className="flex min-w-0 items-start justify-between gap-3 min-[1080px]:block">
-              <div className="min-w-0">
-                <h2 className="text-base font-semibold tracking-normal text-[#111827] dark:text-foreground">
-                My week
-                </h2>
-                <p className="mt-0.5 text-xs leading-5 text-[#667085] dark:text-muted-foreground">
-                  Set default locations.
-                </p>
+        <section
+          className="reference-card border-[#e7edf5] p-3 shadow-none dark:border-[#23344c]"
+          aria-label="Weekday plan"
+        >
+          {message ? (
+            <div className="mb-2 flex justify-end">
+              <div
+                className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-[#2563eb] dark:bg-blue-400/10 dark:text-blue-200"
+                role="status"
+              >
+                {message}
               </div>
-              {message ? (
-                <div className="shrink-0 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-[#2563eb] dark:bg-blue-400/10 dark:text-blue-200 min-[1080px]:mt-2 min-[1080px]:inline-flex">
-                  {message}
-                </div>
-              ) : null}
             </div>
-            <div className="reference-table-scroll -mx-1 px-1">
-              <div className="grid min-w-[760px] grid-cols-7 gap-1.5">
-                {data.dates.map((date) => {
-                  const plan = myPlanByDate.get(date);
-                  const saving = savingPlanDate === date;
+          ) : null}
+          <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            {weekdayPlanDates.map((date) => {
+              const plan = myPlanByDate.get(date);
+              const saving = savingPlanDateSet.has(date);
 
-                  return (
-                    <div
-                      key={date}
-                      className={cn(
-                        "grid min-w-0 gap-1.5 rounded-[8px] border border-[#dfe4ee] bg-[#f8fafc] p-2 transition-colors dark:border-[#263a55] dark:bg-[#0d1828]",
-                        plan &&
-                          "border-[#b9cef6] bg-[#f3f7ff] dark:border-blue-300/20 dark:bg-blue-400/[0.055]",
-                      )}
-                    >
-                      <div className="flex min-w-0 items-center justify-between gap-2 px-0.5">
-                        <div className="flex min-w-0 items-baseline gap-1.5">
-                          <span className="shrink-0 text-sm font-semibold text-[#111827] dark:text-foreground">
-                            {dayNumber(date)}
-                          </span>
-                          <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
-                            {weekdayLabel(date)}
-                          </span>
-                        </div>
-                        {saving ? (
-                          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#2563eb]" />
-                        ) : null}
-                      </div>
-                      <Select
-                        aria-label={`Plan for ${dayLabel(date)}`}
-                        className="h-8 border-[#d9e2ef] bg-white text-xs dark:border-[#24354c] dark:bg-[#101d2e]"
-                        value={plan?.workLocation ?? ""}
-                        disabled={Boolean(savingPlanDate)}
-                        onChange={(event) => {
-                          const nextValue = event.target.value;
-                          void saveWeeklyPlan(
-                            date,
-                            nextValue
-                              ? (nextValue as PlannedWorkLocationValue)
-                              : null,
-                          );
-                        }}
-                      >
-                        <option value="">No plan</option>
-                        {planLocationOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </Select>
+              return (
+                <div
+                  key={date}
+                  className={cn(
+                    "grid min-w-0 gap-2 rounded-[8px] bg-[#f5f7fb] p-2.5 transition-colors dark:bg-white/[0.035]",
+                    plan &&
+                      "bg-[#edf4ff] dark:bg-blue-400/[0.075]",
+                  )}
+                >
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-baseline gap-1.5">
+                      <span className="shrink-0 text-lg font-semibold leading-none text-[#111827] dark:text-foreground">
+                        {dayNumber(date)}
+                      </span>
+                      <span className="truncate text-[11px] font-semibold uppercase text-[#667085] dark:text-muted-foreground">
+                        {weekdayLabel(date)}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                    {saving ? (
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#2563eb]" />
+                    ) : null}
+                  </div>
+                  <Select
+                    aria-label={`Plan for ${dayLabel(date)}`}
+                    className="h-9 border-transparent bg-white/90 text-xs dark:border-transparent dark:bg-[#101d2e]"
+                    value={plan?.workLocation ?? ""}
+                    disabled={saving}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      void saveWeeklyPlan(
+                        date,
+                        nextValue
+                          ? (nextValue as PlannedWorkLocationValue)
+                          : null,
+                      );
+                    }}
+                  >
+                    <option value="">No plan</option>
+                    {planLocationOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              );
+            })}
           </div>
         </section>
       ) : null}

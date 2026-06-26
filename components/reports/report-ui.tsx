@@ -213,6 +213,32 @@ export function reportActivitySourceLabel(source?: string | null) {
   return source ? titleCase(source) : "Unknown";
 }
 
+export function reportActivityStatusLabel(
+  status?: string | null,
+  { showNoted = false }: { showNoted?: boolean } = {},
+) {
+  const trimmed = status?.trim();
+  const normalized = trimmed?.toLowerCase();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (normalized === "noted") {
+    return showNoted ? "Noted" : null;
+  }
+
+  if (
+    normalized === "complete" ||
+    normalized === "completed" ||
+    normalized === "done"
+  ) {
+    return "Done";
+  }
+
+  return trimmed;
+}
+
 export function ReportActivitySourceIcon({
   source,
   className,
