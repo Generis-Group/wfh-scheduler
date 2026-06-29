@@ -195,6 +195,12 @@ function weekdayLabel(value: string) {
   }).format(utcDate(value));
 }
 
+function isWeekdayDate(value: string) {
+  const weekday = utcDate(value).getUTCDay();
+
+  return weekday >= 1 && weekday <= 5;
+}
+
 function weekRangeLabel(start: string, end: string) {
   const formatter = new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -326,11 +332,13 @@ function wfhCoverageLabel(coverage: WfhCoverage) {
   return "WFH";
 }
 
-function monthWeeks(dates: CalendarMonthDay[]) {
+function workWeeks(dates: CalendarMonthDay[]) {
   const weeks: CalendarMonthDay[][] = [];
 
   for (let index = 0; index < dates.length; index += 7) {
-    weeks.push(dates.slice(index, index + 7));
+    weeks.push(
+      dates.slice(index, index + 7).filter((day) => isWeekdayDate(day.date)),
+    );
   }
 
   return weeks;
@@ -668,31 +676,186 @@ function MonthPicker({
   monthStart: string;
   onSelectDate: (date: string) => void;
 }) {
-  const monthOptions = useMemo(
+  const [open, setOpen] = useState(false);
+  const [pickerYear, setPickerYear] = useState(() =>
+    monthDateFromKey(monthKeyFromDate(monthStart)).getFullYear(),
+  );
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+  const pickerButtonRef = useRef<HTMLButtonElement | null>(null);
+  const pickerMenuRef = useRef<HTMLDivElement | null>(null);
+  const [pickerPosition, setPickerPosition] =
+    useState<FloatingPanelPosition | null>(null);
+  const selectedMonthKey = monthKeyFromDate(monthStart);
+  const selectedYear = monthDateFromKey(selectedMonthKey).getFullYear();
+  const monthButtons = useMemo(
     () =>
-      Array.from({ length: 25 }, (_, index) => {
-        const month = selectedMonthDate(monthStart, index - 12);
+      Array.from({ length: 12 }, (_, monthIndex) => {
+        const date = dateStringFromParts(pickerYear, monthIndex, 1);
 
         return {
-          value: month,
-          label: monthLabel(month),
+          date,
+          key: date.slice(0, 7),
+          label: new Intl.DateTimeFormat("en-US", {
+            month: "short",
+          }).format(localDate(date)),
+          fullLabel: monthLabel(date),
         };
       }),
-    [monthStart],
+    [pickerYear],
   );
 
+  const updatePickerPosition = useCallback(() => {
+    if (typeof window === "undefined" || !pickerButtonRef.current) {
+      return;
+    }
+
+    const placement = anchoredFixedPlacement({
+      anchorRect: pickerButtonRef.current.getBoundingClientRect(),
+      preferredWidth: 304,
+      preferredMaxHeight: 340,
+      minHeight: 220,
+      flipHeight: 240,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      viewportPadding: 8,
+      gap: 6,
+      align: "end",
+    });
+
+    setPickerPosition({
+      left: placement.left,
+      top: placement.top,
+      width: placement.width,
+      maxHeight: placement.maxHeight,
+    });
+  }, []);
+
+  useDismissableLayer({
+    open,
+    refs: [pickerRef, pickerMenuRef],
+    onDismiss: () => setOpen(false),
+  });
+
+  useEffect(() => {
+    if (open) {
+      setPickerYear(selectedYear);
+    }
+  }, [open, selectedYear]);
+
+  useEffect(() => {
+    if (!open) {
+      setPickerPosition(null);
+      return undefined;
+    }
+
+    updatePickerPosition();
+    window.addEventListener("resize", updatePickerPosition);
+    window.addEventListener("scroll", updatePickerPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePickerPosition);
+      window.removeEventListener("scroll", updatePickerPosition, true);
+    };
+  }, [open, updatePickerPosition]);
+
+  function selectMonth(date: string) {
+    setOpen(false);
+    onSelectDate(date);
+  }
+
   return (
-    <Select
-      aria-label="Jump to month"
-      value={monthStart}
-      onChange={(event) => onSelectDate(event.target.value)}
-    >
-      {monthOptions.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </Select>
+    <div ref={pickerRef} className="relative">
+      <button
+        ref={pickerButtonRef}
+        type="button"
+        aria-label="Jump to month"
+        aria-expanded={open}
+        aria-controls="work-location-month-picker"
+        className="flex h-10 w-full min-w-0 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-[#111827] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55] dark:hover:bg-white/5"
+        onClick={() => {
+          if (open) {
+            setOpen(false);
+            return;
+          }
+
+          updatePickerPosition();
+          setOpen(true);
+        }}
+      >
+        <CalendarDays className="h-4 w-4 shrink-0 text-[#667085] dark:text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-left">
+          {monthLabel(monthStart)}
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-[#667085] transition-transform dark:text-muted-foreground",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={pickerMenuRef}
+              id="work-location-month-picker"
+              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+              style={{
+                left: pickerPosition?.left ?? 0,
+                top: pickerPosition?.top ?? 0,
+                width: pickerPosition?.width,
+                maxHeight: pickerPosition?.maxHeight,
+                visibility: pickerPosition ? "visible" : "hidden",
+              }}
+            >
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  className="reference-menu-button"
+                  aria-label="Previous year"
+                  onClick={() => setPickerYear((year) => year - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <div className="text-sm font-semibold text-[#111827] dark:text-foreground">
+                  {pickerYear}
+                </div>
+                <button
+                  type="button"
+                  className="reference-menu-button"
+                  aria-label="Next year"
+                  onClick={() => setPickerYear((year) => year + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                {monthButtons.map((month) => {
+                  const selected = month.key === selectedMonthKey;
+
+                  return (
+                    <button
+                      key={month.key}
+                      type="button"
+                      className={cn(
+                        "flex h-10 items-center justify-center rounded-[7px] text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]",
+                        selected
+                          ? "bg-[#2563eb] text-white hover:bg-[#1d4ed8] dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400"
+                          : "text-[#344054] hover:bg-[#eff6ff] hover:text-[#1d4ed8] dark:text-foreground dark:hover:bg-white/10 dark:hover:text-blue-100",
+                      )}
+                      aria-label={`Select ${month.fullLabel}`}
+                      aria-current={selected ? "date" : undefined}
+                      onClick={() => selectMonth(month.date)}
+                    >
+                      {month.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
   );
 }
 
@@ -767,7 +930,7 @@ function WfhCalendarGrid({
     useState<WfhOverflowMenu | null>(null);
   const overflowTriggerRef = useRef<HTMLDivElement | null>(null);
   const overflowMenuRef = useRef<HTMLDivElement | null>(null);
-  const weeks = useMemo(() => monthWeeks(dates), [dates]);
+  const weeks = useMemo(() => workWeeks(dates), [dates]);
   const datesKey = useMemo(
     () => dates.map((calendarDay) => calendarDay.date).join("|"),
     [dates],
@@ -865,16 +1028,14 @@ function WfhCalendarGrid({
           ref={gridRef}
           className="wfh-calendar-grid gap-px rounded-[8px] bg-[#dfe4ee] p-px dark:bg-[#263a55]"
         >
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-            (weekday) => (
-              <div
-                key={weekday}
-                className="bg-[#f8fafc] px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#667085] first:rounded-tl-[7px] last:rounded-tr-[7px] dark:bg-white/[0.035] dark:text-muted-foreground"
-              >
-                {weekday}
-              </div>
-            ),
-          )}
+          {["Mon", "Tue", "Wed", "Thu", "Fri"].map((weekday) => (
+            <div
+              key={weekday}
+              className="bg-[#f8fafc] px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#667085] first:rounded-tl-[7px] last:rounded-tr-[7px] dark:bg-white/[0.035] dark:text-muted-foreground"
+            >
+              {weekday}
+            </div>
+          ))}
           {weeks.flatMap((week, weekIndex) =>
             week.map((calendarDay, dayIndex) => {
               const entries = entriesByDate.get(calendarDay.date) ?? [];
@@ -1021,15 +1182,11 @@ export function WorkLocationCalendar({
     () => new Set(savingPlanDates),
     [savingPlanDates],
   );
-  const weekdayPlanDates = useMemo(
-    () =>
-      data.dates.filter((date) => {
-        const weekday = utcDate(date).getUTCDay();
-
-        return weekday >= 1 && weekday <= 5;
-      }),
+  const weekdayDates = useMemo(
+    () => data.dates.filter(isWeekdayDate),
     [data.dates],
   );
+  const weekdayDateSet = useMemo(() => new Set(weekdayDates), [weekdayDates]);
   const normalizedEmployeeSearch = employeeSearch.trim().toLowerCase();
   const filteredRows = useMemo(
     () =>
@@ -1266,7 +1423,7 @@ export function WorkLocationCalendar({
             </div>
           ) : null}
           <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-            {weekdayPlanDates.map((date) => {
+            {weekdayDates.map((date) => {
               const plan = myPlanByDate.get(date);
               const saving = savingPlanDateSet.has(date);
 
@@ -1374,7 +1531,7 @@ export function WorkLocationCalendar({
             <table className="work-location-weekly-table border-separate border-spacing-0 text-left text-sm">
               <colgroup>
                 <col className="work-location-person-column" />
-                {data.dates.map((date) => (
+                {weekdayDates.map((date) => (
                   <col key={date} className="work-location-day-column" />
                 ))}
               </colgroup>
@@ -1383,7 +1540,7 @@ export function WorkLocationCalendar({
                   <th className="sticky left-0 z-10 border-b border-r border-[#edf2f7] bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:border-white/[0.06] dark:bg-[#0f1b2a] dark:text-muted-foreground">
                     Person
                   </th>
-                  {data.dates.map((date, dateIndex) => (
+                  {weekdayDates.map((date, dateIndex) => (
                     <th
                       key={date}
                       className={cn(
@@ -1416,17 +1573,19 @@ export function WorkLocationCalendar({
                         {employeeDepartmentLabel(row.user)}
                       </div>
                     </th>
-                    {row.days.map((day, dayIndex) => (
-                      <td
-                        key={day.date}
-                        className={cn(
-                          "border-b border-[#edf2f7] px-3 py-3 align-middle transition-colors dark:border-white/[0.06]",
-                          dayIndex > 0 && "border-l",
-                        )}
-                      >
-                        <LocationCell day={day} />
-                      </td>
-                    ))}
+                    {row.days
+                      .filter((day) => weekdayDateSet.has(day.date))
+                      .map((day, dayIndex) => (
+                        <td
+                          key={day.date}
+                          className={cn(
+                            "border-b border-[#edf2f7] px-3 py-3 align-middle transition-colors dark:border-white/[0.06]",
+                            dayIndex > 0 && "border-l",
+                          )}
+                        >
+                          <LocationCell day={day} />
+                        </td>
+                      ))}
                   </tr>
                 ))}
               </tbody>

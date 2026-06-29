@@ -279,7 +279,7 @@
     --work-location-person-column-size: clamp(12rem, 18vw, 15rem);
     --work-location-day-column-size: 8rem;
     --wfh-calendar-row-block-size: clamp(10rem, 16dvh, 11rem);
-    --wfh-calendar-min-inline-size: 42.5rem;
+    --wfh-calendar-min-inline-size: 32rem;
     margin-inline: 0 auto;
   }
 
@@ -382,14 +382,14 @@
     display: grid;
     grid-template-rows: auto;
     grid-auto-rows: var(--wfh-calendar-row-block-size);
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .work-location-weekly-table {
     inline-size: 100%;
     min-inline-size: calc(
       var(--work-location-person-column-size) +
-        (var(--work-location-day-column-size) * 7)
+        (var(--work-location-day-column-size) * 5)
     );
     table-layout: fixed;
   }

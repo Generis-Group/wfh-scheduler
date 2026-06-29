@@ -404,6 +404,23 @@ describe("WorkLocationCalendar", () => {
     expect(myWeek.querySelector(".reference-table-scroll")).toBeNull();
   });
 
+  it("renders the weekly location table without weekend columns", () => {
+    renderCalendar();
+
+    expect(
+      screen.getByRole("columnheader", { name: "Mon, May 18" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("columnheader", { name: "Fri, May 22" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("columnheader", { name: "Sat, May 23" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("columnheader", { name: "Sun, May 24" }),
+    ).toBeNull();
+  });
+
   it("keeps other weekday plan controls enabled while one day is saving", async () => {
     let resolveWednesdaySave!: (response: Response) => void;
     const pendingWednesdaySave = new Promise<Response>((resolve) => {
@@ -533,10 +550,49 @@ describe("WorkLocationCalendar", () => {
     expect(
       screen.getByRole("heading", { name: "WFH calendar" }),
     ).toBeTruthy();
+    expect(screen.getByText("Mon")).toBeTruthy();
+    expect(screen.getByText("Fri")).toBeTruthy();
+    expect(screen.queryByText("Sat")).toBeNull();
+    expect(screen.queryByText("Sun")).toBeNull();
     expect(screen.getByTitle("Alice Example - WFH")).toBeTruthy();
     expect(screen.getByTitle("Alice Example - AM WFH")).toBeTruthy();
     expect(screen.getByTitle("Alice Example - PM WFH")).toBeTruthy();
     expect(screen.getByTitle("Bob Builder - WFH")).toBeTruthy();
+  });
+
+  it("omits weekend WFH calendar entries", () => {
+    renderCalendar(
+      {
+        ...baseData,
+        month: {
+          ...baseData.month,
+          rows: [
+            {
+              user: {
+                id: "weekend-only",
+                name: "Weekend Only",
+                email: "weekend@generisgp.com",
+                departments: [
+                  {
+                    role: "EMPLOYEE",
+                    department: { name: "IT" },
+                  },
+                ],
+              },
+              days: baseData.month.dates.map((day) => ({
+                date: day.date,
+                source: day.date === "2026-05-23" ? "PLAN" : "NONE",
+                workLocation: day.date === "2026-05-23" ? "WFH" : null,
+                reportId: null,
+              })),
+            },
+          ],
+        },
+      },
+      "wfh-calendar",
+    );
+
+    expect(screen.queryByTitle("Weekend Only - WFH")).toBeNull();
   });
 
   it("keeps the WFH calendar view in month navigation links", () => {
@@ -547,13 +603,17 @@ describe("WorkLocationCalendar", () => {
     ).toBe("/calendar?date=2026-06-01&view=wfh-calendar");
   });
 
-  it("uses a month-only selector for the WFH calendar jump control", () => {
+  it("uses a month grid picker for the WFH calendar jump control", () => {
     renderCalendar(baseData, "wfh-calendar");
 
     fireEvent.click(screen.getByRole("button", { name: "Jump to month" }));
+    const monthPicker = document.getElementById("work-location-month-picker");
+
+    expect(monthPicker).toBeTruthy();
+    expect(monthPicker?.parentElement).toBe(document.body);
     fireEvent.click(
-      within(screen.getByRole("listbox")).getByRole("option", {
-        name: "June 2026",
+      screen.getByRole("button", {
+        name: "Select June 2026",
       }),
     );
 
