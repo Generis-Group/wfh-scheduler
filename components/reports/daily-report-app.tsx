@@ -605,7 +605,6 @@ export function DailyReportApp({
   const locationMenuRef = useRef<HTMLDivElement | null>(null);
   const importMenuRef = useRef<HTMLDivElement | null>(null);
   const activityMenuRef = useRef<HTMLDivElement | null>(null);
-  const activityMenuOpenedAtRef = useRef(0);
   const reportRef = useRef(initialReport);
   const activitiesRef = useRef(initialReport.activities);
   const latestDraftRef = useRef<AutoDraftSnapshot | null>(null);
@@ -978,7 +977,6 @@ export function DailyReportApp({
     const placement = placeActivityMenu(anchorRect);
 
     setImportMenuOpen(false);
-    activityMenuOpenedAtRef.current = Date.now();
     setOpenActivityMenu({
       id: activityId,
       anchorRect,
@@ -995,26 +993,17 @@ export function DailyReportApp({
       return;
     }
 
-    function closeMenu(event: Event) {
-      if (
-        event.type === "scroll" &&
-        (renamingActivity || Date.now() - activityMenuOpenedAtRef.current < 250)
-      ) {
-        return;
-      }
-
+    function closeMenu() {
       setRenamingActivity(null);
       setOpenActivityMenu(null);
     }
 
     window.addEventListener("resize", closeMenu);
-    window.addEventListener("scroll", closeMenu, true);
 
     return () => {
       window.removeEventListener("resize", closeMenu);
-      window.removeEventListener("scroll", closeMenu, true);
     };
-  }, [openActivityMenu, renamingActivity]);
+  }, [openActivityMenu]);
 
   const captureCurrentDraftSnapshot = useCallback(
     ({ syncState = true }: { syncState?: boolean } = {}) => {
@@ -2194,8 +2183,8 @@ export function DailyReportApp({
           ) : null}
         </ReportSurface>
 
-        <div className="daily-report-layout grid gap-3 min-[1200px]:min-h-0 min-[1200px]:flex-1 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
-          <ReportSurface className="daily-report-panel flex min-h-[520px] flex-col min-[1200px]:min-h-0">
+        <div className="daily-report-layout grid grid-cols-[minmax(0,1fr)] gap-3 min-[1200px]:min-h-0 min-[1200px]:flex-1 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
+          <ReportSurface className="daily-report-panel flex min-h-[520px] min-w-0 max-w-full flex-col min-[1200px]:min-h-0">
             <div className="grid gap-3 min-[900px]:flex min-[900px]:items-start min-[900px]:justify-between">
               <div>
                 <div className="flex items-center gap-2">
@@ -2204,7 +2193,7 @@ export function DailyReportApp({
                   </h2>
                 </div>
               </div>
-              <div className="grid min-w-0 grid-cols-3 gap-2 min-[900px]:flex min-[900px]:w-auto min-[900px]:flex-wrap min-[900px]:items-center min-[1200px]:gap-1.5">
+              <div className="grid min-w-0 grid-cols-2 gap-2 min-[420px]:grid-cols-3 min-[900px]:flex min-[900px]:w-auto min-[900px]:flex-wrap min-[900px]:items-center min-[1200px]:gap-1.5">
                 <Button
                   variant="outline"
                   className="h-9 min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] min-[900px]:w-auto min-[1200px]:h-8 min-[1200px]:px-2.5 min-[1200px]:text-xs"
@@ -2226,7 +2215,7 @@ export function DailyReportApp({
                 </Button>
                 <div
                   ref={importMenuRef}
-                  className="relative min-w-0 min-[900px]:w-[176px] min-[1200px]:w-[142px]"
+                  className="relative col-span-2 min-w-0 min-[420px]:col-span-1 min-[900px]:w-[176px] min-[1200px]:w-[142px]"
                 >
                   <Button
                     variant="outline"
@@ -2416,7 +2405,7 @@ export function DailyReportApp({
               aria-label="Search work items"
             />
 
-            <div className="daily-work-items-list reference-row-scroll mt-3 min-h-[320px] space-y-2 p-1 min-[1200px]:min-h-0 min-[1200px]:flex-1">
+            <div className="daily-work-items-list mt-3 min-h-[320px] min-w-0 space-y-2 overflow-x-hidden p-1 min-[1200px]:min-h-0 min-[1200px]:flex-1 min-[1200px]:overflow-y-auto min-[1200px]:overscroll-contain min-[1200px]:[scrollbar-gutter:stable]">
               {activities.length === 0 ? (
                 <EmptyReferenceState>
                   No activities yet. Add a work item or import from Jira,
@@ -2436,12 +2425,12 @@ export function DailyReportApp({
                     <article
                       key={activity.id}
                       className={cn(
-                        "flex min-w-0 flex-col gap-2 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] transition-[opacity,transform,box-shadow] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[900px]:grid min-[900px]:min-h-[68px] min-[900px]:grid-cols-[24px_34px_minmax(0,1fr)_auto_minmax(72px,max-content)_28px] min-[900px]:items-center min-[900px]:gap-2.5",
+                        "max-w-full min-w-0 overflow-hidden rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] transition-[opacity,transform,box-shadow] dark:bg-[#0f1b2a] dark:ring-[#263a55] max-[899px]:flex max-[899px]:flex-col max-[899px]:gap-2 min-[900px]:grid min-[900px]:min-h-[68px] min-[900px]:grid-cols-[24px_34px_minmax(0,1fr)_auto_minmax(72px,max-content)_28px] min-[900px]:items-center min-[900px]:gap-2.5",
                         activityDragPreviewId === activity.id &&
                           "scale-[0.995] opacity-55",
                       )}
                     >
-                      <div className="flex min-w-0 items-start gap-2.5 min-[900px]:contents">
+                      <div className="flex max-w-full min-w-0 items-start gap-2.5 min-[900px]:contents">
                         <Checkbox
                           className="mt-1 min-[900px]:mt-0"
                           checked={activity.selected}
@@ -2471,7 +2460,7 @@ export function DailyReportApp({
                         <div className="min-w-0 flex-1 min-[900px]:flex-none">
                           <div
                             className={cn(
-                              "break-words text-sm font-semibold text-[#111827] dark:text-foreground",
+                              "break-words text-sm font-semibold text-[#111827] [overflow-wrap:anywhere] dark:text-foreground",
                               !isRenamingActivity && "min-[900px]:truncate",
                             )}
                           >
@@ -2517,7 +2506,7 @@ export function DailyReportApp({
                                 source={activity.source}
                                 sourceUrl={activity.sourceUrl}
                                 sourceLinks={activity.sourceLinks}
-                                className="max-w-full hover:text-[#2563eb]"
+                                className="block max-w-full min-w-0 [overflow-wrap:anywhere] hover:text-[#2563eb]"
                                 menuLabel={`Choose source link for ${activity.title || "Untitled activity"}`}
                               >
                                 {activity.title || "Untitled activity"}
@@ -2531,7 +2520,7 @@ export function DailyReportApp({
                             {activity.description ? (
                               <>
                                 <span className="text-[#98a2b3]">-</span>
-                                <span className="min-w-0 break-words min-[900px]:truncate">
+                                <span className="min-w-0 break-words [overflow-wrap:anywhere] min-[900px]:truncate">
                                   {activity.description}
                                 </span>
                               </>
@@ -2539,7 +2528,7 @@ export function DailyReportApp({
                           </div>
                         </div>
                       </div>
-                      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 pl-[3.875rem] min-[900px]:contents min-[900px]:pl-0">
+                      <div className="flex max-w-full min-w-0 flex-wrap items-center justify-between gap-2 pl-[3.875rem] min-[900px]:contents min-[900px]:pl-0">
                         {statusLabel ? (
                           <ReferenceBadge
                             tone={statusTone(activity.status)}
@@ -2590,7 +2579,7 @@ export function DailyReportApp({
 
           <ReportSurface
             as="aside"
-            className="daily-report-panel daily-summary-panel flex min-h-[520px] flex-col min-[1200px]:min-h-0"
+            className="daily-report-panel daily-summary-panel flex min-h-[520px] min-w-0 max-w-full flex-col min-[1200px]:min-h-0"
           >
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">

@@ -114,8 +114,8 @@ function DailySkeleton() {
           <LoadingBar className="h-10 w-full rounded-[7px] sm:w-[220px]" />
         </div>
       </LoadingCard>
-      <div className="daily-report-layout grid gap-3 min-[1200px]:min-h-0 min-[1200px]:flex-1 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
-        <LoadingCard className="daily-report-panel flex min-h-[520px] flex-col min-[1200px]:min-h-0">
+      <div className="daily-report-layout grid grid-cols-[minmax(0,1fr)] gap-3 min-[1200px]:min-h-0 min-[1200px]:flex-1 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
+        <LoadingCard className="daily-report-panel flex min-h-[520px] min-w-0 max-w-full flex-col min-[1200px]:min-h-0">
           <div className="grid gap-3 min-[900px]:flex min-[900px]:items-start min-[900px]:justify-between">
             <div className="flex items-center gap-2">
               <LoadingBar className="h-6 w-24 rounded-[4px]" />
@@ -149,7 +149,7 @@ function DailySkeleton() {
             ))}
           </div>
         </LoadingCard>
-        <LoadingCard className="daily-report-panel daily-summary-panel flex min-h-[520px] flex-col min-[1200px]:min-h-0">
+        <LoadingCard className="daily-report-panel daily-summary-panel flex min-h-[520px] min-w-0 max-w-full flex-col min-[1200px]:min-h-0">
           <div className="flex items-center justify-between gap-3">
             <LoadingBar className="h-6 w-28 rounded-[4px]" />
             <LoadingBar className="h-8 w-24 rounded-[7px]" />

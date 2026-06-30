@@ -624,6 +624,10 @@
     tab-size: 2;
     height: clamp(22rem, 52dvh, 30rem);
     @apply w-full overflow-y-auto whitespace-pre-wrap rounded-[8px] bg-white px-3 py-3 text-sm leading-6 text-[#111827] shadow-none ring-1 ring-input focus:outline-none focus:ring-2 focus:ring-[#2563eb] dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-input;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-wrap: anywhere;
   }
 
   .summary-tiptap-skeleton-body {
@@ -663,6 +667,7 @@
   .summary-activity-reference {
     display: inline-flex;
     max-width: min(100%, 360px);
+    min-width: 0;
     margin: 0 0.18rem 0 0;
     color: inherit;
     text-decoration: none;
@@ -675,6 +680,7 @@
     align-items: center;
     min-height: 34px;
     max-width: min(100%, 360px);
+    min-width: 0;
     gap: 0.55rem;
     padding: 0.3rem 0.65rem 0.3rem 0.35rem;
     overflow: hidden;
@@ -839,8 +845,24 @@
     display: block;
     min-width: 0;
     overflow: hidden;
+    overflow-wrap: anywhere;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  @media (max-width: 480px) {
+    .summary-activity-reference,
+    .summary-activity-reference-card,
+    .summary-activity-reference-node {
+      max-width: 100%;
+    }
+
+    .summary-activity-reference-card,
+    .summary-activity-reference-node {
+      min-height: 30px;
+      gap: 0.4rem;
+      padding: 0.25rem 0.5rem 0.25rem 0.3rem;
+    }
   }
 
   a.summary-activity-reference:hover .summary-activity-reference-card {
