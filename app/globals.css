@@ -27,6 +27,52 @@
     --radius: 0.5rem;
     --surface-shadow: 0 10px 28px rgb(15 23 42 / 0.055);
     --surface-shadow-strong: 0 18px 44px rgb(15 23 42 / 0.12);
+
+    /* Phase 0 semantic tokens — added ahead of the component migration that
+       replaces hardcoded hex utilities. Nothing references these yet, so they
+       are visually inert until Phase 1 swaps hex classes over to them. */
+
+    /* Surfaces: card is white; subtle is the near-white panel (#f8fafc family);
+       muted is the light fill (#eef2f7 family, aligned with --muted). */
+    --surface-subtle: 210 40% 98%;
+    --surface-muted: 214 32% 95%;
+
+    /* Text hierarchy between --foreground (#111827) and --muted-foreground. */
+    --foreground-muted: 215 19% 35%;
+    --muted-foreground-subtle: 215 20% 65%;
+
+    /* Borders: default lives in --border; strong is the emphasis/hover edge. */
+    --border-strong: 215 20% 78%;
+
+    /* Brand tints for the #1d4ed8 / #eff6ff usages. */
+    --primary-strong: 224 76% 48%;
+    --primary-subtle: 214 100% 97%;
+    --primary-subtle-foreground: 224 71% 42%;
+
+    /* Status: success (#16a34a / #ecfdf0). */
+    --success: 142 71% 29%;
+    --success-foreground: 0 0% 100%;
+    --success-subtle: 146 63% 95%;
+    --success-subtle-foreground: 142 72% 26%;
+
+    /* Status: warning (#ea580c / #fff7ed). */
+    --warning: 24 90% 40%;
+    --warning-foreground: 0 0% 100%;
+    --warning-subtle: 38 100% 95%;
+    --warning-subtle-foreground: 21 89% 38%;
+
+    /* Status: info (blue family, mirrors primary). */
+    --info: 221 83% 53%;
+    --info-foreground: 0 0% 100%;
+    --info-subtle: 214 100% 97%;
+    --info-subtle-foreground: 224 71% 42%;
+
+    /* Destructive already has base + foreground; add the tinted surface. */
+    --destructive-subtle: 0 86% 97%;
+    --destructive-subtle-foreground: 0 74% 42%;
+
+    /* Shadow scale. */
+    --surface-shadow-sm: 0 1px 2px rgb(15 23 42 / 0.05);
   }
 
   .dark {
@@ -52,6 +98,41 @@
     --ring: 217 91% 60%;
     --surface-shadow: 0 18px 46px rgb(0 0 0 / 0.28);
     --surface-shadow-strong: 0 28px 70px rgb(0 0 0 / 0.46);
+
+    /* Phase 0 semantic tokens (dark). Values mirror what the existing
+       `.dark [class*="…hex…"]` compatibility patches already resolve to, so a
+       Phase 1 migration keeps dark mode looking the same. */
+    --surface-subtle: 222 33% 10%;
+    --surface-muted: 222 26% 13%;
+
+    --foreground-muted: 214 20% 74%;
+    --muted-foreground-subtle: 215 16% 55%;
+
+    --border-strong: 217 24% 30%;
+
+    --primary-strong: 217 91% 66%;
+    --primary-subtle: 217 40% 18%;
+    --primary-subtle-foreground: 213 94% 82%;
+
+    --success: 142 64% 45%;
+    --success-foreground: 0 0% 100%;
+    --success-subtle: 152 45% 16%;
+    --success-subtle-foreground: 142 69% 72%;
+
+    --warning: 30 90% 55%;
+    --warning-foreground: 0 0% 100%;
+    --warning-subtle: 22 60% 20%;
+    --warning-subtle-foreground: 33 96% 72%;
+
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
+    --info-subtle: 217 40% 18%;
+    --info-subtle-foreground: 213 94% 82%;
+
+    --destructive-subtle: 0 50% 22%;
+    --destructive-subtle-foreground: 0 91% 78%;
+
+    --surface-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   }
 
   * {
