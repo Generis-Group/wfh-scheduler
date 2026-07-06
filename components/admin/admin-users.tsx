@@ -120,7 +120,7 @@ const allDepartmentsValue = "__ALL_DEPARTMENTS__";
 const defaultTeamMemberPageSize = 5;
 const defaultDepartmentPageSize = defaultPaginationPageSize;
 const dirtyControlClassName =
-  "bg-[#f8fbff] ring-[#93c5fd] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.08),0_0_0_3px_rgba(37,99,235,0.08)] dark:bg-blue-400/10 dark:ring-blue-300/45";
+  "bg-primary-subtle ring-[#93c5fd] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.08),0_0_0_3px_rgba(37,99,235,0.08)] dark:bg-blue-400/10 dark:ring-blue-300/45";
 const teamMemberCheckboxClass =
   "h-4 w-4 [&_span]:rounded-[4px] [&_svg]:h-3 [&_svg]:w-3";
 const teamActionCheckboxClass =
@@ -1257,7 +1257,7 @@ export function AdminUsers({
           section === "team" ? (
             <Button
               type="button"
-              className="min-w-[132px] bg-[#2563eb] hover:bg-[#1d4ed8]"
+              className="min-w-[132px] bg-primary hover:bg-primary"
               disabled={!hasPendingChanges || isSavingPage}
               onClick={savePageChanges}
             >
@@ -1289,15 +1289,15 @@ export function AdminUsers({
                 <CardTitle>Team members</CardTitle>
               </CardHeader>
               <CardContent className="flex min-h-0 flex-1 flex-col gap-1.5 px-2 pb-0 pt-0">
-                <div className="grid gap-2 rounded-[8px] bg-[#f8fafc]/70 p-1.5 dark:bg-white/[0.025] min-[900px]:grid-cols-[minmax(240px,1fr)_auto] min-[900px]:items-center">
+                <div className="grid gap-2 rounded-[8px] bg-surface-subtle/70 p-1.5 dark:bg-white/[0.025] min-[900px]:grid-cols-[minmax(240px,1fr)_auto] min-[900px]:items-center">
                   <div className="relative min-w-0">
                     <Search
-                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b] dark:text-muted-foreground"
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground dark:text-muted-foreground"
                       aria-hidden="true"
                     />
                     <Input
                       aria-label="Search team members by name"
-                      className="h-8 border-transparent bg-white/95 pl-9 text-sm ring-0 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)] dark:border-transparent dark:bg-[#111d2d] dark:ring-0"
+                      className="h-8 border-transparent bg-white/95 pl-9 text-sm ring-0 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)] dark:border-transparent dark:bg-card dark:ring-0"
                       placeholder="Search by name"
                       value={userSearch}
                       onChange={(event) => setUserSearch(event.target.value)}
@@ -1305,7 +1305,7 @@ export function AdminUsers({
                   </div>
 
                   <div className="flex min-w-0 items-center justify-between gap-2">
-                    <label className="inline-flex h-8 min-w-0 items-center gap-2 rounded-[7px] px-2 text-xs font-semibold text-[#475569] dark:text-muted-foreground min-[900px]:hidden">
+                    <label className="inline-flex h-8 min-w-0 items-center gap-2 rounded-[7px] px-2 text-xs font-semibold text-foreground-muted dark:text-muted-foreground min-[900px]:hidden">
                       <Checkbox
                         checked={allVisibleUsersSelected}
                         disabled={visibleUserIds.length === 0}
@@ -1321,7 +1321,7 @@ export function AdminUsers({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="ml-auto h-8 min-w-[104px] justify-start whitespace-nowrap bg-white px-2 text-xs dark:bg-[#0f1b2a]"
+                      className="ml-auto h-8 min-w-[104px] justify-start whitespace-nowrap bg-white px-2 text-xs dark:bg-card"
                       onClick={() => {
                         setNameSortDirection((current) =>
                           current === "asc" ? "desc" : "asc",
@@ -1346,7 +1346,7 @@ export function AdminUsers({
                 >
                   <div
                     className={cn(
-                      "reference-team-member-header sticky top-0 z-10 hidden bg-white px-2 text-left text-[10px] font-semibold uppercase tracking-[0.04em] text-[#64748b] dark:bg-[#0f1b2a] dark:text-muted-foreground min-[900px]:grid",
+                      "reference-team-member-header sticky top-0 z-10 hidden bg-white px-2 text-left text-[10px] font-semibold uppercase tracking-[0.04em] text-muted-foreground dark:bg-card dark:text-muted-foreground min-[900px]:grid",
                       "reference-team-member-row-grid",
                     )}
                   >
@@ -1365,7 +1365,7 @@ export function AdminUsers({
                     <span>Reviewer dept.</span>
                   </div>
                   {filteredUsers.length === 0 ? (
-                    <div className="rounded-[8px] bg-[#f8fafc] py-5 text-center text-xs text-[#64748b] dark:bg-[#0b1523]">
+                    <div className="rounded-[8px] bg-surface-subtle py-5 text-center text-xs text-muted-foreground dark:bg-background">
                       {users.length === 0
                         ? "No users have been created yet."
                         : "No team members match this search."}
@@ -1401,9 +1401,9 @@ export function AdminUsers({
                           aria-label={`${userLabel} assignments`}
                           data-selected={userSelected}
                           className={cn(
-                            "reference-team-member-row-grid cursor-pointer rounded-[8px] bg-[#f8fafc]/82 px-2 py-1.5 shadow-[0_4px_14px_rgba(15,23,42,0.028)] transition-colors hover:bg-[#f4f8ff] dark:bg-white/[0.035] dark:hover:bg-blue-400/10 min-[900px]:min-h-14",
+                            "reference-team-member-row-grid cursor-pointer rounded-[8px] bg-surface-subtle/82 px-2 py-1.5 shadow-[0_4px_14px_rgba(15,23,42,0.028)] transition-colors hover:bg-primary-subtle dark:bg-white/[0.035] dark:hover:bg-blue-400/10 min-[900px]:min-h-14",
                             userSelected &&
-                              "bg-[#eef6ff] ring-1 ring-[#bfdbfe] shadow-[0_4px_14px_rgba(15,23,42,0.04)] dark:bg-blue-400/10 dark:ring-blue-300/25",
+                              "bg-primary-subtle ring-1 ring-[#bfdbfe] shadow-[0_4px_14px_rgba(15,23,42,0.04)] dark:bg-blue-400/10 dark:ring-blue-300/25",
                           )}
                           onClick={(event) => selectUserFromRow(user.id, event)}
                         >
@@ -1419,11 +1419,11 @@ export function AdminUsers({
                           />
                           <div className="min-w-0">
                             <div className="flex min-w-0 items-center gap-1.5">
-                              <h3 className="truncate text-sm font-semibold text-[#0f172a] dark:text-foreground">
+                              <h3 className="truncate text-sm font-semibold text-foreground dark:text-foreground">
                                 {user.name ?? "-"}
                               </h3>
                             </div>
-                            <div className="mt-0.5 truncate text-xs text-[#64748b] dark:text-muted-foreground">
+                            <div className="mt-0.5 truncate text-xs text-muted-foreground dark:text-muted-foreground">
                               {user.email}
                             </div>
                           </div>
@@ -1597,7 +1597,7 @@ export function AdminUsers({
                       </div>
                     ) : null}
                     <Button
-                      className="h-8 w-full bg-[#2563eb] text-xs hover:bg-[#1d4ed8]"
+                      className="h-8 w-full bg-primary text-xs hover:bg-primary"
                       disabled={isCreatingUser}
                     >
                       {isCreatingUser ? (
@@ -1616,7 +1616,7 @@ export function AdminUsers({
               <Card className="ring-0 shadow-[0_12px_34px_rgba(15,23,42,0.055)] dark:ring-0 min-[1180px]:self-start">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 p-2 pb-1">
                   <CardTitle>Actions</CardTitle>
-                  <span className="rounded-[999px] bg-[#eef4ff] px-2 py-0.5 text-[11px] font-semibold text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]">
+                  <span className="rounded-[999px] bg-primary-subtle px-2 py-0.5 text-[11px] font-semibold text-primary dark:bg-blue-400/10 dark:text-[#bfdbfe]">
                     {selectedUsers.length} selected
                   </span>
                 </CardHeader>
@@ -1640,9 +1640,9 @@ export function AdminUsers({
                           className={cn(
                             "flex h-8 items-center gap-2 rounded-[7px] px-2 text-xs font-semibold transition-colors",
                             !disabled &&
-                              "cursor-pointer hover:bg-[#f4f8ff] dark:hover:bg-white/[0.05]",
+                              "cursor-pointer hover:bg-primary-subtle dark:hover:bg-white/[0.05]",
                             checked &&
-                              "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-[#bfdbfe]",
+                              "bg-primary-subtle text-primary-subtle-foreground dark:bg-blue-400/10 dark:text-[#bfdbfe]",
                             action.danger && "text-red-700 dark:text-red-200",
                             action.danger &&
                               checked &&
@@ -1676,7 +1676,7 @@ export function AdminUsers({
                       "h-8 w-full text-xs",
                       removeActionSelected
                         ? "bg-red-600 hover:bg-red-700"
-                        : "bg-[#2563eb] hover:bg-[#1d4ed8]",
+                        : "bg-primary hover:bg-primary",
                     )}
                     disabled={
                       selectedUsers.length === 0 ||
@@ -1749,7 +1749,7 @@ export function AdminUsers({
                     )}
                   >
                     {departments.length === 0 ? (
-                      <span className="text-xs text-[#64748b] dark:text-muted-foreground">
+                      <span className="text-xs text-muted-foreground dark:text-muted-foreground">
                         No departments created yet.
                       </span>
                     ) : (
@@ -1757,15 +1757,15 @@ export function AdminUsers({
                         {pagedDepartments.map((department) => (
                           <div
                             key={department.id}
-                            className="flex min-w-0 items-center gap-1.5 rounded-[8px] bg-[#f8fafc] px-2 py-1.5 ring-1 ring-[#e2e8f0] dark:bg-white/[0.04] dark:ring-white/[0.08]"
+                            className="flex min-w-0 items-center gap-1.5 rounded-[8px] bg-surface-subtle px-2 py-1.5 ring-1 ring-border dark:bg-white/[0.04] dark:ring-white/[0.08]"
                             title={department.name}
                           >
-                            <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[#334155] dark:text-foreground">
+                            <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground-muted dark:text-foreground">
                               {department.name}
                             </span>
                             <button
                               type="button"
-                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-[#64748b] transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:pointer-events-none disabled:opacity-50 dark:text-muted-foreground dark:hover:bg-red-400/10 dark:hover:text-red-300"
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:pointer-events-none disabled:opacity-50 dark:text-muted-foreground dark:hover:bg-red-400/10 dark:hover:text-red-300"
                               aria-label={`Remove ${department.name} department`}
                               title={`Remove ${department.name} department`}
                               disabled={
@@ -1813,7 +1813,7 @@ export function AdminUsers({
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-7 bg-white px-2 text-xs dark:bg-[#0f1b2a]"
+                          className="h-7 bg-white px-2 text-xs dark:bg-card"
                           disabled={deletingDepartmentId !== null}
                           onClick={() => setDepartmentToDelete(null)}
                         >
@@ -1870,7 +1870,7 @@ function TemporaryCredentialsPopup({
 
   return (
     <aside
-      className="fixed right-4 top-4 z-50 w-[min(560px,calc(100vw-2rem))] rounded-[12px] bg-white p-4 text-sm text-[#0f172a] shadow-[0_24px_70px_rgba(15,23,42,0.22)] ring-1 ring-[#dbe5f4] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-white/[0.08]"
+      className="fixed right-4 top-4 z-50 w-[min(560px,calc(100vw-2rem))] rounded-[12px] bg-white p-4 text-sm text-foreground shadow-[0_24px_70px_rgba(15,23,42,0.22)] ring-1 ring-border dark:bg-card dark:text-foreground dark:ring-white/[0.08]"
       role="dialog"
       aria-labelledby="temporary-password-title"
       aria-live="polite"
@@ -1879,13 +1879,13 @@ function TemporaryCredentialsPopup({
         <div className="min-w-0">
           <div
             id="temporary-password-title"
-            className="font-semibold text-[#0f172a] dark:text-foreground"
+            className="font-semibold text-foreground dark:text-foreground"
           >
             {multipleCredentials
               ? "Temporary sign-in passwords"
               : "Temporary sign-in password"}
           </div>
-          <p className="mt-1 text-[#475569] dark:text-muted-foreground">
+          <p className="mt-1 text-foreground-muted dark:text-muted-foreground">
             {multipleCredentials
               ? `${credentials.length} temporary passwords were generated.`
               : emailDeliveryMessage(firstCredentials.emailDelivery)}{" "}
@@ -1894,7 +1894,7 @@ function TemporaryCredentialsPopup({
         </div>
         <button
           type="button"
-          className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[#64748b] transition-colors hover:bg-[#eef2f7] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+          className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
           aria-label="Close temporary password"
           onClick={onDismiss}
         >
@@ -1907,21 +1907,21 @@ function TemporaryCredentialsPopup({
           {credentials.map((credential) => (
             <div
               key={`${credential.email}-${credential.password}`}
-              className="grid gap-2 rounded-[8px] bg-[#f7f9fc] p-2 ring-1 ring-[#dbe5f4] dark:bg-white/[0.04] dark:ring-white/[0.08] sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+              className="grid gap-2 rounded-[8px] bg-surface-subtle p-2 ring-1 ring-border dark:bg-white/[0.04] dark:ring-white/[0.08] sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
             >
               <div className="min-w-0">
-                <div className="text-xs font-medium uppercase tracking-wide text-[#64748b] dark:text-muted-foreground">
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground dark:text-muted-foreground">
                   Email
                 </div>
-                <div className="mt-1 break-words font-mono text-[#111827] dark:text-foreground">
+                <div className="mt-1 break-words font-mono text-foreground dark:text-foreground">
                   {credential.email || "-"}
                 </div>
               </div>
               <div className="min-w-0">
-                <div className="text-xs font-medium uppercase tracking-wide text-[#64748b] dark:text-muted-foreground">
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground dark:text-muted-foreground">
                   Password
                 </div>
-                <div className="mt-1 break-words font-mono text-[#111827] dark:text-foreground">
+                <div className="mt-1 break-words font-mono text-foreground dark:text-foreground">
                   {credential.password}
                 </div>
               </div>
@@ -1978,7 +1978,7 @@ function DepartmentSelector({
   return (
     <>
       {departments.length === 0 ? (
-        <span className="text-xs text-[#64748b] dark:text-muted-foreground">
+        <span className="text-xs text-muted-foreground dark:text-muted-foreground">
           {emptyText}
         </span>
       ) : (

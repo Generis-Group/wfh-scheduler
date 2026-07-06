@@ -2031,7 +2031,7 @@ export function DailyReportApp({
             <>
               <Button
                 variant="outline"
-                className="h-10 rounded-[8px] bg-white px-4 text-sm font-semibold text-[#344054] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] disabled:bg-[#f2f4f7] disabled:text-[#98a2b3] disabled:ring-[#d0d5dd] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55] dark:hover:bg-white/5 dark:disabled:bg-[#162235] dark:disabled:text-[#71809a] max-[639px]:w-full"
+                className="h-10 rounded-[8px] bg-white px-4 text-sm font-semibold text-foreground-muted shadow-none ring-1 ring-border hover:bg-surface-subtle disabled:bg-surface-subtle disabled:text-muted-foreground-subtle disabled:ring-border-strong dark:bg-card dark:text-foreground dark:ring-border dark:hover:bg-white/5 dark:disabled:bg-card dark:disabled:text-muted-foreground max-[639px]:w-full"
                 disabled={isBusy || !canSaveDraft}
                 onClick={saveDraft}
               >
@@ -2045,7 +2045,7 @@ export function DailyReportApp({
               {report.id && report.status === "DRAFT" ? (
                 <Button
                   variant="outline"
-                  className="h-10 rounded-[8px] bg-white px-4 text-sm font-medium text-[#b42318] shadow-none ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10 max-[639px]:w-full"
+                  className="h-10 rounded-[8px] bg-white px-4 text-sm font-medium text-destructive-subtle-foreground shadow-none ring-1 ring-[#f3b8b2] hover:bg-destructive-subtle dark:bg-card dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10 max-[639px]:w-full"
                   disabled={isBusy}
                   onClick={deleteDraft}
                 >
@@ -2058,7 +2058,7 @@ export function DailyReportApp({
                 </Button>
               ) : null}
               <Button
-                className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,0.2)] hover:bg-[#1d4ed8] max-[639px]:w-full"
+                className="h-10 rounded-[8px] bg-primary px-5 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,0.2)] hover:bg-primary max-[639px]:w-full"
                 disabled={isBusy}
                 onClick={submitReport}
               >
@@ -2092,19 +2092,19 @@ export function DailyReportApp({
                 aria-label="Work location"
                 aria-controls="work-location-menu"
                 aria-expanded={locationMenuOpen}
-                className="flex min-h-10 w-full items-center gap-3 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#101d2e] dark:ring-[#263a55] dark:hover:bg-white/5"
+                className="flex min-h-10 w-full items-center gap-3 rounded-[7px] bg-white px-3 text-sm shadow-none ring-1 ring-border transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60 dark:bg-card dark:ring-border dark:hover:bg-white/5"
                 disabled={isBusy}
                 onClick={toggleLocationMenu}
               >
-                <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
+                <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground dark:text-muted-foreground">
                   Location
                 </span>
-                <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-[#111827] dark:text-foreground">
+                <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-foreground dark:text-foreground">
                   {selectedWorkLocationLabel}
                 </span>
                 <ChevronDown
                   className={cn(
-                    "h-4 w-4 shrink-0 text-[#667085] transition-transform dark:text-muted-foreground",
+                    "h-4 w-4 shrink-0 text-muted-foreground transition-transform dark:text-muted-foreground",
                     locationMenuOpen && "rotate-180",
                   )}
                 />
@@ -2114,7 +2114,7 @@ export function DailyReportApp({
                   id="work-location-menu"
                   role="listbox"
                   aria-label="Work location options"
-                  className="absolute left-0 top-12 z-30 w-full rounded-[8px] bg-white p-1.5 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                  className="absolute left-0 top-12 z-30 w-full rounded-[8px] bg-white p-1.5 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border dark:bg-card dark:ring-border"
                 >
                   {workLocationOptions.map((option) => {
                     const selected = option.value === workLocation;
@@ -2126,16 +2126,16 @@ export function DailyReportApp({
                         role="option"
                         aria-selected={selected}
                         className={cn(
-                          "flex w-full items-center justify-between rounded-[7px] px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]",
+                          "flex w-full items-center justify-between rounded-[7px] px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                           selected
-                            ? "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-blue-100"
-                            : "text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5",
+                            ? "bg-primary-subtle text-primary-subtle-foreground dark:bg-blue-400/10 dark:text-blue-100"
+                            : "text-foreground-muted hover:bg-surface-subtle dark:text-foreground dark:hover:bg-white/5",
                         )}
                         onClick={() => selectWorkLocation(option.value)}
                       >
                         <span>{option.label}</span>
                         {selected ? (
-                          <CheckCircle2 className="h-4 w-4 text-[#2563eb] dark:text-blue-300" />
+                          <CheckCircle2 className="h-4 w-4 text-primary dark:text-blue-300" />
                         ) : null}
                       </button>
                     );
@@ -2170,13 +2170,13 @@ export function DailyReportApp({
               </Button>
             </div>
           ) : planMismatch ? (
-            <div className="mt-2 text-xs font-medium text-[#667085] dark:text-muted-foreground">
+            <div className="mt-2 text-xs font-medium text-muted-foreground dark:text-muted-foreground">
               Different from weekly plan
             </div>
           ) : plannedLocationForReport ? (
-            <div className="mt-2 text-xs font-medium text-[#667085] dark:text-muted-foreground">
+            <div className="mt-2 text-xs font-medium text-muted-foreground dark:text-muted-foreground">
               Planned today:{" "}
-              <span className="font-semibold text-[#344054] dark:text-foreground">
+              <span className="font-semibold text-foreground-muted dark:text-foreground">
                 {workLocationLabel(plannedLocationForReport)}
               </span>
             </div>
@@ -2188,7 +2188,7 @@ export function DailyReportApp({
             <div className="grid gap-3 min-[900px]:flex min-[900px]:items-start min-[900px]:justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
+                  <h2 className="text-lg font-semibold tracking-normal text-foreground dark:text-foreground">
                     Work items
                   </h2>
                 </div>
@@ -2196,7 +2196,7 @@ export function DailyReportApp({
               <div className="grid min-w-0 grid-cols-2 gap-2 min-[420px]:grid-cols-3 min-[900px]:flex min-[900px]:w-auto min-[900px]:flex-wrap min-[900px]:items-center min-[1200px]:gap-1.5">
                 <Button
                   variant="outline"
-                  className="h-9 min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] min-[900px]:w-auto min-[1200px]:h-8 min-[1200px]:px-2.5 min-[1200px]:text-xs"
+                  className="h-9 min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-foreground shadow-none ring-1 ring-border hover:bg-surface-subtle dark:bg-card dark:text-foreground dark:ring-border min-[900px]:w-auto min-[1200px]:h-8 min-[1200px]:px-2.5 min-[1200px]:text-xs"
                   disabled={isBusy}
                   onClick={addManualActivity}
                 >
@@ -2205,7 +2205,7 @@ export function DailyReportApp({
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-9 min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-white dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] dark:disabled:text-[#64748b] dark:disabled:hover:bg-[#0f1b2a] min-[900px]:w-auto min-[1200px]:h-8 min-[1200px]:px-2.5 min-[1200px]:text-xs"
+                  className="h-9 min-w-0 justify-center rounded-[7px] bg-white px-3 text-sm font-medium text-foreground shadow-none ring-1 ring-border hover:bg-surface-subtle disabled:cursor-not-allowed disabled:text-muted-foreground-subtle disabled:hover:bg-white dark:bg-card dark:text-foreground dark:ring-border dark:disabled:text-muted-foreground dark:disabled:hover:bg-card min-[900px]:w-auto min-[1200px]:h-8 min-[1200px]:px-2.5 min-[1200px]:text-xs"
                   disabled={isBusy || activities.length === 0}
                   aria-label="Clear work items"
                   onClick={clearActivities}
@@ -2220,7 +2220,7 @@ export function DailyReportApp({
                   <Button
                     variant="outline"
                     className={cn(
-                      "relative h-9 w-full min-w-0 justify-center overflow-hidden rounded-[7px] bg-white px-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-white dark:bg-[#0f1b2a] dark:text-foreground dark:ring-[#263a55] dark:disabled:text-[#64748b] dark:disabled:hover:bg-[#0f1b2a] min-[1200px]:h-8 min-[1200px]:px-2.5 min-[1200px]:text-xs",
+                      "relative h-9 w-full min-w-0 justify-center overflow-hidden rounded-[7px] bg-white px-3 text-sm font-medium text-foreground shadow-none ring-1 ring-border hover:bg-surface-subtle disabled:cursor-not-allowed disabled:text-muted-foreground-subtle disabled:hover:bg-white dark:bg-card dark:text-foreground dark:ring-border dark:disabled:text-muted-foreground dark:disabled:hover:bg-card min-[1200px]:h-8 min-[1200px]:px-2.5 min-[1200px]:text-xs",
                       "py-2 min-[1200px]:py-1.5",
                     )}
                     disabled={isBusy && !isImporting}
@@ -2249,9 +2249,9 @@ export function DailyReportApp({
                     />
                   </Button>
                   {importMenuOpen ? (
-                    <div className="absolute right-0 top-12 z-30 w-[min(16rem,calc(100vw-2rem))] rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+                    <div className="absolute right-0 top-12 z-30 w-[min(16rem,calc(100vw-2rem))] rounded-[12px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border dark:bg-card dark:ring-border">
                       <button
-                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-semibold text-[#111827] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-semibold text-foreground hover:bg-surface-subtle disabled:cursor-not-allowed disabled:text-muted-foreground-subtle disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-muted-foreground dark:disabled:hover:bg-transparent"
                         disabled={!canSyncAnyIntegration}
                         title={
                           canSyncAnyIntegration
@@ -2265,9 +2265,9 @@ export function DailyReportApp({
                       >
                         Import all
                       </button>
-                      <div className="my-1 h-px bg-[#e1e6ef] dark:bg-[#263a55]" />
+                      <div className="my-1 h-px bg-border" />
                       <button
-                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-foreground-muted hover:bg-surface-subtle disabled:cursor-not-allowed disabled:text-muted-foreground-subtle disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-muted-foreground dark:disabled:hover:bg-transparent"
                         disabled={!canSyncJira}
                         title={
                           canSyncJira
@@ -2282,7 +2282,7 @@ export function DailyReportApp({
                         Import Jira
                       </button>
                       <button
-                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5"
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-foreground-muted hover:bg-surface-subtle dark:text-foreground dark:hover:bg-white/5"
                         onClick={() => {
                           setImportMenuOpen(false);
                           sync("hubspot");
@@ -2291,7 +2291,7 @@ export function DailyReportApp({
                         Import HubSpot hours
                       </button>
                       <button
-                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-foreground-muted hover:bg-surface-subtle disabled:cursor-not-allowed disabled:text-muted-foreground-subtle disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-muted-foreground dark:disabled:hover:bg-transparent"
                         disabled={!canSyncGoogle}
                         title={
                           canSyncGoogle
@@ -2306,7 +2306,7 @@ export function DailyReportApp({
                         Import Google Calendar
                       </button>
                       <button
-                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                        className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-foreground-muted hover:bg-surface-subtle disabled:cursor-not-allowed disabled:text-muted-foreground-subtle disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-muted-foreground dark:disabled:hover:bg-transparent"
                         disabled={!canSyncGoogle}
                         title={
                           canSyncGoogle
@@ -2321,7 +2321,7 @@ export function DailyReportApp({
                         Import Google Tasks
                       </button>
                       <button
-                        className="group flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                        className="group flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-foreground-muted hover:bg-primary-subtle disabled:cursor-not-allowed disabled:text-muted-foreground-subtle disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-muted-foreground dark:disabled:hover:bg-transparent"
                         disabled={!canSyncGoogle}
                         aria-label="Import Gmail with AI"
                         title={
@@ -2338,13 +2338,13 @@ export function DailyReportApp({
                         <span className="min-w-0 truncate">Import Gmail</span>
                         <span
                           aria-hidden="true"
-                          className="ml-auto inline-flex h-5 shrink-0 items-center rounded-full bg-[linear-gradient(135deg,#eef2ff,#ecfeff)] px-2 text-[11px] font-semibold uppercase tracking-normal text-[#2563eb] shadow-[0_0_0_1px_rgba(37,99,235,0.16),0_6px_18px_rgba(37,99,235,0.12)] transition-shadow group-hover:shadow-[0_0_0_1px_rgba(37,99,235,0.28),0_8px_24px_rgba(37,99,235,0.2)] dark:bg-[linear-gradient(135deg,rgba(124,58,237,0.24),rgba(6,182,212,0.16))] dark:text-[#93c5fd]"
+                          className="ml-auto inline-flex h-5 shrink-0 items-center rounded-full bg-[linear-gradient(135deg,#eef2ff,#ecfeff)] px-2 text-[11px] font-semibold uppercase tracking-normal text-primary shadow-[0_0_0_1px_rgba(37,99,235,0.16),0_6px_18px_rgba(37,99,235,0.12)] transition-shadow group-hover:shadow-[0_0_0_1px_rgba(37,99,235,0.28),0_8px_24px_rgba(37,99,235,0.2)] dark:bg-[linear-gradient(135deg,rgba(124,58,237,0.24),rgba(6,182,212,0.16))] dark:text-[#93c5fd]"
                         >
                           AI
                         </span>
                       </button>
                       <button
-                        className="group flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[#344054] hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:text-[#98a2b3] disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-[#64748b] dark:disabled:hover:bg-transparent"
+                        className="group flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-foreground-muted hover:bg-primary-subtle disabled:cursor-not-allowed disabled:text-muted-foreground-subtle disabled:hover:bg-transparent dark:text-foreground dark:hover:bg-white/5 dark:disabled:text-muted-foreground dark:disabled:hover:bg-transparent"
                         disabled={!canSyncGoogle}
                         aria-label="Import Google Chat with AI"
                         title={
@@ -2363,7 +2363,7 @@ export function DailyReportApp({
                         </span>
                         <span
                           aria-hidden="true"
-                          className="ml-auto inline-flex h-5 shrink-0 items-center rounded-full bg-[linear-gradient(135deg,#eef2ff,#ecfeff)] px-2 text-[11px] font-semibold uppercase tracking-normal text-[#2563eb] shadow-[0_0_0_1px_rgba(37,99,235,0.16),0_6px_18px_rgba(37,99,235,0.12)] transition-shadow group-hover:shadow-[0_0_0_1px_rgba(37,99,235,0.28),0_8px_24px_rgba(37,99,235,0.2)] dark:bg-[linear-gradient(135deg,rgba(124,58,237,0.24),rgba(6,182,212,0.16))] dark:text-[#93c5fd]"
+                          className="ml-auto inline-flex h-5 shrink-0 items-center rounded-full bg-[linear-gradient(135deg,#eef2ff,#ecfeff)] px-2 text-[11px] font-semibold uppercase tracking-normal text-primary shadow-[0_0_0_1px_rgba(37,99,235,0.16),0_6px_18px_rgba(37,99,235,0.12)] transition-shadow group-hover:shadow-[0_0_0_1px_rgba(37,99,235,0.28),0_8px_24px_rgba(37,99,235,0.2)] dark:bg-[linear-gradient(135deg,rgba(124,58,237,0.24),rgba(6,182,212,0.16))] dark:text-[#93c5fd]"
                         >
                           AI
                         </span>
@@ -2374,15 +2374,15 @@ export function DailyReportApp({
               </div>
             </div>
             {importProgress ? (
-              <div className="mt-3 rounded-[8px] bg-[#f8fbff] px-3 py-2 ring-1 ring-[#dbe7ff] dark:bg-blue-400/5 dark:ring-blue-300/15">
-                <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-[#344054] dark:text-blue-100">
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#2563eb] dark:text-blue-300" />
+              <div className="mt-3 rounded-[8px] bg-primary-subtle px-3 py-2 ring-1 ring-[#dbe7ff] dark:bg-blue-400/5 dark:ring-blue-300/15">
+                <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground-muted dark:text-blue-100">
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary dark:text-blue-300" />
                   <span className="min-w-0 truncate">
                     {importProgress.message}
                   </span>
                 </div>
                 <div
-                  className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e6eaf2] dark:bg-[#22334d]"
+                  className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted dark:bg-card"
                   role="progressbar"
                   aria-label={`${syncProviderLabels[importProgress.provider]} import progress`}
                   aria-valuemin={0}
@@ -2401,7 +2401,7 @@ export function DailyReportApp({
               value={activitySearch}
               onValueChange={setActivitySearch}
               placeholder="Search work items"
-              className="mt-3 dark:bg-[#0f1b2a]"
+              className="mt-3 dark:bg-card"
               aria-label="Search work items"
             />
 
@@ -2425,7 +2425,7 @@ export function DailyReportApp({
                     <article
                       key={activity.id}
                       className={cn(
-                        "max-w-full min-w-0 overflow-hidden rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] transition-[opacity,transform,box-shadow] dark:bg-[#0f1b2a] dark:ring-[#263a55] max-[899px]:flex max-[899px]:flex-col max-[899px]:gap-2 min-[900px]:grid min-[900px]:min-h-[68px] min-[900px]:grid-cols-[24px_34px_minmax(0,1fr)_auto_minmax(72px,max-content)_28px] min-[900px]:items-center min-[900px]:gap-2.5",
+                        "max-w-full min-w-0 overflow-hidden rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-border transition-[opacity,transform,box-shadow] dark:bg-card dark:ring-border max-[899px]:flex max-[899px]:flex-col max-[899px]:gap-2 min-[900px]:grid min-[900px]:min-h-[68px] min-[900px]:grid-cols-[24px_34px_minmax(0,1fr)_auto_minmax(72px,max-content)_28px] min-[900px]:items-center min-[900px]:gap-2.5",
                         activityDragPreviewId === activity.id &&
                           "scale-[0.995] opacity-55",
                       )}
@@ -2460,7 +2460,7 @@ export function DailyReportApp({
                         <div className="min-w-0 flex-1 min-[900px]:flex-none">
                           <div
                             className={cn(
-                              "break-words text-sm font-semibold text-[#111827] [overflow-wrap:anywhere] dark:text-foreground",
+                              "break-words text-sm font-semibold text-foreground [overflow-wrap:anywhere] dark:text-foreground",
                               !isRenamingActivity && "min-[900px]:truncate",
                             )}
                           >
@@ -2499,27 +2499,27 @@ export function DailyReportApp({
                                 }}
                                 autoFocus
                                 aria-label="Task title"
-                                className="h-7 rounded-[6px] bg-white px-2 text-sm font-semibold shadow-none ring-1 ring-[#93c5fd] focus-visible:ring-2 dark:bg-[#101d2e] dark:ring-[#3a506d]"
+                                className="h-7 rounded-[6px] bg-white px-2 text-sm font-semibold shadow-none ring-1 ring-[#93c5fd] focus-visible:ring-2 dark:bg-card dark:ring-border-strong"
                               />
                             ) : (
                               <ActivitySourceLinkPicker
                                 source={activity.source}
                                 sourceUrl={activity.sourceUrl}
                                 sourceLinks={activity.sourceLinks}
-                                className="block max-w-full min-w-0 [overflow-wrap:anywhere] hover:text-[#2563eb]"
+                                className="block max-w-full min-w-0 [overflow-wrap:anywhere] hover:text-primary"
                                 menuLabel={`Choose source link for ${activity.title || "Untitled activity"}`}
                               >
                                 {activity.title || "Untitled activity"}
                               </ActivitySourceLinkPicker>
                             )}
                           </div>
-                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#667085] dark:text-muted-foreground min-[900px]:flex-nowrap">
+                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground dark:text-muted-foreground min-[900px]:flex-nowrap">
                             <span className="shrink-0">
                               {reportActivitySourceLabel(activity.source)}
                             </span>
                             {activity.description ? (
                               <>
-                                <span className="text-[#98a2b3]">-</span>
+                                <span className="text-muted-foreground-subtle">-</span>
                                 <span className="min-w-0 break-words [overflow-wrap:anywhere] min-[900px]:truncate">
                                   {activity.description}
                                 </span>
@@ -2542,7 +2542,7 @@ export function DailyReportApp({
                             aria-hidden="true"
                           />
                         )}
-                        <div className="text-sm font-medium text-[#111827] dark:text-foreground">
+                        <div className="text-sm font-medium text-foreground dark:text-foreground">
                           {formatReportDuration(activity.durationMinutes)}
                         </div>
                         <button
@@ -2563,8 +2563,8 @@ export function DailyReportApp({
               )}
             </div>
 
-            <div className="mt-auto border-t border-[#e6eaf2] pt-3 dark:border-[#263a55]">
-              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[#667085] dark:text-muted-foreground">
+            <div className="mt-auto border-t border-border pt-3 dark:border-border">
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground dark:text-muted-foreground">
                 <span>
                   {workItemCount} work item{workItemCount === 1 ? "" : "s"}
                   {workItemCount > 0
@@ -2582,7 +2582,7 @@ export function DailyReportApp({
             className="daily-report-panel daily-summary-panel flex min-h-[520px] min-w-0 max-w-full flex-col min-[1200px]:min-h-0"
           >
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
+              <h2 className="text-lg font-semibold tracking-normal text-foreground dark:text-foreground">
                 Summary
               </h2>
               <button
@@ -2623,7 +2623,7 @@ export function DailyReportApp({
           />
           <div
             ref={activityMenuRef}
-            className="fixed z-50 overflow-y-auto overscroll-contain rounded-[12px] bg-white p-2 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+            className="fixed z-50 overflow-y-auto overscroll-contain rounded-[12px] bg-white p-2 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border dark:bg-card dark:ring-border"
             style={{
               top: openActivityMenu.top,
               left: openActivityMenu.left,
@@ -2633,8 +2633,8 @@ export function DailyReportApp({
             role="menu"
           >
             {menuActivityLinks.length > 1 ? (
-              <div className="mb-1 border-b border-[#e1e6ef] pb-1 dark:border-[#263a55]">
-                <div className="px-3 pb-1 pt-1 text-xs font-semibold text-[#667085] dark:text-muted-foreground">
+              <div className="mb-1 border-b border-border pb-1 dark:border-border">
+                <div className="px-3 pb-1 pt-1 text-xs font-semibold text-muted-foreground dark:text-muted-foreground">
                   Open source
                 </div>
                 {menuActivityLinks.map((link) => (
@@ -2644,7 +2644,7 @@ export function DailyReportApp({
                     href={link.href}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] transition-colors hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
+                    className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-foreground-muted transition-colors hover:bg-primary-subtle hover:text-primary-subtle-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
                     onClick={() => setOpenActivityMenu(null)}
                   >
                     <ExternalLink className="h-4 w-4" />
@@ -2656,7 +2656,7 @@ export function DailyReportApp({
               <button
                 type="button"
                 role="menuitem"
-                className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] transition-colors hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
+                className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-foreground-muted transition-colors hover:bg-primary-subtle hover:text-primary-subtle-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
                 onClick={() => openActivitySource(menuActivity)}
               >
                 <ExternalLink className="h-4 w-4" />
@@ -2666,7 +2666,7 @@ export function DailyReportApp({
             <button
               type="button"
               role="menuitem"
-              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] transition-colors hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
+              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-foreground-muted transition-colors hover:bg-primary-subtle hover:text-primary-subtle-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
               onClick={() => startRenamingActivity(menuActivity)}
             >
               <Edit3 className="h-4 w-4" />
@@ -2675,7 +2675,7 @@ export function DailyReportApp({
             <button
               type="button"
               role="menuitem"
-              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#334155] transition-colors hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
+              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-foreground-muted transition-colors hover:bg-primary-subtle hover:text-primary-subtle-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
               onClick={() => copyActivityTitle(menuActivity)}
             >
               <Copy className="h-4 w-4" />
@@ -2684,7 +2684,7 @@ export function DailyReportApp({
             <button
               type="button"
               role="menuitem"
-              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[#dc2626] transition-colors hover:bg-[#fef2f2] hover:text-[#b42318] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-300 dark:hover:bg-red-400/10 dark:hover:text-red-200"
+              className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-destructive transition-colors hover:bg-destructive-subtle hover:text-destructive-subtle-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-300 dark:hover:bg-red-400/10 dark:hover:text-red-200"
               onClick={() => removeActivity(menuActivity)}
             >
               <Trash2 className="h-4 w-4" />
@@ -2695,7 +2695,7 @@ export function DailyReportApp({
       ) : null}
       {activityDragPreview ? (
         <div
-          className="activity-drag-preview pointer-events-none fixed z-[80] flex max-w-[320px] items-center gap-3 rounded-[12px] bg-white/95 px-3 py-2.5 text-sm text-[#111827] shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-[#dbe5f4] backdrop-blur dark:bg-[#0f1b2a]/95 dark:text-foreground dark:ring-[#263a55]"
+          className="activity-drag-preview pointer-events-none fixed z-[80] flex max-w-[320px] items-center gap-3 rounded-[12px] bg-white/95 px-3 py-2.5 text-sm text-foreground shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-border backdrop-blur dark:bg-card/95 dark:text-foreground dark:ring-border"
           style={{
             left: activityDragPreview.x,
             top: activityDragPreview.y,
@@ -2710,7 +2710,7 @@ export function DailyReportApp({
             <span className="block truncate font-semibold">
               {activityDragPreview.title}
             </span>
-            <span className="block truncate text-xs text-[#667085] dark:text-muted-foreground">
+            <span className="block truncate text-xs text-muted-foreground dark:text-muted-foreground">
               {reportActivitySourceLabel(activityDragPreview.source)}
             </span>
           </span>

@@ -59,7 +59,7 @@ export function ResetPasswordForm({
     <>
       <Card className="w-full max-w-md shadow-[var(--surface-shadow-strong)]">
         <CardHeader className="space-y-2 px-5 pt-5 text-center">
-          <CardTitle className="text-[26px] font-semibold tracking-normal text-[#111827] dark:text-foreground">
+          <CardTitle className="text-[26px] font-semibold tracking-normal text-foreground dark:text-foreground">
             Reset password
           </CardTitle>
           <CardDescription>

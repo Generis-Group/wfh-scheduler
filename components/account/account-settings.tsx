@@ -139,7 +139,7 @@ export function AccountSettings({
       <Card className="flex flex-col overflow-hidden min-[1080px]:min-h-[414px]">
         <CardHeader className="px-5 py-5">
           <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary-subtle text-primary dark:bg-white/[0.06]">
               <UserRound className="h-5 w-5" />
             </span>
             <div>
@@ -152,10 +152,10 @@ export function AccountSettings({
         </CardHeader>
         <CardContent className="flex flex-1 flex-col px-5 pb-5">
           <form className="flex flex-1 flex-col gap-5" onSubmit={saveProfile}>
-            <div className="relative flex min-h-[114px] flex-wrap items-center gap-5 rounded-[8px] border border-[#dfe7f2] bg-white px-5 py-4 shadow-[inset_0_1px_0_rgba(15,23,42,0.02)] dark:border-[#263a55] dark:bg-[#0b1523]">
+            <div className="relative flex min-h-[114px] flex-wrap items-center gap-5 rounded-[8px] border border-border bg-white px-5 py-4 shadow-[inset_0_1px_0_rgba(15,23,42,0.02)] dark:border-border dark:bg-background">
               <button
                 type="button"
-                className="group relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[#1d4ed8] bg-cover bg-center text-[30px] font-semibold text-white shadow-[0_20px_45px_rgba(29,78,216,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#1d4ed8]"
+                className="group relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-primary bg-cover bg-center text-[30px] font-semibold text-white shadow-[0_20px_45px_rgba(29,78,216,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-primary"
                 style={
                   profileImage
                     ? { backgroundImage: `url("${profileImage}")` }
@@ -165,7 +165,7 @@ export function AccountSettings({
                 onClick={() => fileInputRef.current?.click()}
               >
                 {profileImage ? null : initials(name || email || "User")}
-                <span className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#1d4ed8] text-white shadow-[0_8px_16px_rgba(29,78,216,0.28)] transition-colors group-hover:bg-[#1e40af] dark:border-[#0b1523]">
+                <span className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-primary text-white shadow-[0_8px_16px_rgba(29,78,216,0.28)] transition-colors group-hover:bg-primary-strong dark:border-background">
                   <Camera className="h-4 w-4" />
                 </span>
               </button>
@@ -180,10 +180,10 @@ export function AccountSettings({
                 }}
               />
               <div className="min-w-0 flex-1 basis-48">
-                <div className="truncate text-[17px] font-semibold text-[#111827] dark:text-foreground">
+                <div className="truncate text-[17px] font-semibold text-foreground dark:text-foreground">
                   {name.trim() || "Your name"}
                 </div>
-                <div className="mt-1 truncate text-sm text-[#64748b] dark:text-muted-foreground">
+                <div className="mt-1 truncate text-sm text-muted-foreground dark:text-muted-foreground">
                   {email.trim() || "name@generisgp.com"}
                 </div>
               </div>
@@ -219,20 +219,20 @@ export function AccountSettings({
               </div>
             </div>
 
-            <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[#e6ebf3] pt-5 dark:border-[#263a55]">
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5 dark:border-border">
               <p
                 className={cn(
                   "min-h-5 text-sm",
                   profileMessage?.includes("Unable") ||
                     profileMessage?.includes("Choose")
-                    ? "text-[#dc2626]"
-                    : "text-[#64748b]",
+                    ? "text-destructive"
+                    : "text-muted-foreground",
                 )}
               >
                 {profileMessage}
               </p>
               <Button
-                className="min-w-40 bg-[#2563eb] hover:bg-[#1d4ed8]"
+                className="min-w-40 bg-primary hover:bg-primary"
                 disabled={isSavingProfile}
               >
                 <Save className="mr-2 h-4 w-4" />
@@ -247,7 +247,7 @@ export function AccountSettings({
         <Card className="overflow-hidden">
           <CardHeader className="px-5 py-5">
             <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary-subtle text-primary dark:bg-white/[0.06]">
                 <KeyRound className="h-5 w-5" />
               </span>
               <div>
@@ -301,15 +301,15 @@ export function AccountSettings({
                     "text-sm",
                     passwordMessage.includes("Unable") ||
                       passwordMessage.includes("match")
-                      ? "text-[#dc2626]"
-                      : "text-[#64748b]",
+                      ? "text-destructive"
+                      : "text-muted-foreground",
                   )}
                 >
                   {passwordMessage}
                 </p>
               ) : null}
               <Button
-                className="mt-2 w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
+                className="mt-2 w-full bg-primary hover:bg-primary"
                 disabled={isSavingPassword}
               >
                 <KeyRound className="mr-2 h-4 w-4" />

@@ -876,8 +876,8 @@ function SortableHeader({
     <button
       type="button"
       className={cn(
-        "-ml-1 inline-flex max-w-full items-center gap-1 rounded-[6px] px-1 py-0.5 text-left font-semibold uppercase tracking-[0.02em] text-inherit transition-colors hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:hover:text-foreground",
-        active && "text-[#1d4ed8] dark:text-[#93c5fd]",
+        "-ml-1 inline-flex max-w-full items-center gap-1 rounded-[6px] px-1 py-0.5 text-left font-semibold uppercase tracking-[0.02em] text-inherit transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:text-foreground",
+        active && "text-primary-subtle-foreground dark:text-[#93c5fd]",
       )}
       onClick={() => onSort(sortKey)}
       aria-label={`Sort by ${label} ${nextDirection}`}
@@ -914,10 +914,10 @@ function ReviewerRowMenuButton({
       role="menuitem"
       disabled={disabled}
       className={cn(
-        "flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60",
+        "flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60",
         tone === "danger"
-          ? "text-[#dc2626] hover:bg-[#fef2f2] dark:text-red-300 dark:hover:bg-red-400/10"
-          : "text-[#334155] hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/5",
+          ? "text-destructive hover:bg-destructive-subtle dark:text-red-300 dark:hover:bg-red-400/10"
+          : "text-foreground-muted hover:bg-surface-subtle dark:text-foreground dark:hover:bg-white/5",
       )}
       onClick={onClick}
     >
@@ -1914,7 +1914,7 @@ export function ReviewerDashboard({
               <div className="flex flex-wrap items-center gap-2 min-[760px]:flex-nowrap">
                 <Button
                   variant="outline"
-                  className="h-10 min-w-[118px] shrink-0 justify-center rounded-[8px] bg-white px-3 text-xs shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]"
+                  className="h-10 min-w-[118px] shrink-0 justify-center rounded-[8px] bg-white px-3 text-xs shadow-none ring-1 ring-border dark:bg-background dark:ring-border"
                   onClick={sendEmailDigest}
                   disabled={isSendingDigest}
                   hidden={!canUseReviewerActions}
@@ -1923,7 +1923,7 @@ export function ReviewerDashboard({
                   {isSendingDigest ? "Sending..." : "Email digest"}
                 </Button>
                 <Button
-                  className="h-10 min-w-[96px] shrink-0 justify-center rounded-[8px] bg-[#2563eb] px-3 text-xs font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,0.2)] hover:bg-[#1d4ed8]"
+                  className="h-10 min-w-[96px] shrink-0 justify-center rounded-[8px] bg-primary px-3 text-xs font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,0.2)] hover:bg-primary"
                   onClick={downloadCsv}
                 >
                   <Download className="mr-1.5 h-3.5 w-3.5" />
@@ -1940,19 +1940,19 @@ export function ReviewerDashboard({
           >
             <div className="grid shrink-0 gap-3 p-3 min-[1180px]:grid-cols-[auto_minmax(0,1fr)] min-[1180px]:items-start">
               <div className="flex min-w-0 items-center gap-3 pt-1">
-                <h2 className="text-lg font-semibold text-[#101828] dark:text-foreground">
+                <h2 className="text-lg font-semibold text-foreground dark:text-foreground">
                   Employee Reports
                 </h2>
                 <div className="min-h-9 min-w-0 flex-1">
                   {selectedRows.length > 0 ? (
-                    <div className="inline-flex h-9 max-w-full items-center gap-2 rounded-[9px] bg-[#f4f8ff] px-2 py-1.5 ring-1 ring-[#dbe7f5] dark:bg-blue-400/10 dark:ring-blue-300/15">
-                      <span className="shrink-0 px-1 text-xs font-semibold text-[#475467] dark:text-muted-foreground">
+                    <div className="inline-flex h-9 max-w-full items-center gap-2 rounded-[9px] bg-primary-subtle px-2 py-1.5 ring-1 ring-border dark:bg-blue-400/10 dark:ring-blue-300/15">
+                      <span className="shrink-0 px-1 text-xs font-semibold text-foreground-muted dark:text-muted-foreground">
                         {selectedRows.length} selected
                       </span>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 shrink-0 rounded-[7px] bg-white px-3 text-xs dark:bg-[#0b1523]"
+                        className="h-7 shrink-0 rounded-[7px] bg-white px-3 text-xs dark:bg-background"
                         onClick={markSelectedReadState}
                       >
                         {selectedReadAction ? "Mark as read" : "Mark as unread"}
@@ -1988,7 +1988,7 @@ export function ReviewerDashboard({
                 </Select>
 
                 <div
-                  className="grid h-10 w-full grid-cols-3 rounded-[7px] bg-white p-0.5 ring-1 ring-[#dfe4ee] dark:bg-[#0b1523] dark:ring-[#263a55]"
+                  className="grid h-10 w-full grid-cols-3 rounded-[7px] bg-white p-0.5 ring-1 ring-border dark:bg-background dark:ring-border"
                   aria-label="Filter by report status"
                   role="group"
                 >
@@ -1997,9 +1997,9 @@ export function ReviewerDashboard({
                       key={option.value}
                       type="button"
                       className={cn(
-                        "rounded-[6px] px-2 text-xs font-semibold text-[#64748b] transition-colors hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:text-foreground",
+                        "rounded-[6px] px-2 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:text-foreground",
                         statusFilter === option.value &&
-                          "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#93c5fd]",
+                          "bg-primary-subtle text-primary dark:bg-blue-400/10 dark:text-[#93c5fd]",
                       )}
                       onClick={() => setStatusFilter(option.value)}
                     >
@@ -2011,7 +2011,7 @@ export function ReviewerDashboard({
                 {hasActiveTableControls ? (
                   <button
                     type="button"
-                    className="h-10 rounded-[7px] px-2 text-xs font-semibold text-[#64748b] transition-colors hover:bg-[#f1f5f9] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+                    className="h-10 rounded-[7px] px-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
                     onClick={clearTableControls}
                   >
                     Clear
@@ -2024,8 +2024,8 @@ export function ReviewerDashboard({
               className="reference-paginated-viewport reference-visible-rows-viewport reference-review-table-viewport px-3"
             >
               <table className="w-full table-fixed text-xs">
-                <thead className="sticky top-0 z-10 bg-white dark:bg-[#0f1b2a]">
-                  <tr className="border-b border-[#e5eaf2] text-left text-[10px] font-semibold uppercase tracking-[0.02em] text-[#64748b] dark:border-[#263a55] dark:text-muted-foreground">
+                <thead className="sticky top-0 z-10 bg-white dark:bg-card">
+                  <tr className="border-b border-border text-left text-[10px] font-semibold uppercase tracking-[0.02em] text-muted-foreground dark:border-border dark:text-muted-foreground">
                     <th className="w-[32px] px-1 py-2 min-[700px]:w-[36px] min-[700px]:px-2">
                       <Checkbox
                         checked={allVisibleReportsSelected}
@@ -2141,9 +2141,9 @@ export function ReviewerDashboard({
                               : blockedReason
                           }
                           className={cn(
-                            "h-14 border-b border-[#e5eaf2] text-[#344054] transition-colors last:border-b-0 hover:bg-[#f8fbff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563eb] dark:border-[#263a55] dark:text-muted-foreground dark:hover:bg-white/[0.04]",
+                            "h-14 border-b border-border text-foreground-muted transition-colors last:border-b-0 hover:bg-primary-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary dark:border-border dark:text-muted-foreground dark:hover:bg-white/[0.04]",
                             canReview && "cursor-pointer",
-                            unread && "bg-[#f4f8ff] dark:bg-blue-400/10",
+                            unread && "bg-primary-subtle dark:bg-blue-400/10",
                           )}
                           onClick={() => {
                             if (canReview) {
@@ -2179,16 +2179,16 @@ export function ReviewerDashboard({
                               <span
                                 className={cn(
                                   "h-2 w-2 rounded-full",
-                                  unread ? "bg-[#2563eb]" : "bg-transparent",
+                                  unread ? "bg-primary" : "bg-transparent",
                                 )}
                               />
                               <Avatar name={row.user.name ?? row.user.email} />
-                              <span className="min-w-0 truncate text-xs font-semibold text-[#101828] dark:text-foreground">
+                              <span className="min-w-0 truncate text-xs font-semibold text-foreground dark:text-foreground">
                                 {row.user.name ?? row.user.email ?? "Employee"}
                               </span>
                             </div>
                           </td>
-                          <td className="hidden px-2 py-2.5 text-xs text-[#475467] dark:text-muted-foreground min-[760px]:table-cell">
+                          <td className="hidden px-2 py-2.5 text-xs text-foreground-muted dark:text-muted-foreground min-[760px]:table-cell">
                             {userDepartmentLabel(row.user)}
                           </td>
                           <td className="px-2 py-2.5">
@@ -2200,20 +2200,20 @@ export function ReviewerDashboard({
                           <td className="hidden px-2 py-2.5 min-[1180px]:table-cell">
                             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                               {flags.length === 0 ? (
-                                <span className="text-[#98a2b3]">-</span>
+                                <span className="text-muted-foreground-subtle">-</span>
                               ) : (
                                 flags.map((flag) => (
                                   <span
                                     key={flag.key}
                                     title={flag.label}
                                     className={cn(
-                                      "inline-flex h-6 w-6 items-center justify-center rounded-full border bg-white [&_svg]:h-3.5 [&_svg]:w-3.5 dark:bg-[#0b1523]",
+                                      "inline-flex h-6 w-6 items-center justify-center rounded-full border bg-white [&_svg]:h-3.5 [&_svg]:w-3.5 dark:bg-background",
                                       flag.key === "activities" &&
-                                        "border-blue-200 text-[#2563eb] dark:border-blue-300/25",
+                                        "border-blue-200 text-primary dark:border-blue-300/25",
                                       flag.key === "edited" &&
                                         "border-purple-200 text-[#8b5cf6] dark:border-purple-300/25",
                                       flag.key === "late" &&
-                                        "border-red-200 text-[#ef4444] dark:border-red-300/25",
+                                        "border-red-200 text-destructive dark:border-red-300/25",
                                     )}
                                   >
                                     {flag.icon}
@@ -2237,7 +2237,7 @@ export function ReviewerDashboard({
                             >
                               {unavailablePulse ? (
                                 <span
-                                  className="reference-lock-nudge pointer-events-none absolute -left-7 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-[#eef2f7] text-[#64748b] dark:bg-white/10 dark:text-muted-foreground"
+                                  className="reference-lock-nudge pointer-events-none absolute -left-7 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-muted text-muted-foreground dark:bg-white/10 dark:text-muted-foreground"
                                   aria-hidden="true"
                                 >
                                   <Lock className="h-3.5 w-3.5" />
@@ -2247,7 +2247,7 @@ export function ReviewerDashboard({
                                 type="button"
                                 variant="outline"
                                 size="icon"
-                                className="h-8 w-8 rounded-[7px] bg-[#f4f7fb] p-0 text-[#64748b] hover:text-[#2563eb]"
+                                className="h-8 w-8 rounded-[7px] bg-surface-subtle p-0 text-muted-foreground hover:text-primary"
                                 aria-label={`More actions for ${employeeLabel(row)}`}
                                 aria-haspopup="menu"
                                 aria-expanded={
@@ -2295,7 +2295,7 @@ export function ReviewerDashboard({
           />
           <div
             ref={rowActionMenuRef}
-            className="fixed z-50 overflow-y-auto overscroll-contain rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-[#e1e6ef] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+            className="fixed z-50 overflow-y-auto overscroll-contain rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
             style={{
               top: rowActionMenu.top,
               left: rowActionMenu.left,
@@ -2375,8 +2375,8 @@ export function ReviewerDashboard({
             ) : null}
             {canAdminManageReports && menuRow.report?.status === "SUBMITTED" ? (
               <>
-                <div className="mx-2 my-1 border-t border-[#e5eaf2] dark:border-[#263a55]" />
-                <div className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#64748b] dark:text-muted-foreground">
+                <div className="mx-2 my-1 border-t border-border dark:border-border" />
+                <div className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground dark:text-muted-foreground">
                   Admin actions
                 </div>
                 <ReviewerRowMenuButton
@@ -2478,16 +2478,16 @@ function LocationCountChip({
 }) {
   const percent = percentage(count, total);
   const toneClass = {
-    blue: "bg-[#f8fbff] text-[#1d4ed8] ring-[#dbe7f5] dark:bg-blue-400/10 dark:text-blue-100 dark:ring-blue-300/15",
+    blue: "bg-primary-subtle text-primary-subtle-foreground ring-border dark:bg-blue-400/10 dark:text-blue-100 dark:ring-blue-300/15",
     green:
       "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-300/15",
     purple:
       "bg-[#f8f3ff] text-[#7c3aed] ring-[#eadcff] dark:bg-purple-400/10 dark:text-purple-100 dark:ring-purple-300/15",
     yellow:
       "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-300/20",
-    red: "bg-[#fff5f5] text-[#dc2626] ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15",
+    red: "bg-destructive-subtle text-destructive ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15",
     neutral:
-      "bg-[#f8fafc] text-[#475467] ring-[#e5eaf2] dark:bg-white/[0.04] dark:text-muted-foreground dark:ring-[#263a55]",
+      "bg-surface-subtle text-foreground-muted ring-border dark:bg-white/[0.04] dark:text-muted-foreground dark:ring-border",
   }[tone];
 
   return (
@@ -2542,14 +2542,14 @@ function WorkLocationBreakdown({
   return (
     <section
       aria-label="Work location breakdown"
-      className="mt-3 border-t border-[#e5eaf2] pt-2.5 dark:border-[#263a55]"
+      className="mt-3 border-t border-border pt-2.5 dark:border-border"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <h3 className="text-sm font-semibold text-[#101828] dark:text-foreground">
+          <h3 className="text-sm font-semibold text-foreground dark:text-foreground">
             Work location breakdown
           </h3>
-          <span className="text-xs text-[#64748b] dark:text-muted-foreground">
+          <span className="text-xs text-muted-foreground dark:text-muted-foreground">
             {submittedLabel}
           </span>
         </div>
@@ -2558,7 +2558,7 @@ function WorkLocationBreakdown({
             className={cn(
               "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ring-1",
               warning.tone === "red"
-                ? "bg-[#fff5f5] text-[#dc2626] ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15"
+                ? "bg-destructive-subtle text-destructive ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15"
                 : "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-300/20",
             )}
           >
@@ -2568,7 +2568,7 @@ function WorkLocationBreakdown({
           </span>
         ) : null}
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-[#64748b] dark:text-muted-foreground">
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground dark:text-muted-foreground">
         {primaryLocations.map(({ location, tone }) => (
           <LocationCountChip
             key={location}
@@ -2583,7 +2583,7 @@ function WorkLocationBreakdown({
             {secondaryLocations.map((location) => (
               <span
                 key={location}
-                className="inline-flex h-7 items-center rounded-full bg-[#f8fafc] px-2.5 font-semibold ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
+                className="inline-flex h-7 items-center rounded-full bg-surface-subtle px-2.5 font-semibold ring-1 ring-border dark:bg-white/[0.04] dark:ring-border"
               >
                 {workLocationLabel(location)}: {breakdown.counts[location]}
               </span>
@@ -2640,14 +2640,14 @@ function WeeklyWorkLocationBreakdown({
   return (
     <section
       aria-label="Weekly work location breakdown"
-      className="report-pdf-card mt-5 rounded-[10px] border border-[#dbe3ee] bg-[#f8fbff] p-4 dark:border-[#263a55] dark:bg-white/[0.03]"
+      className="report-pdf-card mt-5 rounded-[10px] border border-border bg-primary-subtle p-4 dark:border-border dark:bg-white/[0.03]"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <h2 className="text-sm font-semibold text-[#101828] dark:text-foreground">
+          <h2 className="text-sm font-semibold text-foreground dark:text-foreground">
             Weekly location breakdown
           </h2>
-          <span className="text-xs text-[#64748b] dark:text-muted-foreground">
+          <span className="text-xs text-muted-foreground dark:text-muted-foreground">
             {submittedLabel}
           </span>
         </div>
@@ -2656,7 +2656,7 @@ function WeeklyWorkLocationBreakdown({
             className={cn(
               "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ring-1",
               warning.tone === "red"
-                ? "bg-[#fff5f5] text-[#dc2626] ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15"
+                ? "bg-destructive-subtle text-destructive ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15"
                 : "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-300/20",
             )}
           >
@@ -2666,7 +2666,7 @@ function WeeklyWorkLocationBreakdown({
           </span>
         ) : null}
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-[#64748b] dark:text-muted-foreground">
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground dark:text-muted-foreground">
         {primaryLocations.map(({ location, tone }) => (
           <LocationCountChip
             key={location}
@@ -2679,7 +2679,7 @@ function WeeklyWorkLocationBreakdown({
         {secondaryLocations.map((location) => (
           <span
             key={location}
-            className="inline-flex h-7 items-center rounded-full bg-white px-2.5 font-semibold ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
+            className="inline-flex h-7 items-center rounded-full bg-white px-2.5 font-semibold ring-1 ring-border dark:bg-white/[0.04] dark:ring-border"
           >
             {workLocationLabel(location)}: {breakdown.counts[location]}
           </span>
@@ -2704,8 +2704,8 @@ function CompactMetric({
   tone: "blue" | "red" | "purple";
 }) {
   const toneClass = {
-    blue: "bg-[#f4f8ff] text-[#1d4ed8] ring-[#dbe7f5] dark:bg-blue-400/10 dark:text-blue-100 dark:ring-blue-300/15",
-    red: "bg-[#fff5f5] text-[#dc2626] ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15",
+    blue: "bg-primary-subtle text-primary-subtle-foreground ring-border dark:bg-blue-400/10 dark:text-blue-100 dark:ring-blue-300/15",
+    red: "bg-destructive-subtle text-destructive ring-[#f5d7dc] dark:bg-red-400/10 dark:text-red-100 dark:ring-red-300/15",
     purple:
       "bg-[#f8f3ff] text-[#7c3aed] ring-[#eadcff] dark:bg-purple-400/10 dark:text-purple-100 dark:ring-purple-300/15",
   }[tone];
@@ -2760,7 +2760,7 @@ function WeeklyProgressRing({
       }}
       aria-label={`${submittedCount} of ${expectedDays} submitted`}
     >
-      <div className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-white text-sm font-semibold text-[#0f172a] dark:bg-[#0f1b2a] dark:text-foreground">
+      <div className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-white text-sm font-semibold text-foreground dark:bg-card dark:text-foreground">
         {submittedCount}/{expectedDays}
       </div>
     </div>
@@ -2792,10 +2792,10 @@ function WeeklyReportDayTabs({
             key={weekDate}
             type="button"
             className={cn(
-              "relative flex h-[76px] min-w-0 flex-col items-center justify-center rounded-[10px] border px-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]",
+              "relative flex h-[76px] min-w-0 flex-col items-center justify-center rounded-[10px] border px-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
               selected
-                ? "border-[#8ab7ff] bg-[#eff6ff] text-[#0b63e5] shadow-[0_10px_22px_rgba(37,99,235,0.08)] dark:border-blue-300/30 dark:bg-blue-400/10 dark:text-blue-100"
-                : "border-[#dbe3ee] bg-white text-[#0f172a] hover:border-[#b7c8df] hover:bg-[#fbfdff] dark:border-[#263a55] dark:bg-[#0f1b2a] dark:text-foreground dark:hover:bg-white/[0.06]",
+                ? "border-[#8ab7ff] bg-primary-subtle text-primary shadow-[0_10px_22px_rgba(37,99,235,0.08)] dark:border-blue-300/30 dark:bg-blue-400/10 dark:text-blue-100"
+                : "border-border bg-white text-foreground hover:border-border hover:bg-surface-subtle dark:border-border dark:bg-card dark:text-foreground dark:hover:bg-white/[0.06]",
             )}
             aria-pressed={selected}
             aria-label={`${formatWeekdayShortDate(weekDate)} ${
@@ -2810,15 +2810,15 @@ function WeeklyReportDayTabs({
               className={cn(
                 "mt-1 text-[13px] font-medium leading-5",
                 selected
-                  ? "text-[#0b63e5] dark:text-blue-100"
-                  : "text-[#52647a] dark:text-muted-foreground",
+                  ? "text-primary dark:text-blue-100"
+                  : "text-foreground-muted dark:text-muted-foreground",
               )}
             >
               {formatMonthDay(weekDate)}
             </span>
             {selected ? (
               <span
-                className="absolute inset-x-0 -bottom-2 h-1 rounded-full bg-[#0b63e5]"
+                className="absolute inset-x-0 -bottom-2 h-1 rounded-full bg-primary"
                 aria-hidden="true"
               />
             ) : null}
@@ -2826,16 +2826,16 @@ function WeeklyReportDayTabs({
         );
       })}
 
-      <div className="flex min-h-[76px] items-center gap-4 rounded-[10px] border border-[#dbe3ee] bg-white px-5 py-3 dark:border-[#263a55] dark:bg-[#0f1b2a] min-[720px]:col-span-2 min-[1120px]:col-span-1">
+      <div className="flex min-h-[76px] items-center gap-4 rounded-[10px] border border-border bg-white px-5 py-3 dark:border-border dark:bg-card min-[720px]:col-span-2 min-[1120px]:col-span-1">
         <WeeklyProgressRing
           submittedCount={submittedCount}
           expectedDays={expectedDays}
         />
         <div className="min-w-0">
-          <p className="text-[15px] font-semibold text-[#0f172a] dark:text-foreground">
+          <p className="text-[15px] font-semibold text-foreground dark:text-foreground">
             {submittedCount} of {expectedDays} submitted
           </p>
-          <p className="mt-1 text-[13px] leading-5 text-[#52647a] dark:text-muted-foreground">
+          <p className="mt-1 text-[13px] leading-5 text-foreground-muted dark:text-muted-foreground">
             Keep it up. You&apos;re on track.
           </p>
         </div>
@@ -2854,15 +2854,15 @@ function WeeklyDayMeta({
   value: ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-3 border-[#dbe3ee] py-2 dark:border-[#263a55] min-[700px]:border-r min-[700px]:pr-8 min-[700px]:last:border-r-0">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center text-[#52647a] [&_svg]:h-5 [&_svg]:w-5 dark:text-muted-foreground">
+    <div className="flex min-w-0 items-center gap-3 border-border py-2 dark:border-border min-[700px]:border-r min-[700px]:pr-8 min-[700px]:last:border-r-0">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center text-foreground-muted [&_svg]:h-5 [&_svg]:w-5 dark:text-muted-foreground">
         {icon}
       </span>
       <div className="min-w-0">
-        <dt className="text-[13px] font-medium leading-5 text-[#52647a] dark:text-muted-foreground">
+        <dt className="text-[13px] font-medium leading-5 text-foreground-muted dark:text-muted-foreground">
           {label}
         </dt>
-        <dd className="truncate text-[15px] font-medium leading-6 text-[#0f172a] dark:text-foreground">
+        <dd className="truncate text-[15px] font-medium leading-6 text-foreground dark:text-foreground">
           {value}
         </dd>
       </div>
@@ -2878,14 +2878,14 @@ function WeeklyDayActivities({
   return (
     <div className="min-w-0">
       <div className="flex items-center gap-3">
-        <ListChecks className="h-5 w-5 text-[#0b63e5]" aria-hidden="true" />
-        <h4 className="text-[17px] font-semibold text-[#0f172a] dark:text-foreground">
+        <ListChecks className="h-5 w-5 text-primary" aria-hidden="true" />
+        <h4 className="text-[17px] font-semibold text-foreground dark:text-foreground">
           Activities
         </h4>
       </div>
-      <div className="mt-4 border-t border-[#dbe3ee] dark:border-[#263a55]">
+      <div className="mt-4 border-t border-border dark:border-border">
         {activities.length ? (
-          <ul className="divide-y divide-[#e6edf6] dark:divide-[#263a55]">
+          <ul className="divide-y divide-border dark:divide-border">
             {activities.map((activity) => {
               const statusLabel = weeklyActivityStatusLabel(activity);
 
@@ -2901,23 +2901,23 @@ function WeeklyDayActivities({
                       className="weekly-report-source-icon report-pdf-source-icon"
                     />
                     <div className="min-w-0">
-                      <p className="truncate text-[15px] font-semibold leading-5 text-[#0f172a] dark:text-foreground">
+                      <p className="truncate text-[15px] font-semibold leading-5 text-foreground dark:text-foreground">
                         <ActivitySourceLinkPicker
                           source={activity.source}
                           sourceUrl={activity.sourceUrl}
                           sourceLinks={activity.sourceLinks}
-                          className="max-w-full hover:text-[#2563eb]"
+                          className="max-w-full hover:text-primary"
                           menuLabel={`Choose source link for ${activity.title || "Untitled activity"}`}
                         >
                           {activity.title || "Untitled activity"}
                         </ActivitySourceLinkPicker>
                       </p>
-                      <p className="mt-0.5 truncate text-[13px] leading-5 text-[#52647a] dark:text-muted-foreground">
+                      <p className="mt-0.5 truncate text-[13px] leading-5 text-foreground-muted dark:text-muted-foreground">
                         {reportActivitySourceLabel(activity.source)}
                       </p>
                     </div>
                   </div>
-                  <div className="text-[14px] font-medium text-[#0f172a] dark:text-foreground">
+                  <div className="text-[14px] font-medium text-foreground dark:text-foreground">
                     {formatReportDuration(activity.durationMinutes)}
                   </div>
                   {statusLabel ? (
@@ -2932,7 +2932,7 @@ function WeeklyDayActivities({
             })}
           </ul>
         ) : (
-          <p className="py-5 text-[14px] leading-6 text-[#52647a] dark:text-muted-foreground">
+          <p className="py-5 text-[14px] leading-6 text-foreground-muted dark:text-muted-foreground">
             No activities selected.
           </p>
         )}
@@ -2953,10 +2953,10 @@ function WeeklyReportDayCard({
   const dayActivities = includedActivities(report ?? null);
 
   return (
-    <section className="weekly-report-day report-pdf-card overflow-hidden rounded-[10px] border border-[#dbe3ee] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.07)] dark:border-[#263a55] dark:bg-[#0f1b2a]">
+    <section className="weekly-report-day report-pdf-card overflow-hidden rounded-[10px] border border-border bg-white shadow-[0_10px_30px_rgba(15,23,42,0.07)] dark:border-border dark:bg-card">
       <div className="px-6 py-6 min-[900px]:px-7">
         <div className="flex flex-wrap items-center gap-4">
-          <h3 className="text-[24px] font-semibold leading-tight text-[#0f172a] dark:text-foreground">
+          <h3 className="text-[24px] font-semibold leading-tight text-foreground dark:text-foreground">
             {formatFullWeekdayDate(weekDate)}
           </h3>
           <ReportStatusBadge
@@ -2966,7 +2966,7 @@ function WeeklyReportDayCard({
           />
         </div>
 
-        <dl className="mt-6 grid gap-x-8 gap-y-3 border-t border-[#dbe3ee] pt-5 dark:border-[#263a55] min-[700px]:grid-cols-3">
+        <dl className="mt-6 grid gap-x-8 gap-y-3 border-t border-border pt-5 dark:border-border min-[700px]:grid-cols-3">
           <WeeklyDayMeta
             icon={<MapPin />}
             label="Location"
@@ -2985,15 +2985,15 @@ function WeeklyReportDayCard({
         </dl>
       </div>
 
-      <div className="grid border-t border-[#dbe3ee] dark:border-[#263a55] min-[960px]:grid-cols-[minmax(0,1fr)_minmax(360px,1.05fr)]">
-        <div className="min-w-0 px-6 py-6 dark:bg-[#0f1b2a] min-[900px]:px-7 min-[960px]:border-r min-[960px]:border-[#dbe3ee] min-[960px]:dark:border-[#263a55]">
+      <div className="grid border-t border-border dark:border-border min-[960px]:grid-cols-[minmax(0,1fr)_minmax(360px,1.05fr)]">
+        <div className="min-w-0 px-6 py-6 dark:bg-card min-[900px]:px-7 min-[960px]:border-r min-[960px]:border-border min-[960px]:dark:border-border">
           <div className="flex items-center gap-3">
-            <FileText className="h-5 w-5 text-[#0b63e5]" aria-hidden="true" />
-            <h4 className="text-[17px] font-semibold text-[#0f172a] dark:text-foreground">
+            <FileText className="h-5 w-5 text-primary" aria-hidden="true" />
+            <h4 className="text-[17px] font-semibold text-foreground dark:text-foreground">
               Summary
             </h4>
           </div>
-          <div className="mt-4 border-t border-[#dbe3ee] pt-5 text-[15px] leading-7 text-[#0f172a] dark:border-[#263a55] dark:text-foreground">
+          <div className="mt-4 border-t border-border pt-5 text-[15px] leading-7 text-foreground dark:border-border dark:text-foreground">
             {report ? (
               <SummaryRenderer
                 value={report.summary}
@@ -3001,7 +3001,7 @@ function WeeklyReportDayCard({
                 emptyText="No summary recorded."
               />
             ) : (
-              <p className="text-[#52647a] dark:text-muted-foreground">
+              <p className="text-foreground-muted dark:text-muted-foreground">
                 Nothing to summarize for this day.
               </p>
             )}
@@ -3031,19 +3031,19 @@ function WeeklyReportArchivePage({
   return (
     <main className="reference-page min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
       <button
-        className="mb-3 inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+        className="mb-3 inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-primary hover:text-primary-subtle-foreground"
         onClick={onBack}
       >
         <ArrowLeft className="h-4 w-4" />
         Back to review dashboard
       </button>
       <ReportSurface className="mx-auto max-w-[980px] min-[1024px]:flex min-[1024px]:min-h-0 min-[1024px]:w-full min-[1024px]:flex-1 min-[1024px]:flex-col">
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e5eaf2] pb-4 dark:border-[#263a55]">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4 dark:border-border">
           <div>
-            <h1 className="text-[24px] font-semibold leading-tight text-[#101828] dark:text-foreground">
+            <h1 className="text-[24px] font-semibold leading-tight text-foreground dark:text-foreground">
               Saved Weekly Reports
             </h1>
-            <p className="mt-1 text-sm text-[#52647a] dark:text-muted-foreground">
+            <p className="mt-1 text-sm text-foreground-muted dark:text-muted-foreground">
               {userLabel(state.employee)}
             </p>
           </div>
@@ -3052,8 +3052,8 @@ function WeeklyReportArchivePage({
         {state.status === "loading" ? (
           <div className="flex min-h-[220px] items-center justify-center text-center">
             <div>
-              <Loader2 className="mx-auto h-7 w-7 animate-spin text-[#2563eb]" />
-              <p className="mt-3 text-sm font-medium text-[#52647a] dark:text-muted-foreground">
+              <Loader2 className="mx-auto h-7 w-7 animate-spin text-primary" />
+              <p className="mt-3 text-sm font-medium text-foreground-muted dark:text-muted-foreground">
                 Loading saved weekly reports
               </p>
             </div>
@@ -3063,17 +3063,17 @@ function WeeklyReportArchivePage({
             <EmptyReferenceState>{state.message}</EmptyReferenceState>
           </div>
         ) : state.reports.length ? (
-          <div className="mt-4 divide-y divide-[#e5eaf2] overflow-hidden rounded-[10px] border border-[#dbe3ee] dark:divide-[#263a55] dark:border-[#263a55] min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:overflow-y-auto min-[1024px]:overscroll-contain min-[1024px]:[scrollbar-gutter:stable]">
+          <div className="mt-4 divide-y divide-border overflow-hidden rounded-[10px] border border-border dark:divide-border dark:border-border min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:overflow-y-auto min-[1024px]:overscroll-contain min-[1024px]:[scrollbar-gutter:stable]">
             {state.reports.map((report) => (
               <div
                 key={report.id}
-                className="grid gap-3 bg-white px-4 py-4 dark:bg-[#0f1b2a] min-[760px]:grid-cols-[minmax(0,1fr)_auto] min-[760px]:items-center"
+                className="grid gap-3 bg-white px-4 py-4 dark:bg-card min-[760px]:grid-cols-[minmax(0,1fr)_auto] min-[760px]:items-center"
               >
                 <div className="min-w-0">
-                  <p className="text-base font-semibold text-[#0f172a] dark:text-foreground">
+                  <p className="text-base font-semibold text-foreground dark:text-foreground">
                     {formatWeekRange(report.weekStart, report.weekEnd)}
                   </p>
-                  <p className="mt-1 text-sm text-[#52647a] dark:text-muted-foreground">
+                  <p className="mt-1 text-sm text-foreground-muted dark:text-muted-foreground">
                     {report.submittedCount} of {report.expectedDays} submitted -{" "}
                     {report.activityCount} activities - Generated{" "}
                     {formatTimestamp(report.generatedAt)}
@@ -3082,7 +3082,7 @@ function WeeklyReportArchivePage({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-9 rounded-[8px] bg-white px-4 text-sm font-semibold text-[#2563eb] dark:bg-[#0b1523]"
+                  className="h-9 rounded-[8px] bg-white px-4 text-sm font-semibold text-primary dark:bg-background"
                   onClick={() => {
                     void onOpenReport(report, state.employee);
                   }}
@@ -3120,7 +3120,7 @@ function WeeklyReportReviewPage({
     return (
       <main className="reference-page report-pdf-page weekly-report-pdf min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
         <button
-          className="report-pdf-back mb-3 inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+          className="report-pdf-back mb-3 inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-primary hover:text-primary-subtle-foreground"
           onClick={onBack}
         >
           <ArrowLeft className="h-4 w-4" />
@@ -3130,20 +3130,20 @@ function WeeklyReportReviewPage({
           <div className="text-center">
             {state.status === "loading" ? (
               <>
-                <Loader2 className="mx-auto h-7 w-7 animate-spin text-[#2563eb]" />
-                <h1 className="mt-4 text-lg font-semibold text-[#101828] dark:text-foreground">
+                <Loader2 className="mx-auto h-7 w-7 animate-spin text-primary" />
+                <h1 className="mt-4 text-lg font-semibold text-foreground dark:text-foreground">
                   Loading weekly report
                 </h1>
-                <p className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
+                <p className="mt-1 text-sm text-muted-foreground dark:text-muted-foreground">
                   {userLabel(state.employee)}
                 </p>
               </>
             ) : (
               <>
-                <h1 className="text-lg font-semibold text-[#101828] dark:text-foreground">
+                <h1 className="text-lg font-semibold text-foreground dark:text-foreground">
                   Unable to load weekly report
                 </h1>
-                <p className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
+                <p className="mt-1 text-sm text-muted-foreground dark:text-muted-foreground">
                   {state.message}
                 </p>
               </>
@@ -3199,30 +3199,30 @@ function WeeklyReportReviewPage({
   );
 
   return (
-    <main className="reference-page reference-page-contained report-pdf-page weekly-report-pdf bg-[#f6f9fd] dark:bg-background min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
+    <main className="reference-page reference-page-contained report-pdf-page weekly-report-pdf bg-surface-subtle dark:bg-background min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
       <div className="reference-row-scroll min-[1024px]:min-h-0 min-[1024px]:w-full min-[1024px]:flex-1 min-[1024px]:pr-1">
         <button
-          className="report-pdf-back mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+          className="report-pdf-back mb-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary-subtle-foreground"
           onClick={onBack}
         >
           <ArrowLeft className="h-4 w-4" />
           Back to review dashboard
         </button>
 
-        <article className="report-pdf-document weekly-report-document rounded-[12px] border border-[#dbe3ee] bg-white p-6 shadow-[0_16px_46px_rgba(15,23,42,0.08)] dark:border-[#263a55] dark:bg-[#0f1b2a] min-[900px]:p-9">
-          <header className="report-pdf-header flex flex-col gap-4 border-b border-[#dbe3ee] pb-8 dark:border-[#263a55] min-[720px]:flex-row min-[720px]:items-start min-[720px]:justify-between">
+        <article className="report-pdf-document weekly-report-document rounded-[12px] border border-border bg-white p-6 shadow-[0_16px_46px_rgba(15,23,42,0.08)] dark:border-border dark:bg-card min-[900px]:p-9">
+          <header className="report-pdf-header flex flex-col gap-4 border-b border-border pb-8 dark:border-border min-[720px]:flex-row min-[720px]:items-start min-[720px]:justify-between">
             <div className="flex min-w-0 items-center gap-5">
-              <span className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-[12px] bg-[#eef6ff] text-[#0b63e5] dark:bg-blue-400/10 dark:text-blue-100">
+              <span className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-[12px] bg-primary-subtle text-primary dark:bg-blue-400/10 dark:text-blue-100">
                 <FileText className="h-7 w-7" aria-hidden="true" />
               </span>
               <div className="min-w-0">
-                <h1 className="text-[28px] font-semibold leading-tight text-[#07152e] dark:text-foreground min-[900px]:text-[30px]">
+                <h1 className="text-[28px] font-semibold leading-tight text-foreground dark:text-foreground min-[900px]:text-[30px]">
                   Weekly Report
                 </h1>
-                <p className="mt-1 text-[18px] font-medium leading-6 text-[#52647a] dark:text-muted-foreground">
+                <p className="mt-1 text-[18px] font-medium leading-6 text-foreground-muted dark:text-muted-foreground">
                   {formatWeekRange(data.weekStart, data.weekEnd)}
                 </p>
-                <p className="mt-1 text-sm text-[#64748b] dark:text-muted-foreground">
+                <p className="mt-1 text-sm text-muted-foreground dark:text-muted-foreground">
                   {userLabel(data.employee)}
                 </p>
               </div>
@@ -3231,7 +3231,7 @@ function WeeklyReportReviewPage({
             <div className="report-pdf-actions">
               <Button
                 variant="outline"
-                className="h-12 rounded-[9px] bg-white px-5 text-[15px] font-semibold text-[#0b63e5] ring-1 ring-[#cbd9ea] hover:bg-[#f8fbff] dark:bg-[#0b1523] dark:ring-[#263a55]"
+                className="h-12 rounded-[9px] bg-white px-5 text-[15px] font-semibold text-primary ring-1 ring-border hover:bg-primary-subtle dark:bg-background dark:ring-border"
                 onClick={onPrint}
               >
                 <Download className="mr-2 h-5 w-5" />
@@ -3271,7 +3271,7 @@ function WeeklyReportReviewPage({
             ))}
           </div>
 
-          <footer className="report-pdf-footer mt-8 flex flex-wrap items-center justify-between gap-4 text-[14px] font-medium text-[#52647a] dark:text-muted-foreground">
+          <footer className="report-pdf-footer mt-8 flex flex-wrap items-center justify-between gap-4 text-[14px] font-medium text-foreground-muted dark:text-muted-foreground">
             <span className="inline-flex items-center gap-3">
               <ShieldCheck className="h-5 w-5" aria-hidden="true" />
               Only visible to reviewers and admins
@@ -3437,7 +3437,7 @@ function ReportReviewPage({
       comments={pdfComments}
       backControl={
         <button
-          className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+          className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary-subtle-foreground"
           onClick={handleBackClick}
         >
           <ArrowLeft className="h-4 w-4" />
@@ -3446,7 +3446,7 @@ function ReportReviewPage({
       }
       actions={
         <Button
-          className="h-10 rounded-[8px] bg-[#2563eb] px-5 text-sm font-semibold text-white hover:bg-[#1d4ed8]"
+          className="h-10 rounded-[8px] bg-primary px-5 text-sm font-semibold text-white hover:bg-primary"
           onClick={onPrint}
           disabled={!report}
         >
@@ -3459,7 +3459,7 @@ function ReportReviewPage({
           <form onSubmit={handleCommentSubmit}>
             <label
               htmlFor="review-comment-body"
-              className="mb-1.5 block text-sm font-semibold text-[#111827] dark:text-foreground"
+              className="mb-1.5 block text-sm font-semibold text-foreground dark:text-foreground"
             >
               Add review note
             </label>

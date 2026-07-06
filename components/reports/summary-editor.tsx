@@ -645,11 +645,11 @@ export const summaryEditorExtensions = [
 
 function buttonTone(active: boolean, className = "", activeClassName = "") {
   return cn(
-    "inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#667085] transition-colors hover:bg-[#f3f6fb] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground",
-    "disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[#64748b] dark:disabled:hover:bg-transparent dark:disabled:hover:text-muted-foreground",
+    "inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-surface-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground",
+    "disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted-foreground dark:disabled:hover:bg-transparent dark:disabled:hover:text-muted-foreground",
     active &&
       (activeClassName ||
-        "bg-[#e8f1ff] text-[#1d4ed8] ring-1 ring-[#b9d2ff] dark:bg-blue-400/15 dark:text-blue-100 dark:ring-blue-300/20"),
+        "bg-primary-subtle text-primary-subtle-foreground ring-1 ring-[#b9d2ff] dark:bg-blue-400/15 dark:text-blue-100 dark:ring-blue-300/20"),
     className,
   );
 }
@@ -966,12 +966,12 @@ const SummaryEditorComponent = forwardRef<
           />
           {disabled ? (
             <div
-              className="absolute inset-0 z-10 flex items-center justify-center rounded-[8px] bg-white dark:bg-[#0f1b2a]"
+              className="absolute inset-0 z-10 flex items-center justify-center rounded-[8px] bg-white dark:bg-card"
               role="status"
               aria-live="polite"
             >
-              <div className="flex items-center gap-2 text-sm font-semibold text-[#111827] dark:text-foreground">
-                <Loader2 className="h-4 w-4 animate-spin text-[#2563eb] dark:text-blue-300" />
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground dark:text-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-primary dark:text-blue-300" />
                 {loadingLabel}
               </div>
             </div>

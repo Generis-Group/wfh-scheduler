@@ -131,7 +131,7 @@ function DailySkeleton() {
             {Array.from({ length: 5 }).map((_, index) => (
               <div
                 key={index}
-                className="flex min-w-0 flex-col gap-2 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[900px]:grid min-[900px]:min-h-[68px] min-[900px]:grid-cols-[24px_34px_minmax(0,1fr)_58px_28px] min-[900px]:items-center min-[900px]:gap-2.5"
+                className="flex min-w-0 flex-col gap-2 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-border dark:bg-card dark:ring-border min-[900px]:grid min-[900px]:min-h-[68px] min-[900px]:grid-cols-[24px_34px_minmax(0,1fr)_58px_28px] min-[900px]:items-center min-[900px]:gap-2.5"
               >
                 <div className="flex min-w-0 items-start gap-2.5 min-[900px]:contents">
                   <LoadingBar className="mt-1 h-4 w-4 shrink-0 rounded-[4px] min-[900px]:mt-0" />
@@ -154,12 +154,12 @@ function DailySkeleton() {
             <LoadingBar className="h-6 w-28 rounded-[4px]" />
             <LoadingBar className="h-8 w-24 rounded-[7px]" />
           </div>
-          <div className="mt-3 flex min-h-0 flex-1 flex-col rounded-[8px] bg-white ring-1 ring-[#e1e6ef] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+          <div className="mt-3 flex min-h-0 flex-1 flex-col rounded-[8px] bg-white ring-1 ring-border dark:bg-card dark:ring-border">
             <LoadingBar className="m-3 h-5 w-40 rounded-[4px]" />
             <LoadingBar className="mx-3 h-4 w-[82%] rounded-[4px]" />
             <LoadingBar className="mx-3 mt-2 h-4 w-[74%] rounded-[4px]" />
             <LoadingBar className="mx-3 mt-2 h-4 w-[88%] rounded-[4px]" />
-            <div className="mt-auto border-t border-[#e1e6ef] p-3 dark:border-[#263a55]">
+            <div className="mt-auto border-t border-border p-3 dark:border-border">
               <LoadingBar className="h-9 rounded-[7px]" />
             </div>
           </div>
@@ -184,14 +184,14 @@ function ReportsSkeleton() {
       <section className="reference-card reference-paginated-surface min-[1024px]:flex-1">
         <div className="reference-paginated-viewport">
           <div
-            className={`sticky top-0 z-10 hidden border-b border-[#e8ecf3] bg-white px-4 py-3 dark:border-[#263a55] dark:bg-[#0f1b2a] ${reportHistorySkeletonGridClass}`}
+            className={`sticky top-0 z-10 hidden border-b border-border bg-white px-4 py-3 dark:border-border dark:bg-card ${reportHistorySkeletonGridClass}`}
           >
             <LoadingBar className="h-4 w-16 rounded-[4px]" />
             <LoadingBar className="h-4 w-16 rounded-[4px]" />
             <LoadingBar className="h-4 w-20 rounded-[4px]" />
             <LoadingBar className="ml-auto h-4 w-16 rounded-[4px]" />
           </div>
-          <div className="divide-y divide-[#e8ecf3] dark:divide-[#263a55]">
+          <div className="divide-y divide-border dark:divide-border">
             {Array.from({ length: 5 }).map((_, index) => (
               <div
                 key={index}
@@ -227,8 +227,8 @@ function ReviewTableSkeleton() {
       className="reference-paginated-viewport reference-visible-rows-viewport reference-review-table-viewport px-3"
     >
       <table className="w-full table-fixed text-xs">
-        <thead className="sticky top-0 z-10 bg-white dark:bg-[#0f1b2a]">
-          <tr className="border-b border-[#e5eaf2] dark:border-[#263a55]">
+        <thead className="sticky top-0 z-10 bg-white dark:bg-card">
+          <tr className="border-b border-border dark:border-border">
             <th className="w-[32px] px-1 py-2 min-[700px]:w-[36px] min-[700px]:px-2">
               <LoadingBar className="h-4 w-4 rounded-[4px]" />
             </th>
@@ -259,7 +259,7 @@ function ReviewTableSkeleton() {
           {Array.from({ length: 5 }).map((_, index) => (
             <tr
               key={index}
-              className="h-14 border-b border-[#e5eaf2] last:border-b-0 dark:border-[#263a55]"
+              className="h-14 border-b border-border last:border-b-0 dark:border-border"
             >
               <td className="px-1 py-2.5 min-[700px]:px-2">
                 <LoadingBar className="h-4 w-4 rounded-[4px]" />
@@ -330,7 +330,7 @@ export function AdminTeamSectionSkeleton() {
           <LoadingBar className="h-6 w-36 rounded-[4px]" />
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-2 pb-0 pt-0">
-          <div className="grid gap-2 rounded-[8px] bg-[#f8fafc]/70 p-1.5 dark:bg-white/[0.025] min-[900px]:grid-cols-[minmax(240px,1fr)_auto] min-[900px]:items-center">
+          <div className="grid gap-2 rounded-[8px] bg-surface-subtle/70 p-1.5 dark:bg-white/[0.025] min-[900px]:grid-cols-[minmax(240px,1fr)_auto] min-[900px]:items-center">
             <LoadingBar className="h-8 rounded-[8px]" />
             <div className="grid gap-2 min-[520px]:grid-cols-[auto_auto] min-[520px]:items-center min-[900px]:justify-end">
               <LoadingBar className="h-4 w-24 rounded-[4px]" />
@@ -338,7 +338,7 @@ export function AdminTeamSectionSkeleton() {
             </div>
           </div>
           <div className="reference-paginated-viewport reference-visible-rows-viewport reference-team-member-viewport space-y-1 pr-1 min-[1180px]:mt-1">
-            <div className="reference-team-member-header reference-team-member-row-grid sticky top-0 z-10 hidden bg-white px-2 dark:bg-[#0f1b2a] min-[900px]:grid">
+            <div className="reference-team-member-header reference-team-member-row-grid sticky top-0 z-10 hidden bg-white px-2 dark:bg-card min-[900px]:grid">
               <LoadingBar className="h-4 w-4 rounded-[4px]" />
               <LoadingBar className="h-3 w-24 rounded-[4px]" />
               <LoadingBar className="h-3 w-12 rounded-[4px]" />
@@ -348,7 +348,7 @@ export function AdminTeamSectionSkeleton() {
             {Array.from({ length: 5 }).map((_, index) => (
               <div
                 key={index}
-                className="reference-team-member-row-grid rounded-[8px] bg-[#f8fafc]/82 px-2 py-1.5 dark:bg-white/[0.035] min-[900px]:min-h-14"
+                className="reference-team-member-row-grid rounded-[8px] bg-surface-subtle/82 px-2 py-1.5 dark:bg-white/[0.035] min-[900px]:min-h-14"
               >
                 <LoadingBar className="h-4 w-4 rounded-[4px]" />
                 <div className="min-w-0">
@@ -407,7 +407,7 @@ export function AdminDepartmentsSectionSkeleton() {
             {Array.from({ length: 8 }).map((_, index) => (
               <div
                 key={index}
-                className="flex min-h-10 items-center gap-2 rounded-[8px] bg-[#f8fafc] px-2 py-1.5 ring-1 ring-[#e2e8f0] dark:bg-white/[0.04] dark:ring-white/[0.08]"
+                className="flex min-h-10 items-center gap-2 rounded-[8px] bg-surface-subtle px-2 py-1.5 ring-1 ring-border dark:bg-white/[0.04] dark:ring-white/[0.08]"
               >
                 <LoadingBar className="h-4 flex-1 rounded-[4px]" />
                 <LoadingBar className="h-7 w-7 rounded-[7px]" />
@@ -424,7 +424,7 @@ export function AdminDepartmentsSectionSkeleton() {
 export function AdminReportsSectionSkeleton() {
   return (
     <section className="reference-card reference-paginated-surface p-0 min-[1024px]:h-full">
-      <div className="shrink-0 border-b border-[#e5eaf2] p-3 dark:border-[#263a55]">
+      <div className="shrink-0 border-b border-border p-3 dark:border-border">
         <div className="flex flex-col gap-3 min-[820px]:flex-row min-[820px]:items-center">
           <LoadingBar className="h-10 min-w-0 flex-1 rounded-[8px]" />
           <LoadingBar className="h-10 w-full rounded-[8px] min-[820px]:w-44" />
@@ -432,7 +432,7 @@ export function AdminReportsSectionSkeleton() {
         </div>
       </div>
       <div className="min-h-0 min-[1024px]:flex-1 min-[1024px]:overflow-hidden">
-        <div className="divide-y divide-[#e5eaf2] dark:divide-[#263a55]">
+        <div className="divide-y divide-border dark:divide-border">
           {Array.from({ length: 6 }).map((_, index) => (
             <article key={index} className="reference-admin-report-row-grid">
               <div className="min-w-0">
@@ -531,7 +531,7 @@ function BugComposerSkeleton() {
 function BugInboxSkeleton() {
   return (
     <section className="reference-card min-w-0 overflow-hidden p-0 min-[980px]:flex min-[980px]:h-full min-[980px]:min-h-0 min-[980px]:flex-col">
-      <div className="border-b border-[#e5eaf2] p-3 pb-2 dark:border-[#263a55]">
+      <div className="border-b border-border p-3 pb-2 dark:border-border">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <LoadingBar className="h-6 w-40 rounded-[4px]" />
@@ -546,7 +546,7 @@ function BugInboxSkeleton() {
           {Array.from({ length: 5 }).map((_, index) => (
             <div
               key={index}
-              className="rounded-[8px] bg-[#f8fafc] p-3 ring-1 ring-[#e6ebf3] dark:bg-white/[0.035] dark:ring-[#263a55]"
+              className="rounded-[8px] bg-surface-subtle p-3 ring-1 ring-border dark:bg-white/[0.035] dark:ring-border"
             >
               <LoadingBar className="h-4 w-[70%] rounded-[4px]" />
               <LoadingBar className="mt-2 h-3 w-[52%] rounded-[4px]" />
@@ -595,7 +595,7 @@ function SettingsAccountSkeleton() {
           </div>
         </div>
         <div className="flex flex-1 flex-col px-5 pb-5">
-          <div className="flex min-h-[114px] flex-wrap items-center gap-5 rounded-[8px] border border-[#dfe7f2] bg-white px-5 py-4 dark:border-[#263a55] dark:bg-[#0b1523]">
+          <div className="flex min-h-[114px] flex-wrap items-center gap-5 rounded-[8px] border border-border bg-white px-5 py-4 dark:border-border dark:bg-background">
             <LoadingBar className="h-20 w-20 shrink-0 rounded-full" />
             <div className="min-w-0 flex-1 basis-48">
               <LoadingBar className="h-5 w-44 rounded-[4px]" />
@@ -606,7 +606,7 @@ function SettingsAccountSkeleton() {
             <LoadingBar className="h-11 rounded-[8px]" />
             <LoadingBar className="h-11 rounded-[8px]" />
           </div>
-          <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[#e6ebf3] pt-5 dark:border-[#263a55]">
+          <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5 dark:border-border">
             <LoadingBar className="h-4 w-36 rounded-[4px]" />
             <LoadingBar className="h-10 w-40 rounded-[8px]" />
           </div>
@@ -673,7 +673,7 @@ function SettingsIntegrationsSkeleton() {
           </div>
           <LoadingBar className="h-6 w-20 rounded-full" />
         </div>
-        <div className="mt-4 grid max-h-52 gap-2 overflow-hidden rounded-[8px] border border-[#dfe7f2] bg-white p-2 dark:border-[#263a55] dark:bg-[#0b1523]">
+        <div className="mt-4 grid max-h-52 gap-2 overflow-hidden rounded-[8px] border border-border bg-white p-2 dark:border-border dark:bg-background">
           {Array.from({ length: 4 }).map((_, index) => (
             <LoadingBar key={index} className="h-10 rounded-[6px]" />
           ))}

@@ -773,10 +773,10 @@ export function ReportHistory({
             </div>
           </div>
 
-          <section className="mb-3 shrink-0 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43]">
+          <section className="mb-3 shrink-0 rounded-[8px] bg-white p-3 shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-border dark:bg-card dark:ring-border">
             <div className="grid gap-3 min-[980px]:grid-cols-[minmax(260px,1fr)_190px_320px_150px]">
               <label className="relative min-w-0">
-                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#667085]" />
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={query}
                   onChange={(event) => {
@@ -784,7 +784,7 @@ export function ReportHistory({
                     setReportPage(1);
                   }}
                   placeholder="Search reports..."
-                  className="h-11 rounded-[8px] bg-white pl-11 text-sm shadow-none ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
+                  className="h-11 rounded-[8px] bg-white pl-11 text-sm shadow-none ring-1 ring-border dark:bg-card dark:ring-border"
                 />
               </label>
               <Select
@@ -793,7 +793,7 @@ export function ReportHistory({
                   setStatusFilter(event.target.value);
                   setReportPage(1);
                 }}
-                className="h-11 rounded-[8px] bg-white text-sm ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
+                className="h-11 rounded-[8px] bg-white text-sm ring-1 ring-border dark:bg-card dark:ring-border"
               >
                 <option value="ALL">All statuses</option>
                 <option value="DRAFT">Draft</option>
@@ -802,7 +802,7 @@ export function ReportHistory({
               <div ref={datePickerRef} className="relative">
                 <button
                   type="button"
-                  className="flex h-11 w-full items-center gap-3 rounded-[8px] bg-white px-4 text-left text-sm font-medium text-[#111827] ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55]"
+                  className="flex h-11 w-full items-center gap-3 rounded-[8px] bg-white px-4 text-left text-sm font-medium text-foreground ring-1 ring-border dark:bg-card dark:text-foreground dark:ring-border"
                   onClick={() => {
                     setRowMenu(null);
                     if (!datePickerOpen) {
@@ -811,11 +811,11 @@ export function ReportHistory({
                     setDatePickerOpen((open) => !open);
                   }}
                 >
-                  <CalendarDays className="h-4 w-4 text-[#475467]" />
+                  <CalendarDays className="h-4 w-4 text-foreground-muted" />
                   <span className="min-w-0 flex-1 truncate">
                     {dateRangeLabel}
                   </span>
-                  <ChevronDown className="h-4 w-4 text-[#667085]" />
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </button>
                 {datePickerOpen && typeof document !== "undefined"
                   ? createPortal(
@@ -823,7 +823,7 @@ export function ReportHistory({
                         ref={datePickerPanelRef}
                         role="dialog"
                         aria-label="Report history date range"
-                        className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[12px] bg-white p-3 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#e1e6ef] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                        className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[12px] bg-white p-3 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
                         style={{
                           top: datePickerPosition?.top ?? 0,
                           left: datePickerPosition?.left ?? 0,
@@ -835,7 +835,7 @@ export function ReportHistory({
                         }}
                       >
                         <div className="grid gap-3">
-                          <label className="text-xs font-medium text-[#667085]">
+                          <label className="text-xs font-medium text-muted-foreground">
                             From
                             <Input
                               type="date"
@@ -852,7 +852,7 @@ export function ReportHistory({
                               className="mt-1 h-10"
                             />
                           </label>
-                          <label className="text-xs font-medium text-[#667085]">
+                          <label className="text-xs font-medium text-muted-foreground">
                             To
                             <Input
                               type="date"
@@ -888,7 +888,7 @@ export function ReportHistory({
                   : null}
               </div>
               <Button
-                className="h-11 rounded-[8px] bg-[#2563eb] text-sm font-semibold hover:bg-[#1d4ed8]"
+                className="h-11 rounded-[8px] bg-primary text-sm font-semibold hover:bg-primary"
                 onClick={openNewReport}
               >
                 <Plus className="mr-2 h-4 w-4" />
@@ -897,7 +897,7 @@ export function ReportHistory({
             </div>
           </section>
 
-          <section className="reference-paginated-surface rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-[#e6ebf3] dark:bg-[#0f1b2a] dark:ring-[#1d2d43] min-[1024px]:flex-1">
+          <section className="reference-paginated-surface rounded-[8px] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.045)] ring-1 ring-border dark:bg-card dark:ring-border min-[1024px]:flex-1">
             <div
               className="reference-paginated-viewport"
               data-pagination-loading={
@@ -920,7 +920,7 @@ export function ReportHistory({
                 <>
                   <div
                     className={cn(
-                      "sticky top-0 z-10 hidden border-b border-[#e8ecf3] bg-white px-4 py-3 text-sm font-semibold text-[#667085] dark:border-[#263a55] dark:bg-[#0f1b2a] dark:text-muted-foreground",
+                      "sticky top-0 z-10 hidden border-b border-border bg-white px-4 py-3 text-sm font-semibold text-muted-foreground dark:border-border dark:bg-card dark:text-muted-foreground",
                       reportHistoryRowGridClass,
                     )}
                   >
@@ -936,23 +936,23 @@ export function ReportHistory({
                     <article
                       key={report.id}
                       className={cn(
-                        "space-y-3 border-b border-[#e8ecf3] px-4 py-3 last:border-b-0 dark:border-[#263a55] min-[860px]:min-h-[86px] min-[860px]:space-y-0",
+                        "space-y-3 border-b border-border px-4 py-3 last:border-b-0 dark:border-border min-[860px]:min-h-[86px] min-[860px]:space-y-0",
                         reportHistoryRowGridClass,
                       )}
                     >
                       <div>
-                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-muted-foreground dark:text-muted-foreground min-[860px]:hidden">
                           Date
                         </div>
-                        <div className="text-sm font-medium text-[#111827] dark:text-foreground">
+                        <div className="text-sm font-medium text-foreground dark:text-foreground">
                           {formatReportDate(report.reportDate)}
                         </div>
-                        <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
+                        <div className="mt-1 text-sm text-muted-foreground dark:text-muted-foreground">
                           {formatWeekday(report.reportDate)}
                         </div>
                       </div>
                       <div>
-                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-muted-foreground dark:text-muted-foreground min-[860px]:hidden">
                           Status
                         </div>
                         <StatusPill tone={statusTone(report)}>
@@ -960,13 +960,13 @@ export function ReportHistory({
                         </StatusPill>
                       </div>
                       <div className="min-w-0">
-                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#667085] dark:text-muted-foreground min-[860px]:hidden">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-muted-foreground dark:text-muted-foreground min-[860px]:hidden">
                           Summary
                         </div>
-                        <div className="truncate text-base text-[#111827] dark:text-foreground">
+                        <div className="truncate text-base text-foreground dark:text-foreground">
                           {summaryPlainText(report.summary)}
                         </div>
-                        <div className="mt-1 text-sm text-[#667085] dark:text-muted-foreground">
+                        <div className="mt-1 text-sm text-muted-foreground dark:text-muted-foreground">
                           {report.activities.length} activit
                           {report.activities.length === 1 ? "y" : "ies"}{" "}
                           included
@@ -975,7 +975,7 @@ export function ReportHistory({
                       <div className="flex items-center justify-start gap-3 min-[860px]:justify-end">
                         <Button
                           variant="outline"
-                          className="h-9 rounded-[7px] bg-white px-4 text-sm font-medium ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
+                          className="h-9 rounded-[7px] bg-white px-4 text-sm font-medium ring-1 ring-border dark:bg-card dark:ring-border"
                           onClick={() => openReport(report)}
                         >
                           <ExternalLink className="mr-2 h-4 w-4" />
@@ -1016,7 +1016,7 @@ export function ReportHistory({
               />
               <div
                 ref={rowMenuRef}
-                className="fixed z-50 overflow-y-auto overscroll-contain rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-[#e1e6ef] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+                className="fixed z-50 overflow-y-auto overscroll-contain rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
                 style={{
                   top: rowMenu.top,
                   left: rowMenu.left,
@@ -1186,7 +1186,7 @@ function OpenedReportView({
       comments={pdfComments}
       backControl={
         <button
-          className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#2563eb] hover:text-[#1d4ed8]"
+          className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary-subtle-foreground"
           onClick={onBack}
         >
           <ArrowLeft className="h-4 w-4" />
@@ -1197,7 +1197,7 @@ function OpenedReportView({
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
-            className="h-10 rounded-[8px] bg-white px-4 text-sm font-medium ring-1 ring-[#dfe4ee] dark:bg-[#101d2e] dark:ring-[#263a55]"
+            className="h-10 rounded-[8px] bg-white px-4 text-sm font-medium ring-1 ring-border dark:bg-card dark:ring-border"
             disabled={isPending}
             onClick={onEdit}
           >
@@ -1207,7 +1207,7 @@ function OpenedReportView({
           {report.status === "DRAFT" ? (
             <Button
               variant="outline"
-              className="h-10 rounded-[8px] bg-white px-4 text-sm font-semibold text-[#b42318] ring-1 ring-[#f3b8b2] hover:bg-[#fff5f5] dark:bg-[#101d2e] dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
+              className="h-10 rounded-[8px] bg-white px-4 text-sm font-semibold text-destructive-subtle-foreground ring-1 ring-[#f3b8b2] hover:bg-destructive-subtle dark:bg-card dark:text-red-300 dark:ring-red-400/25 dark:hover:bg-red-400/10"
               disabled={isPending}
               onClick={onDelete}
             >
@@ -1221,7 +1221,7 @@ function OpenedReportView({
           ) : null}
           {report.status === "DRAFT" ? (
             <Button
-              className="h-10 rounded-[8px] bg-[#2563eb] px-4 text-sm font-semibold hover:bg-[#1d4ed8]"
+              className="h-10 rounded-[8px] bg-primary px-4 text-sm font-semibold hover:bg-primary"
               disabled={isPending}
               onClick={onSubmit}
             >
@@ -1234,7 +1234,7 @@ function OpenedReportView({
             </Button>
           ) : null}
           <Button
-            className="h-10 rounded-[8px] bg-[#2563eb] px-4 text-sm font-semibold hover:bg-[#1d4ed8]"
+            className="h-10 rounded-[8px] bg-primary px-4 text-sm font-semibold hover:bg-primary"
             disabled={isPending}
             onClick={() => onDownload()}
           >
@@ -1274,7 +1274,7 @@ function StatusPill({
       "bg-orange-50 text-orange-700 dark:bg-orange-400/10 dark:text-orange-300",
     blue: "bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300",
     neutral:
-      "bg-[#f4f7fb] text-[#52647a] dark:bg-white/[0.05] dark:text-[#b5c2d3]",
+      "bg-surface-subtle text-foreground-muted dark:bg-white/[0.05] dark:text-muted-foreground",
   };
 
   return (
@@ -1306,10 +1306,10 @@ function MenuButton({
   return (
     <button
       className={cn(
-        "flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-white/5",
+        "flex w-full items-center gap-2 rounded-[6px] px-3 py-2 text-left hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-white/5",
         destructive
-          ? "text-[#b42318] dark:text-red-300"
-          : "text-[#334155] dark:text-foreground",
+          ? "text-destructive-subtle-foreground dark:text-red-300"
+          : "text-foreground-muted dark:text-foreground",
       )}
       disabled={disabled}
       onClick={onClick}

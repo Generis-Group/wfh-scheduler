@@ -143,7 +143,7 @@ export function MultiSelect({
         type="button"
         id={triggerId}
         className={cn(
-          "flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-[8px] border border-[#dfe5ef] bg-[hsl(var(--field))] px-3 text-left text-sm font-medium text-foreground shadow-none ring-0 transition-[background-color,border-color,box-shadow] hover:bg-white focus-visible:border-[#93b4f7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#263a55] dark:bg-[hsl(var(--field))] dark:hover:bg-white/[0.075]",
+          "flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-[8px] border border-border bg-[hsl(var(--field))] px-3 text-left text-sm font-medium text-foreground shadow-none ring-0 transition-[background-color,border-color,box-shadow] hover:bg-white focus-visible:border-[#93b4f7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-border dark:bg-[hsl(var(--field))] dark:hover:bg-white/[0.075]",
           triggerClassName,
         )}
         aria-label={ariaLabel}
@@ -176,14 +176,14 @@ export function MultiSelect({
           className={cn(
             "min-w-0 flex-1 truncate",
             selectedOptions.length === 0 &&
-              "text-[#667085] dark:text-muted-foreground",
+              "text-muted-foreground dark:text-muted-foreground",
           )}
         >
           {selectedText || placeholder}
         </span>
         <ChevronDown
           className={cn(
-            "h-4 w-4 shrink-0 text-[#667085] transition-transform dark:text-muted-foreground",
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform dark:text-muted-foreground",
             open && "rotate-180",
           )}
           aria-hidden="true"
@@ -198,7 +198,7 @@ export function MultiSelect({
               role="listbox"
               aria-labelledby={triggerId}
               aria-multiselectable="true"
-              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] border border-[#dfe5ef] bg-white p-1.5 text-sm shadow-[var(--surface-shadow-strong)] [scrollbar-gutter:stable] dark:border-[#263a55] dark:bg-[#0f1b2a]"
+              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] border border-border bg-white p-1.5 text-sm shadow-[var(--surface-shadow-strong)] [scrollbar-gutter:stable] dark:border-border dark:bg-card"
               style={{
                 left: menuPosition?.left ?? 0,
                 top: menuPosition?.top ?? 0,
@@ -220,10 +220,10 @@ export function MultiSelect({
                     aria-selected={selected}
                     disabled={disabled || option.disabled || locked}
                     className={cn(
-                      "flex w-full items-center justify-between gap-2 rounded-[7px] px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-45",
+                      "flex w-full items-center justify-between gap-2 rounded-[7px] px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-45",
                       selected
-                        ? "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-blue-100"
-                        : "text-[#344054] hover:bg-[#f6f8fb] dark:text-foreground dark:hover:bg-white/[0.055]",
+                        ? "bg-primary-subtle text-primary-subtle-foreground dark:bg-blue-400/10 dark:text-blue-100"
+                        : "text-foreground-muted hover:bg-surface-subtle dark:text-foreground dark:hover:bg-white/[0.055]",
                     )}
                     onClick={() => toggleValue(option.value)}
                   >

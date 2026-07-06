@@ -68,34 +68,34 @@ const activitySourceIconSizeClassNames = {
 
 function activitySourceIconTone(source?: string | null) {
   if (source === "JIRA") {
-    return "bg-[#2563eb] text-white";
+    return "bg-primary text-white";
   }
 
   if (source === "GOOGLE_CALENDAR") {
-    return "bg-[#facc15] text-[#2563eb]";
+    return "bg-[#facc15] text-primary";
   }
 
   if (source === "GOOGLE_TASKS") {
-    return "bg-white text-[#2563eb] ring-1 ring-[#2563eb] dark:bg-[#0b1523]";
+    return "bg-white text-primary ring-1 ring-primary dark:bg-background";
   }
 
   if (source === "GMAIL") {
-    return "bg-white text-[#b42318] ring-1 ring-[#f4b9b0] dark:bg-[#0b1523] dark:text-[#fca5a5] dark:ring-red-300/25";
+    return "bg-white text-destructive-subtle-foreground ring-1 ring-[#f4b9b0] dark:bg-background dark:text-[#fca5a5] dark:ring-red-300/25";
   }
 
   if (source === "GOOGLE_CHAT") {
-    return "bg-white text-[#0f9d58] ring-1 ring-[#b7e4cf] dark:bg-[#0b1523] dark:text-[#86efac] dark:ring-emerald-300/25";
+    return "bg-white text-[#0f9d58] ring-1 ring-[#b7e4cf] dark:bg-background dark:text-[#86efac] dark:ring-emerald-300/25";
   }
 
   if (source === "HUBSPOT") {
-    return "bg-white text-[#ff5c35] ring-1 ring-[#ffb199] dark:bg-[#0b1523] dark:text-[#fb923c] dark:ring-orange-300/25";
+    return "bg-white text-[#ff5c35] ring-1 ring-[#ffb199] dark:bg-background dark:text-[#fb923c] dark:ring-orange-300/25";
   }
 
   if (source === "MANUAL") {
-    return "bg-white text-[#2563eb] ring-1 ring-[#2563eb] dark:bg-[#0b1523]";
+    return "bg-white text-primary ring-1 ring-primary dark:bg-background";
   }
 
-  return "bg-white text-[#8b5cf6] ring-1 ring-[#d8b4fe] dark:bg-[#0b1523] dark:ring-purple-300/25";
+  return "bg-white text-[#8b5cf6] ring-1 ring-[#d8b4fe] dark:bg-background dark:ring-purple-300/25";
 }
 
 function activitySourceIcon(source?: string | null) {
@@ -139,7 +139,7 @@ function statusTextTone(status: string) {
     return "text-red-700 dark:text-red-300";
   }
 
-  return "text-[#475569] dark:text-[#b5c2d3]";
+  return "text-foreground-muted dark:text-muted-foreground";
 }
 
 function statusDotTone(status: string) {
@@ -270,7 +270,7 @@ export function ReportPageHeader({
       <div>
         <h1 className="reference-title">{title}</h1>
         {description ? (
-          <p className="mt-0.5 text-xs leading-5 text-[#667085] dark:text-muted-foreground">
+          <p className="mt-0.5 text-xs leading-5 text-muted-foreground dark:text-muted-foreground">
             {description}
           </p>
         ) : null}
@@ -296,17 +296,17 @@ export function ReportSearchField({
   return (
     <label
       className={cn(
-        "relative flex h-9 min-w-0 items-center rounded-[8px] border border-[#dfe5ef] bg-white text-sm shadow-none transition-[border-color,box-shadow] focus-within:border-[#93b4f7] focus-within:ring-2 focus-within:ring-[#2563eb]/20 dark:border-[#263a55] dark:bg-[#0b1523]",
+        "relative flex h-9 min-w-0 items-center rounded-[8px] border border-border bg-white text-sm shadow-none transition-[border-color,box-shadow] focus-within:border-[#93b4f7] focus-within:ring-2 focus-within:ring-primary/20 dark:border-border dark:bg-background",
         className,
       )}
     >
-      <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#667085]" />
+      <Search className="pointer-events-none absolute left-3 h-4 w-4 text-muted-foreground" />
       <Input
         {...props}
         value={value}
         onChange={(event) => onValueChange(event.target.value)}
         className={cn(
-          "h-8 min-w-0 border-0 bg-transparent pl-9 pr-3 text-sm font-medium text-[#111827] shadow-none placeholder:text-[#98a2b3] focus-visible:ring-0 dark:bg-transparent dark:text-foreground",
+          "h-8 min-w-0 border-0 bg-transparent pl-9 pr-3 text-sm font-medium text-foreground shadow-none placeholder:text-muted-foreground-subtle focus-visible:ring-0 dark:bg-transparent dark:text-foreground",
           inputClassName,
         )}
       />

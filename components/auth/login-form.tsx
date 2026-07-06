@@ -25,7 +25,7 @@ type SignupDepartment = {
 };
 
 const oauthButtonClassName =
-  "flex h-10 w-full items-center justify-center gap-3 rounded-[8px] border border-[#dfe5ef] bg-white px-3 text-sm font-semibold text-[#344054] shadow-[0_1px_2px_rgba(15,23,42,0.035)] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#263a55] dark:bg-white/[0.04] dark:text-[#e2e8f0] dark:hover:bg-white/[0.08]";
+  "flex h-10 w-full items-center justify-center gap-3 rounded-[8px] border border-border bg-white px-3 text-sm font-semibold text-foreground-muted shadow-[0_1px_2px_rgba(15,23,42,0.035)] transition-colors hover:border-border-strong hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-border dark:bg-white/[0.04] dark:text-foreground dark:hover:bg-white/[0.08]";
 
 export function LoginForm({
   oauthConfig,
@@ -176,7 +176,7 @@ export function LoginForm({
     <>
       <Card className="w-full max-w-md shadow-[var(--surface-shadow-strong)]">
         <CardHeader className="space-y-2 px-5 pt-5 text-center">
-          <CardTitle className="text-[26px] font-semibold tracking-normal text-[#111827] dark:text-foreground">
+          <CardTitle className="text-[26px] font-semibold tracking-normal text-foreground dark:text-foreground">
             {title}
           </CardTitle>
           <CardDescription>{description}</CardDescription>
@@ -300,16 +300,16 @@ export function LoginForm({
               </div>
               <div className="space-y-2">
                 <Label>Department</Label>
-                <div className="grid max-h-36 gap-2 overflow-y-auto rounded-[8px] border border-[#dfe5ef] bg-white p-2 dark:border-[#263a55] dark:bg-white/[0.03]">
+                <div className="grid max-h-36 gap-2 overflow-y-auto rounded-[8px] border border-border bg-white p-2 dark:border-border dark:bg-white/[0.03]">
                   {departments?.length ? (
                     departments.map((department) => (
                       <label
                         key={department.id}
-                        className="flex min-h-8 items-center gap-2 rounded-[7px] px-2 text-sm font-medium text-[#344054] transition-colors hover:bg-[#f8fafc] dark:text-foreground dark:hover:bg-white/[0.06]"
+                        className="flex min-h-8 items-center gap-2 rounded-[7px] px-2 text-sm font-medium text-foreground-muted transition-colors hover:bg-surface-subtle dark:text-foreground dark:hover:bg-white/[0.06]"
                       >
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-[#cbd5e1] text-[#2563eb]"
+                          className="h-4 w-4 rounded border-border-strong text-primary"
                           checked={selectedDepartmentIds.includes(
                             department.id,
                           )}
@@ -319,7 +319,7 @@ export function LoginForm({
                       </label>
                     ))
                   ) : (
-                    <div className="px-2 py-1 text-sm text-[#667085] dark:text-muted-foreground">
+                    <div className="px-2 py-1 text-sm text-muted-foreground dark:text-muted-foreground">
                       No departments are available.
                     </div>
                   )}
@@ -373,7 +373,7 @@ export function LoginForm({
               </Button>
             </form>
           ) : null}
-          <p className="rounded-[8px] bg-[#f6f8fb] px-3 py-2 text-xs font-medium text-[#667085] dark:bg-white/[0.035] dark:text-muted-foreground">
+          <p className="rounded-[8px] bg-surface-subtle px-3 py-2 text-xs font-medium text-muted-foreground dark:bg-white/[0.035] dark:text-muted-foreground">
             Only @generisgp.com accounts can sign in.
           </p>
           {!oauthConfig.google || !oauthConfig.atlassian ? (

@@ -79,7 +79,7 @@ const statusToneClassNames: Record<ReportPdfStatusTone, string> = {
   blue: "bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-400/10 dark:text-blue-300 dark:ring-blue-300/20",
   red: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-400/10 dark:text-red-300 dark:ring-red-300/20",
   neutral:
-    "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-white/[0.06] dark:text-[#cbd5e1] dark:ring-white/10",
+    "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-white/[0.06] dark:text-foreground-muted dark:ring-white/10",
 };
 
 export function ReportPdfDocument({
@@ -142,22 +142,22 @@ export function ReportPdfDocument({
 
           <article
             className={cn(
-              "report-pdf-document rounded-[10px] bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,0.06)] ring-1 ring-[#d9e1ec] dark:bg-[#0f1b2a] dark:ring-[#263a55] min-[760px]:p-6",
+              "report-pdf-document rounded-xl bg-card p-5 shadow-[0_8px_28px_rgba(15,23,42,0.06)] ring-1 ring-border min-[760px]:p-6",
               hasReviewNotesPanel
                 ? "min-[1120px]:col-start-1 min-[1120px]:row-start-1"
                 : "",
             )}
           >
-            <div className="report-pdf-header flex flex-col gap-3 border-b border-[#d9e1ec] pb-4 dark:border-[#263a55] min-[760px]:flex-row min-[760px]:items-start min-[760px]:justify-between">
+            <div className="report-pdf-header flex flex-col gap-3 border-b border-border pb-4 min-[760px]:flex-row min-[760px]:items-start min-[760px]:justify-between">
               <div className="min-w-0">
-                <p className="report-pdf-eyebrow text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1d4ed8] dark:text-blue-300">
+                <p className="report-pdf-eyebrow text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-subtle-foreground">
                   {eyebrow}
                 </p>
-                <h1 className="mt-1 text-[28px] font-semibold leading-tight tracking-normal text-[#111827] dark:text-foreground">
+                <h1 className="mt-1 text-[28px] font-semibold leading-tight tracking-normal text-foreground">
                   {title}
                 </h1>
                 {subtitle ? (
-                  <div className="mt-1 text-sm leading-5 text-[#475467] dark:text-muted-foreground">
+                  <div className="mt-1 text-sm leading-5 text-foreground-muted">
                     {subtitle}
                   </div>
                 ) : null}
@@ -180,16 +180,16 @@ export function ReportPdfDocument({
               </div>
             </div>
 
-            <dl className="report-pdf-meta mt-4 grid gap-px overflow-hidden rounded-[8px] ring-1 ring-[#d9e1ec] dark:ring-[#263a55] min-[700px]:grid-cols-4">
+            <dl className="report-pdf-meta mt-4 grid gap-px overflow-hidden rounded-lg ring-1 ring-border min-[700px]:grid-cols-4">
               {meta.map((item) => (
                 <div
                   key={item.label}
-                  className="bg-[#f8fafc] px-3 py-2.5 dark:bg-white/[0.04]"
+                  className="bg-surface-subtle px-3 py-2.5 dark:bg-white/[0.04]"
                 >
-                  <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#667085] dark:text-muted-foreground">
+                  <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                     {item.label}
                   </dt>
-                  <dd className="mt-1 text-sm font-medium leading-5 text-[#111827] dark:text-foreground">
+                  <dd className="mt-1 text-sm font-medium leading-5 text-foreground">
                     {item.value}
                   </dd>
                 </div>
@@ -197,7 +197,7 @@ export function ReportPdfDocument({
             </dl>
 
             <ReportPdfSection title={summaryTitle}>
-              <div className="report-pdf-prose text-sm leading-6 text-[#111827] dark:text-foreground">
+              <div className="report-pdf-prose text-sm leading-6 text-foreground">
                 {summary}
               </div>
             </ReportPdfSection>
@@ -207,17 +207,17 @@ export function ReportPdfDocument({
                 title="Activities"
                 action={
                   activityItems.length ? (
-                    <span className="text-xs font-semibold text-[#667085] dark:text-muted-foreground">
+                    <span className="text-xs font-semibold text-muted-foreground">
                       {activityItems.length} included
                     </span>
                   ) : null
                 }
               >
                 {activityItems.length ? (
-                  <div className="overflow-hidden rounded-[8px] ring-1 ring-[#d9e1ec] dark:ring-[#263a55]">
+                  <div className="overflow-hidden rounded-lg ring-1 ring-border">
                     <table className="report-pdf-activity-table w-full text-left text-sm">
                       <thead>
-                        <tr className="bg-[#f8fafc] text-[11px] uppercase tracking-[0.08em] text-[#667085] dark:bg-white/[0.04] dark:text-muted-foreground">
+                        <tr className="bg-surface-subtle text-[11px] uppercase tracking-[0.08em] text-muted-foreground dark:bg-white/[0.04]">
                           <th className="px-3 py-2 font-semibold">Activity</th>
                           <th className="hidden w-32 px-3 py-2 font-semibold min-[740px]:table-cell">
                             Source
@@ -232,7 +232,7 @@ export function ReportPdfDocument({
                           ) : null}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#e5eaf2] dark:divide-[#263a55]">
+                      <tbody className="divide-y divide-border">
                         {activityItems.map((activity) => {
                           const activityNote = displayActivityNote(
                             activity.note,
@@ -253,18 +253,18 @@ export function ReportPdfDocument({
                                     className="report-pdf-source-icon"
                                   />
                                   <div className="min-w-0">
-                                    <div className="font-semibold leading-5 text-[#111827] dark:text-foreground">
+                                    <div className="font-semibold leading-5 text-foreground">
                                       <ActivitySourceLinkPicker
                                         source={activity.source}
                                         sourceUrl={activity.sourceUrl}
                                         sourceLinks={activity.sourceLinks}
-                                        className="max-w-full hover:text-[#2563eb]"
+                                        className="max-w-full hover:text-primary"
                                         menuLabel={`Choose source link for ${activity.title || "Untitled activity"}`}
                                       >
                                         {activity.title || "Untitled activity"}
                                       </ActivitySourceLinkPicker>
                                     </div>
-                                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#667085] dark:text-muted-foreground min-[740px]:hidden">
+                                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground min-[740px]:hidden">
                                       <span>
                                         {activity.sourceLabel ??
                                           reportActivitySourceLabel(
@@ -279,15 +279,15 @@ export function ReportPdfDocument({
                                   </div>
                                 </div>
                               </td>
-                              <td className="hidden px-3 py-2.5 align-top text-[#475467] dark:text-muted-foreground min-[740px]:table-cell">
+                              <td className="hidden px-3 py-2.5 align-top text-foreground-muted min-[740px]:table-cell">
                                 {activity.sourceLabel ??
                                   reportActivitySourceLabel(activity.source)}
                               </td>
-                              <td className="hidden px-3 py-2.5 align-top font-medium text-[#111827] dark:text-foreground min-[840px]:table-cell">
+                              <td className="hidden px-3 py-2.5 align-top font-medium text-foreground min-[840px]:table-cell">
                                 {activity.duration}
                               </td>
                               {hasActivityNotes ? (
-                                <td className="min-w-24 px-3 py-2.5 align-top text-[#475467] dark:text-muted-foreground">
+                                <td className="min-w-24 px-3 py-2.5 align-top text-foreground-muted">
                                   {activityNoteText || "-"}
                                 </td>
                               ) : null}
@@ -298,7 +298,7 @@ export function ReportPdfDocument({
                     </table>
                   </div>
                 ) : (
-                  <p className="text-sm text-[#667085] dark:text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     No activities included.
                   </p>
                 )}
@@ -306,7 +306,7 @@ export function ReportPdfDocument({
             ) : null}
 
             {footer ? (
-              <footer className="report-pdf-footer mt-4 border-t border-[#e5eaf2] pt-3 text-xs text-[#667085] dark:border-[#263a55] dark:text-muted-foreground">
+              <footer className="report-pdf-footer mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
                 {footer}
               </footer>
             ) : null}
@@ -329,17 +329,17 @@ function ReportReviewNotesPanel({
   return (
     <aside
       className={cn(
-        "report-pdf-notes-panel flex flex-col rounded-[10px] bg-white p-4 shadow-[0_8px_28px_rgba(15,23,42,0.06)] ring-1 ring-[#d9e1ec] dark:bg-[#0f1b2a] dark:ring-[#263a55]",
+        "report-pdf-notes-panel flex flex-col rounded-xl bg-card p-4 shadow-[0_8px_28px_rgba(15,23,42,0.06)] ring-1 ring-border",
         className,
       )}
       aria-label="Review notes"
     >
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-[#111827] dark:text-foreground">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
           Review Notes
         </h2>
         {comments.length ? (
-          <span className="shrink-0 text-xs font-semibold text-[#667085] dark:text-muted-foreground">
+          <span className="shrink-0 text-xs font-semibold text-muted-foreground">
             {comments.length} note{comments.length === 1 ? "" : "s"}
           </span>
         ) : null}
@@ -355,19 +355,19 @@ function ReportReviewNotesPanel({
           {comments.map((comment) => (
             <div
               key={comment.id}
-              className="rounded-[8px] bg-[#f8fafc] px-3 py-2.5 ring-1 ring-[#e5eaf2] dark:bg-white/[0.04] dark:ring-[#263a55]"
+              className="rounded-lg bg-surface-subtle px-3 py-2.5 ring-1 ring-border dark:bg-white/[0.04]"
             >
-              <p className="whitespace-pre-wrap text-sm leading-6 text-[#111827] dark:text-foreground">
+              <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">
                 {comment.body}
               </p>
-              <p className="mt-1 text-xs font-medium text-[#667085] dark:text-muted-foreground">
+              <p className="mt-1 text-xs font-medium text-muted-foreground">
                 {comment.meta}
               </p>
             </div>
           ))}
         </div>
       ) : screenExtras ? (
-        <p className="mt-3 text-sm text-[#667085] dark:text-muted-foreground">
+        <p className="mt-3 text-sm text-muted-foreground">
           No review notes yet.
         </p>
       ) : null}
@@ -377,7 +377,7 @@ function ReportReviewNotesPanel({
           className={cn(
             "report-pdf-screen-extra shrink-0",
             comments.length
-              ? "mt-3 border-t border-[#d9e1ec] pt-3 dark:border-[#263a55]"
+              ? "mt-3 border-t border-border pt-3"
               : "mt-3",
           )}
         >
@@ -398,9 +398,9 @@ function ReportPdfSection({
   children: ReactNode;
 }) {
   return (
-    <section className="report-pdf-card mt-4 rounded-[8px] border border-[#d9e1ec] bg-white p-4 dark:border-[#263a55] dark:bg-[#0f1b2a]">
+    <section className="report-pdf-card mt-4 rounded-lg border border-border bg-card p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-[#111827] dark:text-foreground">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
           {title}
         </h2>
         {action}

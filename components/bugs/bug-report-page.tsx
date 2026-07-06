@@ -962,7 +962,7 @@ export function BugReportPage({
         />
 
         <Card className="min-w-0 overflow-hidden min-[980px]:flex min-[980px]:h-full min-[980px]:min-h-0 min-[980px]:flex-col">
-          <CardHeader className="border-b border-[#e5eaf2] p-3 pb-2 dark:border-[#263a55]">
+          <CardHeader className="border-b border-border p-3 pb-2 dark:border-border">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <CardTitle>Open bug reports</CardTitle>
@@ -980,12 +980,12 @@ export function BugReportPage({
           <CardContent className="space-y-2 p-3 min-[980px]:flex min-[980px]:min-h-0 min-[980px]:flex-1 min-[980px]:flex-col min-[980px]:gap-2 min-[980px]:space-y-0">
             <div className="relative">
               <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b]"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                 aria-hidden="true"
               />
               <Input
                 aria-label="Search bug reports"
-                className="h-9 bg-white pl-9 text-sm ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]"
+                className="h-9 bg-white pl-9 text-sm ring-1 ring-border dark:bg-background dark:ring-border"
                 placeholder="Search open reports"
                 value={search}
                 onChange={(event) => {
@@ -1104,13 +1104,13 @@ function BugReportArchiveButton({
       type="button"
       variant="outline"
       size="sm"
-      className="h-8 shrink-0 bg-white px-2 text-xs dark:bg-[#0f1b2a]"
+      className="h-8 shrink-0 bg-white px-2 text-xs dark:bg-card"
       disabled={count === 0}
       onClick={onOpen}
     >
       <Archive className="mr-1.5 h-3.5 w-3.5" />
       Solved archive
-      <span className="ml-1.5 rounded-full bg-[#e2e8f0] px-1.5 py-0.5 text-[10px] font-semibold text-[#475569] dark:bg-white/10 dark:text-muted-foreground">
+      <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-foreground-muted dark:bg-white/10 dark:text-muted-foreground">
         {count}
       </span>
     </Button>
@@ -1163,7 +1163,7 @@ function BugReportArchiveDialog({
   onDelete: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-[#0f172a]/45 p-3 pt-5 backdrop-blur-[2px] min-[720px]:pt-8">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/45 p-3 pt-5 backdrop-blur-[2px] min-[720px]:pt-8">
       <button
         type="button"
         aria-label="Dismiss solved archive"
@@ -1174,23 +1174,23 @@ function BugReportArchiveDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="bug-report-archive-title"
-        className="relative z-10 flex max-h-[min(760px,calc(100vh-2rem))] w-[min(1120px,calc(100vw-2rem))] min-h-0 flex-col overflow-hidden rounded-[12px] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)] ring-1 ring-[#dbe5f4] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+        className="relative z-10 flex max-h-[min(760px,calc(100vh-2rem))] w-[min(1120px,calc(100vw-2rem))] min-h-0 flex-col overflow-hidden rounded-[12px] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)] ring-1 ring-border dark:bg-card dark:ring-border"
       >
-        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-[#e5eaf2] px-4 py-3 dark:border-[#263a55]">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-4 py-3 dark:border-border">
           <div className="min-w-0">
             <h2
               id="bug-report-archive-title"
-              className="text-base font-semibold leading-tight text-[#0f172a] dark:text-foreground"
+              className="text-base font-semibold leading-tight text-foreground dark:text-foreground"
             >
               Solved bug reports
             </h2>
-            <p className="mt-0.5 text-xs text-[#64748b] dark:text-muted-foreground">
+            <p className="mt-0.5 text-xs text-muted-foreground dark:text-muted-foreground">
               {totalCount} solved report{totalCount === 1 ? "" : "s"}
             </p>
           </div>
           <button
             type="button"
-            className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[#64748b] transition-colors hover:bg-[#eef2f7] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+            className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
             aria-label="Close solved archive"
             onClick={onClose}
           >
@@ -1202,12 +1202,12 @@ function BugReportArchiveDialog({
           <div className="flex min-h-0 flex-col gap-2">
             <div className="relative shrink-0">
               <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b]"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                 aria-hidden="true"
               />
               <Input
                 aria-label="Search solved bug reports"
-                className="h-9 bg-white pl-9 text-sm ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]"
+                className="h-9 bg-white pl-9 text-sm ring-1 ring-border dark:bg-background dark:ring-border"
                 placeholder="Search archive"
                 value={search}
                 onChange={(event) => {
@@ -1251,7 +1251,7 @@ function BugReportArchiveDialog({
                 onDelete={onDelete}
               />
             ) : (
-              <div className="flex h-full min-h-[260px] items-center justify-center rounded-[8px] bg-[#f8fafc] p-4 text-center text-sm text-[#64748b] ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:text-muted-foreground dark:ring-[#263a55]">
+              <div className="flex h-full min-h-[260px] items-center justify-center rounded-[8px] bg-surface-subtle p-4 text-center text-sm text-muted-foreground ring-1 ring-border dark:bg-background dark:text-muted-foreground dark:ring-border">
                 {emptyText}
               </div>
             )}
@@ -1282,7 +1282,7 @@ function BugReportDetailDialog({
   onDelete: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-[#0f172a]/45 p-3 pt-5 backdrop-blur-[2px] min-[720px]:pt-8">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/45 p-3 pt-5 backdrop-blur-[2px] min-[720px]:pt-8">
       <button
         type="button"
         aria-label="Dismiss bug report"
@@ -1444,7 +1444,7 @@ function BugReportComposer({
         >
           <Textarea
             aria-label="Bug report text"
-            className="min-h-[220px] resize-none overflow-y-auto bg-white ring-1 ring-[#dbe5f4] [scrollbar-gutter:stable] dark:bg-[#0b1523] dark:ring-[#263a55] min-[980px]:min-h-0 min-[980px]:flex-1"
+            className="min-h-[220px] resize-none overflow-y-auto bg-white ring-1 ring-border [scrollbar-gutter:stable] dark:bg-background dark:ring-border min-[980px]:min-h-0 min-[980px]:flex-1"
             placeholder="What happened?"
             value={body}
             maxLength={maxBugReportBodyCharacters}
@@ -1453,8 +1453,8 @@ function BugReportComposer({
           />
           <div
             className={cn(
-              "flex shrink-0 flex-wrap items-center justify-between gap-2 text-[11px] font-medium text-[#64748b] dark:text-muted-foreground",
-              exceedsReportLimits && "text-[#dc2626] dark:text-red-300",
+              "flex shrink-0 flex-wrap items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground dark:text-muted-foreground",
+              exceedsReportLimits && "text-destructive dark:text-red-300",
             )}
           >
             <span>
@@ -1482,7 +1482,7 @@ function BugReportComposer({
               {attachments.map((attachment, index) => (
                 <div
                   key={`${attachment.fileName}-${index}`}
-                  className="group relative overflow-hidden rounded-[8px] bg-[#f8fafc] ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]"
+                  className="group relative overflow-hidden rounded-[8px] bg-surface-subtle ring-1 ring-border dark:bg-background dark:ring-border"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -1492,7 +1492,7 @@ function BugReportComposer({
                   />
                   <button
                     type="button"
-                    className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-[7px] bg-white/90 text-[#334155] shadow-sm ring-1 ring-[#dbe5f4] transition-colors hover:bg-[#eef2f7] dark:bg-[#0f1b2a]/90 dark:text-foreground dark:ring-[#263a55]"
+                    className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-[7px] bg-white/90 text-foreground-muted shadow-sm ring-1 ring-border transition-colors hover:bg-muted dark:bg-card/90 dark:text-foreground dark:ring-border"
                     aria-label={`Remove ${attachment.fileName}`}
                     disabled={isSubmitting}
                     onClick={() =>
@@ -1524,7 +1524,7 @@ function BugReportComposer({
             <Button
               type="button"
               variant="outline"
-              className="h-9 justify-start bg-white text-sm dark:bg-[#0f1b2a]"
+              className="h-9 justify-start bg-white text-sm dark:bg-card"
               disabled={
                 isSubmitting ||
                 isProcessingImages ||
@@ -1541,7 +1541,7 @@ function BugReportComposer({
             </Button>
             <Button
               type="submit"
-              className="h-9 bg-[#2563eb] text-sm hover:bg-[#1d4ed8]"
+              className="h-9 bg-primary text-sm hover:bg-primary"
               disabled={!canSubmit}
             >
               {isSubmitting ? (
@@ -1583,7 +1583,7 @@ function BugReportList({
     <div
       className={cn(
         isInbox
-          ? "min-w-0 divide-y divide-[#e5eaf2] overflow-x-hidden rounded-[8px] bg-white ring-1 ring-[#dbe5f4] dark:divide-[#263a55] dark:bg-[#0b1523] dark:ring-[#263a55]"
+          ? "min-w-0 divide-y divide-border overflow-x-hidden rounded-[8px] bg-white ring-1 ring-border dark:divide-border dark:bg-background dark:ring-border"
           : "space-y-1.5",
         className,
       )}
@@ -1593,7 +1593,7 @@ function BugReportList({
       aria-busy={loading}
     >
       {title ? (
-        <div className="px-1 text-xs font-semibold uppercase tracking-wide text-[#64748b] dark:text-muted-foreground">
+        <div className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground dark:text-muted-foreground">
           {title}
         </div>
       ) : null}
@@ -1617,12 +1617,12 @@ function BugReportList({
                 type="button"
                 className={cn(
                   isInbox
-                    ? "w-full border-l-2 border-transparent bg-white px-3 py-3 text-left transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563eb] dark:bg-[#0b1523] dark:hover:bg-white/[0.04]"
-                    : "w-full rounded-[8px] bg-white p-2.5 text-left ring-1 ring-[#dbe5f4] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#0f1b2a] dark:ring-[#263a55] dark:hover:bg-white/[0.04]",
+                    ? "w-full border-l-2 border-transparent bg-white px-3 py-3 text-left transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary dark:bg-background dark:hover:bg-white/[0.04]"
+                    : "w-full rounded-[8px] bg-white p-2.5 text-left ring-1 ring-border transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-card dark:ring-border dark:hover:bg-white/[0.04]",
                   selected
                     ? isInbox
-                      ? "border-[#2563eb] bg-[#eff6ff] dark:border-[#60a5fa] dark:bg-blue-400/10"
-                      : "bg-[#eff6ff] ring-[#93c5fd] dark:bg-blue-400/10 dark:ring-blue-300/40"
+                      ? "border-primary bg-primary-subtle dark:border-[#60a5fa] dark:bg-blue-400/10"
+                      : "bg-primary-subtle ring-[#93c5fd] dark:bg-blue-400/10 dark:ring-blue-300/40"
                     : null,
                 )}
                 onClick={() => onSelect(report.id)}
@@ -1631,27 +1631,27 @@ function BugReportList({
                   <ReporterAvatar report={report} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center justify-between gap-2">
-                      <div className="truncate text-sm font-semibold text-[#0f172a] dark:text-foreground">
+                      <div className="truncate text-sm font-semibold text-foreground dark:text-foreground">
                         {reportReporterName(report)}
                       </div>
-                      <span className="shrink-0 text-[11px] font-medium text-[#64748b] dark:text-muted-foreground">
+                      <span className="shrink-0 text-[11px] font-medium text-muted-foreground dark:text-muted-foreground">
                         {formatShortDate(report.createdAt)}
                       </span>
                     </div>
                     {bugReportStatus(report) === "SOLVED" ? (
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         {report.solvedAt ? (
-                          <span className="text-[11px] font-medium text-[#64748b] dark:text-muted-foreground">
+                          <span className="text-[11px] font-medium text-muted-foreground dark:text-muted-foreground">
                             {formatShortDate(report.solvedAt)}
                           </span>
                         ) : null}
                       </div>
                     ) : null}
-                    <div className="mt-1 line-clamp-2 break-words text-xs leading-5 text-[#475569] dark:text-muted-foreground">
+                    <div className="mt-1 line-clamp-2 break-words text-xs leading-5 text-foreground-muted dark:text-muted-foreground">
                       {report.body}
                     </div>
                     {report.attachments.length > 0 ? (
-                      <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#2563eb]">
+                      <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
                         <Paperclip className="h-3.5 w-3.5" />
                         {report.attachments.length}
                       </div>
@@ -1719,7 +1719,7 @@ function BugReportDetail({
                   size="sm"
                   className={cn(
                     "h-8 px-2 text-xs",
-                    !isSolved && "bg-[#16a34a] hover:bg-[#15803d]",
+                    !isSolved && "bg-success hover:bg-success",
                   )}
                   disabled={isUpdatingStatus || isDeleting}
                   onClick={() => onStatusChange(isSolved ? "OPEN" : "SOLVED")}
@@ -1759,7 +1759,7 @@ function BugReportDetail({
             {onClose ? (
               <button
                 type="button"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[#64748b] transition-colors hover:bg-[#eef2f7] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
                 aria-label="Close bug report"
                 onClick={onClose}
               >
@@ -1775,21 +1775,21 @@ function BugReportDetail({
           contentClassName,
         )}
       >
-        <div className="flex flex-wrap items-center gap-2 text-xs text-[#64748b] dark:text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground dark:text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <Clock className="h-3.5 w-3.5" />
             {formatFullDate(report.createdAt)}
           </span>
           {report.pagePath ? (
             <span
-              className="rounded-[7px] bg-[#f4f7fb] px-2 py-1 font-medium dark:bg-white/[0.04]"
+              className="rounded-[7px] bg-surface-subtle px-2 py-1 font-medium dark:bg-white/[0.04]"
               title={report.pagePath}
             >
               {formatBugReportPagePath(report.pagePath)}
             </span>
           ) : null}
           {isSolved && report.solvedAt ? (
-            <span className="rounded-[7px] bg-[#ecfdf0] px-2 py-1 font-medium text-[#15803d] dark:bg-emerald-400/10 dark:text-emerald-200">
+            <span className="rounded-[7px] bg-success-subtle px-2 py-1 font-medium text-success-subtle-foreground dark:bg-emerald-400/10 dark:text-emerald-200">
               Solved {formatFullDate(report.solvedAt)}
               {report.solvedBy
                 ? ` by ${reportReporterName({ ...report, reporter: report.solvedBy })}`
@@ -1798,7 +1798,7 @@ function BugReportDetail({
           ) : null}
         </div>
 
-        <div className="break-words whitespace-pre-wrap rounded-[8px] bg-[#f8fafc] p-3 text-sm leading-6 text-[#0f172a] ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:text-foreground dark:ring-[#263a55]">
+        <div className="break-words whitespace-pre-wrap rounded-[8px] bg-surface-subtle p-3 text-sm leading-6 text-foreground ring-1 ring-border dark:bg-background dark:text-foreground dark:ring-border">
           {report.body}
         </div>
 
@@ -1811,7 +1811,7 @@ function BugReportDetail({
                   href={attachment.dataUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="group overflow-hidden rounded-[8px] bg-[#f8fafc] ring-1 ring-[#dbe5f4] transition-shadow hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#0b1523] dark:ring-[#263a55]"
+                  className="group overflow-hidden rounded-[8px] bg-surface-subtle ring-1 ring-border transition-shadow hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-background dark:ring-border"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -1819,7 +1819,7 @@ function BugReportDetail({
                     alt={attachment.fileName}
                     className="aspect-video w-full object-cover"
                   />
-                  <div className="flex items-center justify-between gap-2 px-2.5 py-2 text-xs font-medium text-[#475569] dark:text-muted-foreground">
+                  <div className="flex items-center justify-between gap-2 px-2.5 py-2 text-xs font-medium text-foreground-muted dark:text-muted-foreground">
                     <span className="truncate">{attachment.fileName}</span>
                     <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60 transition-opacity group-hover:opacity-100" />
                   </div>
@@ -1827,7 +1827,7 @@ function BugReportDetail({
               ) : (
                 <div
                   key={attachment.id ?? attachment.fileName}
-                  className="flex aspect-video items-center justify-center rounded-[8px] bg-[#f8fafc] text-xs font-medium text-[#64748b] ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:text-muted-foreground dark:ring-[#263a55]"
+                  className="flex aspect-video items-center justify-center rounded-[8px] bg-surface-subtle text-xs font-medium text-muted-foreground ring-1 ring-border dark:bg-background dark:text-muted-foreground dark:ring-border"
                 >
                   {isLoadingAttachments ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1857,7 +1857,7 @@ function ReporterAvatar({
   return (
     <div
       className={cn(
-        "shrink-0 rounded-full bg-[#2563eb] bg-cover bg-center text-center font-semibold text-white",
+        "shrink-0 rounded-full bg-primary bg-cover bg-center text-center font-semibold text-white",
         size === "sm"
           ? "h-8 w-8 text-[11px] leading-8"
           : "h-10 w-10 text-sm leading-10",

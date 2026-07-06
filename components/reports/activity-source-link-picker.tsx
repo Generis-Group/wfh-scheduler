@@ -133,7 +133,7 @@ export function ActivitySourceLinkPicker({
             <div
               ref={menuRef}
               role="menu"
-              className="fixed z-[70] overflow-y-auto overscroll-contain rounded-[10px] bg-white p-1.5 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.18)] ring-1 ring-[#dbe3ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+              className="fixed z-[70] overflow-y-auto overscroll-contain rounded-[10px] bg-white p-1.5 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.18)] ring-1 ring-border dark:bg-card dark:ring-border"
               style={{
                 left: position.left,
                 top: position.top,
@@ -148,7 +148,7 @@ export function ActivitySourceLinkPicker({
                   href={link.href}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex min-w-0 items-center gap-2 rounded-[8px] px-3 py-2 text-left font-medium text-[#334155] transition-colors hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
+                  className="flex min-w-0 items-center gap-2 rounded-[8px] px-3 py-2 text-left font-medium text-foreground-muted transition-colors hover:bg-primary-subtle hover:text-primary-subtle-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
                   onClick={() => setOpen(false)}
                 >
                   <ExternalLink className="h-4 w-4 shrink-0" />

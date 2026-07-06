@@ -130,10 +130,10 @@ const planLocationOptions = plannedWorkLocationValues.map((value) => ({
 }));
 
 const weekNavButtonClassName =
-  "inline-flex h-9 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-[#344054] ring-1 ring-[#dfe5ef] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-white/[0.04] dark:text-foreground dark:ring-[#263a55] dark:hover:bg-white/[0.08]";
+  "inline-flex h-9 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-foreground-muted ring-1 ring-border transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-white/[0.04] dark:text-foreground dark:ring-border dark:hover:bg-white/[0.08]";
 
 const calendarViewButtonClassName =
-  "inline-flex h-8 min-w-0 items-center justify-center rounded-[7px] px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]";
+  "inline-flex h-8 min-w-0 items-center justify-center rounded-[7px] px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
 function displayName(user: CalendarUser) {
   return user.name || user.email || "Employee";
@@ -443,7 +443,7 @@ function locationTone(location: WorkLocationValue | null) {
     return "bg-slate-500/10 text-slate-700 dark:text-slate-200";
   }
 
-  return "bg-transparent text-[#94a3b8] dark:text-[#64748b]";
+  return "bg-transparent text-muted-foreground-subtle dark:text-muted-foreground";
 }
 
 function sourceLabel(source: CalendarDay["source"]) {
@@ -561,7 +561,7 @@ function WeekPicker({
         aria-label="Jump to week"
         aria-expanded={open}
         aria-controls="work-location-week-picker"
-        className="flex h-9 w-full min-w-0 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-[#111827] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55] dark:hover:bg-white/5"
+        className="flex h-9 w-full min-w-0 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-foreground shadow-none ring-1 ring-border transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-card dark:text-foreground dark:ring-border dark:hover:bg-white/5"
         onClick={() => {
           if (open) {
             setOpen(false);
@@ -572,13 +572,13 @@ function WeekPicker({
           setOpen(true);
         }}
       >
-        <CalendarDays className="h-4 w-4 shrink-0 text-[#667085] dark:text-muted-foreground" />
+        <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground dark:text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate text-left">
           {shortWeekLabel(weekStart, weekEnd)}
         </span>
         <ChevronDown
           className={cn(
-            "h-4 w-4 shrink-0 text-[#667085] transition-transform dark:text-muted-foreground",
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform dark:text-muted-foreground",
             open && "rotate-180",
           )}
         />
@@ -588,7 +588,7 @@ function WeekPicker({
             <div
               ref={pickerMenuRef}
               id="work-location-week-picker"
-              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
               style={{
                 left: pickerPosition?.left ?? 0,
                 top: pickerPosition?.top ?? 0,
@@ -608,7 +608,7 @@ function WeekPicker({
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <div className="text-sm font-semibold text-[#111827] dark:text-foreground">
+                <div className="text-sm font-semibold text-foreground dark:text-foreground">
                   {formatMonthLabel(pickerMonth)}
                 </div>
                 <button
@@ -622,7 +622,7 @@ function WeekPicker({
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-              <div className="grid grid-cols-7 gap-1 px-1 pb-1 text-center text-[11px] font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
+              <div className="grid grid-cols-7 gap-1 px-1 pb-1 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground dark:text-muted-foreground">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                   (weekday) => (
                     <span key={weekday}>{weekday}</span>
@@ -641,14 +641,14 @@ function WeekPicker({
                       key={calendarDay.value}
                       type="button"
                       className={cn(
-                        "flex h-9 items-center justify-center rounded-[7px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]",
+                        "flex h-9 items-center justify-center rounded-[7px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                         calendarDay.inCurrentMonth
-                          ? "text-[#111827] hover:bg-[#eff6ff] dark:text-foreground dark:hover:bg-white/10"
-                          : "text-[#98a2b3] hover:bg-[#f8fafc] dark:text-muted-foreground/70 dark:hover:bg-white/5",
+                          ? "text-foreground hover:bg-primary-subtle dark:text-foreground dark:hover:bg-white/10"
+                          : "text-muted-foreground-subtle hover:bg-surface-subtle dark:text-muted-foreground/70 dark:hover:bg-white/5",
                         inSelectedWeek &&
-                          "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-blue-100",
+                          "bg-primary-subtle text-primary-subtle-foreground dark:bg-blue-400/10 dark:text-blue-100",
                         isWeekStart &&
-                          "bg-[#2563eb] text-white hover:bg-[#1d4ed8] dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400",
+                          "bg-primary text-white hover:bg-primary dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400",
                       )}
                       aria-label={`Select ${formatCalendarDate(
                         calendarDay.value,
@@ -771,7 +771,7 @@ function MonthPicker({
         aria-label="Jump to month"
         aria-expanded={open}
         aria-controls="work-location-month-picker"
-        className="flex h-10 w-full min-w-0 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-[#111827] shadow-none ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[#101d2e] dark:text-foreground dark:ring-[#263a55] dark:hover:bg-white/5"
+        className="flex h-10 w-full min-w-0 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-foreground shadow-none ring-1 ring-border transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-card dark:text-foreground dark:ring-border dark:hover:bg-white/5"
         onClick={() => {
           if (open) {
             setOpen(false);
@@ -782,13 +782,13 @@ function MonthPicker({
           setOpen(true);
         }}
       >
-        <CalendarDays className="h-4 w-4 shrink-0 text-[#667085] dark:text-muted-foreground" />
+        <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground dark:text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate text-left">
           {monthLabel(monthStart)}
         </span>
         <ChevronDown
           className={cn(
-            "h-4 w-4 shrink-0 text-[#667085] transition-transform dark:text-muted-foreground",
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform dark:text-muted-foreground",
             open && "rotate-180",
           )}
         />
@@ -798,7 +798,7 @@ function MonthPicker({
             <div
               ref={pickerMenuRef}
               id="work-location-month-picker"
-              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
               style={{
                 left: pickerPosition?.left ?? 0,
                 top: pickerPosition?.top ?? 0,
@@ -816,7 +816,7 @@ function MonthPicker({
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <div className="text-sm font-semibold text-[#111827] dark:text-foreground">
+                <div className="text-sm font-semibold text-foreground dark:text-foreground">
                   {pickerYear}
                 </div>
                 <button
@@ -837,10 +837,10 @@ function MonthPicker({
                       key={month.key}
                       type="button"
                       className={cn(
-                        "flex h-10 items-center justify-center rounded-[7px] text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]",
+                        "flex h-10 items-center justify-center rounded-[7px] text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                         selected
-                          ? "bg-[#2563eb] text-white hover:bg-[#1d4ed8] dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400"
-                          : "text-[#344054] hover:bg-[#eff6ff] hover:text-[#1d4ed8] dark:text-foreground dark:hover:bg-white/10 dark:hover:text-blue-100",
+                          ? "bg-primary text-white hover:bg-primary dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400"
+                          : "text-foreground-muted hover:bg-primary-subtle hover:text-primary-subtle-foreground dark:text-foreground dark:hover:bg-white/10 dark:hover:text-blue-100",
                       )}
                       aria-label={`Select ${month.fullLabel}`}
                       aria-current={selected ? "date" : undefined}
@@ -862,7 +862,7 @@ function MonthPicker({
 function LocationCell({ day }: { day: CalendarDay }) {
   if (!day.workLocation) {
     return (
-      <span className="text-sm font-medium text-[#98a2b3] dark:text-muted-foreground/70">
+      <span className="text-sm font-medium text-muted-foreground-subtle dark:text-muted-foreground/70">
         -
       </span>
     );
@@ -902,7 +902,7 @@ function WfhNameBar({ entry }: { entry: WfhCalendarEntry }) {
 
   return (
     <div
-      className="relative h-5 min-w-0 rounded-[6px] bg-[#eef2f8] ring-1 ring-[#dfe4ee] dark:bg-white/[0.035] dark:ring-white/[0.055]"
+      className="relative h-5 min-w-0 rounded-[6px] bg-muted ring-1 ring-border dark:bg-white/[0.035] dark:ring-white/[0.055]"
       title={label}
     >
       <div
@@ -1026,12 +1026,12 @@ function WfhCalendarGrid({
       <div className="wfh-calendar-grid-frame">
         <div
           ref={gridRef}
-          className="wfh-calendar-grid gap-px rounded-[8px] bg-[#dfe4ee] p-px dark:bg-[#263a55]"
+          className="wfh-calendar-grid gap-px rounded-lg bg-border p-px"
         >
           {["Mon", "Tue", "Wed", "Thu", "Fri"].map((weekday) => (
             <div
               key={weekday}
-              className="bg-[#f8fafc] px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#667085] first:rounded-tl-[7px] last:rounded-tr-[7px] dark:bg-white/[0.035] dark:text-muted-foreground"
+              className="bg-surface-subtle px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground first:rounded-tl-[7px] last:rounded-tr-[7px] dark:bg-white/[0.035] dark:text-muted-foreground"
             >
               {weekday}
             </div>
@@ -1049,9 +1049,9 @@ function WfhCalendarGrid({
                   key={calendarDay.date}
                   data-wfh-calendar-day
                   className={cn(
-                    "relative min-w-0 bg-white p-2 dark:bg-[#0f1b2a]",
+                    "relative min-w-0 bg-white p-2 dark:bg-card",
                     !calendarDay.inCurrentMonth &&
-                      "bg-[#f8fafc] text-[#98a2b3] dark:bg-white/[0.018] dark:text-muted-foreground/70",
+                      "bg-surface-subtle text-muted-foreground-subtle dark:bg-white/[0.018] dark:text-muted-foreground/70",
                     weekIndex === weeks.length - 1 &&
                       dayIndex === 0 &&
                       "rounded-bl-[7px]",
@@ -1063,9 +1063,9 @@ function WfhCalendarGrid({
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     <span
                       className={cn(
-                        "text-xs font-semibold text-[#344054] dark:text-foreground",
+                        "text-xs font-semibold text-foreground-muted dark:text-foreground",
                         !calendarDay.inCurrentMonth &&
-                          "text-[#98a2b3] dark:text-muted-foreground/70",
+                          "text-muted-foreground-subtle dark:text-muted-foreground/70",
                       )}
                     >
                       {dayNumber(calendarDay.date)}
@@ -1085,7 +1085,7 @@ function WfhCalendarGrid({
                         type="button"
                         aria-label={`Show all WFH people for ${dateLabel}`}
                         aria-expanded={isOpen}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-[#eef2f8] text-[#344054] ring-1 ring-[#dfe4ee] transition-colors hover:bg-[#e6edf7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-white/[0.055] dark:text-foreground dark:ring-white/[0.08] dark:hover:bg-white/[0.09]"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-muted text-foreground-muted ring-1 ring-border transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-white/[0.055] dark:text-foreground dark:ring-white/[0.08] dark:hover:bg-white/[0.09]"
                         onClick={(event) =>
                           toggleOverflowMenu(calendarDay.date, event)
                         }
@@ -1106,7 +1106,7 @@ function WfhCalendarGrid({
               ref={overflowMenuRef}
               role="dialog"
               aria-label={`WFH people for ${openOverflowDateLabel}`}
-              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
               style={{
                 left: openOverflowMenu.left,
                 top: openOverflowMenu.top,
@@ -1114,19 +1114,19 @@ function WfhCalendarGrid({
                 maxHeight: openOverflowMenu.maxHeight,
               }}
             >
-              <div className="mb-2 truncate text-xs font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
+              <div className="mb-2 truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground dark:text-muted-foreground">
                 {openOverflowDateLabel}
               </div>
               <div className="grid gap-1">
                 {openOverflowEntries.map((entry) => (
                   <div
                     key={`${entry.id}:overflow`}
-                    className="flex min-w-0 items-center justify-between gap-2 rounded-[7px] px-2 py-1.5 text-sm text-[#111827] dark:text-foreground"
+                    className="flex min-w-0 items-center justify-between gap-2 rounded-[7px] px-2 py-1.5 text-sm text-foreground dark:text-foreground"
                   >
                     <span className="min-w-0 truncate font-semibold">
                       {entry.name}
                     </span>
-                    <span className="shrink-0 text-xs font-medium text-[#667085] dark:text-muted-foreground">
+                    <span className="shrink-0 text-xs font-medium text-muted-foreground dark:text-muted-foreground">
                       {wfhCoverageLabel(entry.coverage)}
                     </span>
                   </div>
@@ -1339,7 +1339,7 @@ export function WorkLocationCalendar({
       <div className="reference-page-header gap-3">
         <div>
           <h1 className="reference-title">Work Locations</h1>
-          <p className="mt-0.5 text-xs leading-5 text-[#667085] dark:text-muted-foreground">
+          <p className="mt-0.5 text-xs leading-5 text-muted-foreground dark:text-muted-foreground">
             {periodLabel}
           </p>
         </div>
@@ -1347,7 +1347,7 @@ export function WorkLocationCalendar({
           <div
             role="tablist"
             aria-label="Location view"
-            className="inline-flex min-w-0 rounded-[8px] bg-[#f2f5f9] p-1 ring-1 ring-[#dfe5ef] dark:bg-white/[0.04] dark:ring-[#263a55]"
+            className="inline-flex min-w-0 rounded-[8px] bg-surface-subtle p-1 ring-1 ring-border dark:bg-white/[0.04] dark:ring-border"
           >
             <button
               type="button"
@@ -1356,8 +1356,8 @@ export function WorkLocationCalendar({
               className={cn(
                 calendarViewButtonClassName,
                 view === "weekly-list"
-                  ? "bg-white text-[#111827] shadow-sm dark:bg-[#101d2e] dark:text-foreground"
-                  : "text-[#667085] hover:text-[#344054] dark:text-muted-foreground dark:hover:text-foreground",
+                  ? "bg-white text-foreground shadow-sm dark:bg-card dark:text-foreground"
+                  : "text-muted-foreground hover:text-foreground-muted dark:text-muted-foreground dark:hover:text-foreground",
               )}
               onClick={() => switchView("weekly-list")}
             >
@@ -1370,8 +1370,8 @@ export function WorkLocationCalendar({
               className={cn(
                 calendarViewButtonClassName,
                 view === "wfh-calendar"
-                  ? "bg-white text-[#111827] shadow-sm dark:bg-[#101d2e] dark:text-foreground"
-                  : "text-[#667085] hover:text-[#344054] dark:text-muted-foreground dark:hover:text-foreground",
+                  ? "bg-white text-foreground shadow-sm dark:bg-card dark:text-foreground"
+                  : "text-muted-foreground hover:text-foreground-muted dark:text-muted-foreground dark:hover:text-foreground",
               )}
               onClick={() => switchView("wfh-calendar")}
             >
@@ -1391,7 +1391,7 @@ export function WorkLocationCalendar({
             className={cn(
               weekNavButtonClassName,
               currentPeriodSelected &&
-                "pointer-events-none text-[#98a2b3] dark:text-muted-foreground",
+                "pointer-events-none text-muted-foreground-subtle dark:text-muted-foreground",
             )}
           >
             <CalendarDays className="h-4 w-4" />
@@ -1409,13 +1409,13 @@ export function WorkLocationCalendar({
 
       {view === "weekly-list" && data.canPlanOwnWeek ? (
         <section
-          className="reference-card border-[#e7edf5] p-3 shadow-none dark:border-[#23344c]"
+          className="reference-card border-border p-3 shadow-none dark:border-border"
           aria-label="Weekday plan"
         >
           {message ? (
             <div className="mb-2 flex justify-end">
               <div
-                className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-[#2563eb] dark:bg-blue-400/10 dark:text-blue-200"
+                className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-primary dark:bg-blue-400/10 dark:text-blue-200"
                 role="status"
               >
                 {message}
@@ -1431,27 +1431,27 @@ export function WorkLocationCalendar({
                 <div
                   key={date}
                   className={cn(
-                    "grid min-w-0 gap-2 rounded-[8px] bg-[#f5f7fb] p-2.5 transition-colors dark:bg-white/[0.035]",
+                    "grid min-w-0 gap-2 rounded-[8px] bg-surface-subtle p-2.5 transition-colors dark:bg-white/[0.035]",
                     plan &&
-                      "bg-[#edf4ff] dark:bg-blue-400/[0.075]",
+                      "bg-primary-subtle dark:bg-blue-400/[0.075]",
                   )}
                 >
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     <div className="flex min-w-0 items-baseline gap-1.5">
-                      <span className="shrink-0 text-lg font-semibold leading-none text-[#111827] dark:text-foreground">
+                      <span className="shrink-0 text-lg font-semibold leading-none text-foreground dark:text-foreground">
                         {dayNumber(date)}
                       </span>
-                      <span className="truncate text-[11px] font-semibold uppercase text-[#667085] dark:text-muted-foreground">
+                      <span className="truncate text-[11px] font-semibold uppercase text-muted-foreground dark:text-muted-foreground">
                         {weekdayLabel(date)}
                       </span>
                     </div>
                     {saving ? (
-                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#2563eb]" />
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
                     ) : null}
                   </div>
                   <Select
                     aria-label={`Plan for ${dayLabel(date)}`}
-                    className="h-9 border-transparent bg-white/90 text-xs dark:border-transparent dark:bg-[#101d2e]"
+                    className="h-9 border-transparent bg-white/90 text-xs dark:border-transparent dark:bg-card"
                     value={plan?.workLocation ?? ""}
                     disabled={saving}
                     onChange={(event) => {
@@ -1481,20 +1481,20 @@ export function WorkLocationCalendar({
       {view === "weekly-list" ? (
         <section className="reference-card p-4">
           <div className="mb-4 grid gap-3 min-[900px]:grid-cols-[minmax(220px,1fr)_220px_200px] min-[900px]:items-end">
-            <label className="grid min-w-0 gap-1 text-sm font-semibold text-[#344054] dark:text-foreground">
+            <label className="grid min-w-0 gap-1 text-sm font-semibold text-foreground-muted dark:text-foreground">
               Search people
               <span className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#667085]" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   value={employeeSearch}
                   onChange={(event) => setEmployeeSearch(event.target.value)}
                   placeholder="Search by name, email, or department"
                   aria-label="Search people"
-                  className="h-10 w-full rounded-[8px] bg-[hsl(var(--field))] pl-9 pr-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] transition-colors placeholder:text-[#98a2b3] hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-[#263a55] dark:hover:bg-white/5"
+                  className="h-10 w-full rounded-[8px] bg-[hsl(var(--field))] pl-9 pr-3 text-sm font-medium text-foreground shadow-none ring-1 ring-border transition-colors placeholder:text-muted-foreground-subtle hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-border dark:hover:bg-white/5"
                 />
               </span>
             </label>
-            <label className="grid min-w-0 gap-1 text-sm font-semibold text-[#344054] dark:text-foreground">
+            <label className="grid min-w-0 gap-1 text-sm font-semibold text-foreground-muted dark:text-foreground">
               Department
               <Select
                 aria-label="Department"
@@ -1515,7 +1515,7 @@ export function WorkLocationCalendar({
                 ))}
               </Select>
             </label>
-            <label className="grid min-w-0 gap-1 text-sm font-semibold text-[#344054] dark:text-foreground">
+            <label className="grid min-w-0 gap-1 text-sm font-semibold text-foreground-muted dark:text-foreground">
               Jump to week
               <WeekPicker
                 weekStart={data.weekStart}
@@ -1537,14 +1537,14 @@ export function WorkLocationCalendar({
               </colgroup>
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 border-b border-r border-[#edf2f7] bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:border-white/[0.06] dark:bg-[#0f1b2a] dark:text-muted-foreground">
+                  <th className="sticky left-0 z-10 border-b border-r border-border bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground dark:border-white/[0.06] dark:bg-card dark:text-muted-foreground">
                     Person
                   </th>
                   {weekdayDates.map((date, dateIndex) => (
                     <th
                       key={date}
                       className={cn(
-                        "min-w-[128px] border-b border-[#edf2f7] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#667085] dark:border-white/[0.06] dark:text-muted-foreground",
+                        "min-w-[128px] border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground dark:border-white/[0.06] dark:text-muted-foreground",
                         dateIndex > 0 && "border-l",
                       )}
                     >
@@ -1557,17 +1557,17 @@ export function WorkLocationCalendar({
                 {filteredRows.map((row) => (
                   <tr
                     key={row.user.id}
-                    className="group transition-colors hover:bg-[#f8fbff] dark:hover:bg-white/[0.035]"
+                    className="group transition-colors hover:bg-primary-subtle dark:hover:bg-white/[0.035]"
                   >
-                    <th className="sticky left-0 z-10 border-b border-r border-[#edf2f7] bg-white px-3 py-3 align-middle transition-colors group-hover:bg-[#f8fbff] dark:border-white/[0.06] dark:bg-[#0f1b2a] dark:group-hover:bg-[#111c2d]">
+                    <th className="sticky left-0 z-10 border-b border-r border-border bg-white px-3 py-3 align-middle transition-colors group-hover:bg-primary-subtle dark:border-white/[0.06] dark:bg-card dark:group-hover:bg-card">
                       <div
-                        className="truncate font-semibold text-[#111827] dark:text-foreground"
+                        className="truncate font-semibold text-foreground dark:text-foreground"
                         title={displayName(row.user)}
                       >
                         {displayName(row.user)}
                       </div>
                       <div
-                        className="mt-0.5 truncate text-xs font-medium text-[#667085] dark:text-muted-foreground"
+                        className="mt-0.5 truncate text-xs font-medium text-muted-foreground dark:text-muted-foreground"
                         title={employeeDepartmentLabel(row.user)}
                       >
                         {employeeDepartmentLabel(row.user)}
@@ -1579,7 +1579,7 @@ export function WorkLocationCalendar({
                         <td
                           key={day.date}
                           className={cn(
-                            "border-b border-[#edf2f7] px-3 py-3 align-middle transition-colors dark:border-white/[0.06]",
+                            "border-b border-border px-3 py-3 align-middle transition-colors dark:border-white/[0.06]",
                             dayIndex > 0 && "border-l",
                           )}
                         >
@@ -1592,7 +1592,7 @@ export function WorkLocationCalendar({
             </table>
           </div>
           {filteredRows.length === 0 ? (
-            <div className="mt-3 rounded-[8px] border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-4 py-6 text-center text-sm text-[#667085] dark:border-[#263a55] dark:bg-white/[0.03] dark:text-muted-foreground">
+            <div className="mt-3 rounded-[8px] border border-dashed border-border-strong bg-surface-subtle px-4 py-6 text-center text-sm text-muted-foreground dark:border-border dark:bg-white/[0.03] dark:text-muted-foreground">
               {rows.length === 0
                 ? "No employees found for this department view."
                 : "No people match your search."}
@@ -1605,11 +1605,11 @@ export function WorkLocationCalendar({
         <section className="reference-card p-4">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
+              <h2 className="text-lg font-semibold tracking-normal text-foreground dark:text-foreground">
                 WFH calendar
               </h2>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#667085] dark:text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-muted-foreground dark:text-muted-foreground">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-emerald-700 dark:text-emerald-200">
                 WFH
               </span>
@@ -1622,20 +1622,20 @@ export function WorkLocationCalendar({
             </div>
           </div>
           <div className="mb-4 grid gap-3 min-[900px]:grid-cols-[minmax(220px,1fr)_220px_200px] min-[900px]:items-end">
-            <label className="grid min-w-0 gap-1 text-sm font-semibold text-[#344054] dark:text-foreground">
+            <label className="grid min-w-0 gap-1 text-sm font-semibold text-foreground-muted dark:text-foreground">
               Search people
               <span className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#667085]" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   value={employeeSearch}
                   onChange={(event) => setEmployeeSearch(event.target.value)}
                   placeholder="Search by name, email, or department"
                   aria-label="Search people"
-                  className="h-10 w-full rounded-[8px] bg-[hsl(var(--field))] pl-9 pr-3 text-sm font-medium text-[#111827] shadow-none ring-1 ring-[#dfe4ee] transition-colors placeholder:text-[#98a2b3] hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-[#263a55] dark:hover:bg-white/5"
+                  className="h-10 w-full rounded-[8px] bg-[hsl(var(--field))] pl-9 pr-3 text-sm font-medium text-foreground shadow-none ring-1 ring-border transition-colors placeholder:text-muted-foreground-subtle hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-border dark:hover:bg-white/5"
                 />
               </span>
             </label>
-            <label className="grid min-w-0 gap-1 text-sm font-semibold text-[#344054] dark:text-foreground">
+            <label className="grid min-w-0 gap-1 text-sm font-semibold text-foreground-muted dark:text-foreground">
               Department
               <Select
                 aria-label="Department"
@@ -1656,7 +1656,7 @@ export function WorkLocationCalendar({
                 ))}
               </Select>
             </label>
-            <label className="grid min-w-0 gap-1 text-sm font-semibold text-[#344054] dark:text-foreground">
+            <label className="grid min-w-0 gap-1 text-sm font-semibold text-foreground-muted dark:text-foreground">
               Jump to month
               <MonthPicker
                 monthStart={data.month.monthStart}
@@ -1671,7 +1671,7 @@ export function WorkLocationCalendar({
             entriesByDate={calendarEntriesByDate}
           />
           {filteredMonthRows.length === 0 ? (
-            <div className="mt-3 rounded-[8px] border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-4 py-6 text-center text-sm text-[#667085] dark:border-[#263a55] dark:bg-white/[0.03] dark:text-muted-foreground">
+            <div className="mt-3 rounded-[8px] border border-dashed border-border-strong bg-surface-subtle px-4 py-6 text-center text-sm text-muted-foreground dark:border-border dark:bg-white/[0.03] dark:text-muted-foreground">
               {monthRows.length === 0
                 ? "No employees found for this department view."
                 : "No people match your search."}

@@ -148,14 +148,14 @@ function renderActivityReference(
         <summary className="summary-activity-reference cursor-pointer list-none [&::-webkit-details-marker]:hidden">
           {content}
         </summary>
-        <span className="absolute left-0 top-full z-30 mt-1 flex w-56 flex-col rounded-[10px] bg-white p-1 text-sm shadow-[0_16px_38px_rgba(15,23,42,0.16)] ring-1 ring-[#dbe3ee] dark:bg-[#0f1b2a] dark:ring-[#263a55]">
+        <span className="absolute left-0 top-full z-30 mt-1 flex w-56 flex-col rounded-[10px] bg-white p-1 text-sm shadow-[0_16px_38px_rgba(15,23,42,0.16)] ring-1 ring-border dark:bg-card dark:ring-border">
           {links.map((item) => (
             <a
               key={item.href}
               href={item.href}
               target="_blank"
               rel="noreferrer"
-              className="rounded-[7px] px-3 py-2 text-left font-medium text-[#334155] hover:bg-[#eef4ff] hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
+              className="rounded-[7px] px-3 py-2 text-left font-medium text-foreground-muted hover:bg-primary-subtle hover:text-primary-subtle-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
             >
               {item.label}
             </a>
@@ -423,7 +423,7 @@ function renderBlocks(
     const heading = line.match(/^##\s+(.*)$/);
     if (heading) {
       nodes.push(
-        <h3 key={`heading-${index}`} className="my-0 text-xl font-normal leading-7 text-[#111827] dark:text-foreground">
+        <h3 key={`heading-${index}`} className="my-0 text-xl font-normal leading-7 text-foreground dark:text-foreground">
           {renderInline(
             heading[1],
             `heading-${index}`,
@@ -456,7 +456,7 @@ function renderBlocks(
         index += 1;
       }
       nodes.push(
-        <blockquote key={`quote-${index}`} className="my-0 border-l-2 border-[#c7d2fe] pl-3 text-[#475467] dark:border-blue-300/30 dark:text-muted-foreground">
+        <blockquote key={`quote-${index}`} className="my-0 border-l-2 border-[#c7d2fe] pl-3 text-foreground-muted dark:border-blue-300/30 dark:text-muted-foreground">
           {quoteLines}
         </blockquote>
       );
@@ -491,8 +491,8 @@ export function SummaryRenderer({
   const trimmed = value?.trim();
 
   if (!trimmed) {
-    return <p className={cn("text-sm text-[#667085] dark:text-muted-foreground", className)}>{emptyText}</p>;
+    return <p className={cn("text-sm text-muted-foreground dark:text-muted-foreground", className)}>{emptyText}</p>;
   }
 
-  return <div className={cn("space-y-1 text-sm leading-6 text-[#111827] dark:text-foreground", className)}>{renderBlocks(value ?? "", activityReferences)}</div>;
+  return <div className={cn("space-y-1 text-sm leading-6 text-foreground dark:text-foreground", className)}>{renderBlocks(value ?? "", activityReferences)}</div>;
 }

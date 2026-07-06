@@ -265,16 +265,16 @@ export function AdminReportsManager({
   return (
     <>
       <section className="reference-card reference-paginated-surface p-0 min-[1024px]:h-full">
-        <div className="shrink-0 border-b border-[#e5eaf2] p-3 dark:border-[#263a55]">
+        <div className="shrink-0 border-b border-border p-3 dark:border-border">
           <div className="flex flex-col gap-3 min-[820px]:flex-row min-[820px]:items-center">
             <div className="relative min-w-0 flex-1">
               <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b]"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                 aria-hidden="true"
               />
               <Input
                 aria-label="Search managed reports"
-                className="h-10 bg-white pl-9 ring-1 ring-[#dbe5f4] dark:bg-[#0b1523] dark:ring-[#263a55]"
+                className="h-10 bg-white pl-9 ring-1 ring-border dark:bg-background dark:ring-border"
                 placeholder="Search employee, date, department, or summary"
                 value={search}
                 onChange={(event) => {
@@ -296,7 +296,7 @@ export function AdminReportsManager({
               <option value="SUBMITTED">Submitted</option>
               <option value="DRAFT">Drafts</option>
             </Select>
-            <div className="text-sm font-semibold text-[#64748b] dark:text-muted-foreground min-[820px]:min-w-28 min-[820px]:text-right">
+            <div className="text-sm font-semibold text-muted-foreground dark:text-muted-foreground min-[820px]:min-w-28 min-[820px]:text-right">
               {totalCount} report
               {totalCount === 1 ? "" : "s"}
             </div>
@@ -321,7 +321,7 @@ export function AdminReportsManager({
               </EmptyReferenceState>
             </div>
           ) : (
-            <div className="divide-y divide-[#e5eaf2] dark:divide-[#263a55]">
+            <div className="divide-y divide-border dark:divide-border">
               {reports.map((report) => (
                 <article
                   key={report.id}
@@ -332,7 +332,7 @@ export function AdminReportsManager({
                       <ReportOwnerAvatar report={report} />
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                          <h2 className="truncate text-sm font-semibold text-[#0f172a] dark:text-foreground">
+                          <h2 className="truncate text-sm font-semibold text-foreground dark:text-foreground">
                             {report.user.name ??
                               report.user.email ??
                               "Unknown employee"}
@@ -345,7 +345,7 @@ export function AdminReportsManager({
                             }
                           />
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#64748b] dark:text-muted-foreground">
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground dark:text-muted-foreground">
                           <span className="inline-flex items-center gap-1">
                             <CalendarDays className="h-3.5 w-3.5" />
                             {formatReportDate(report.reportDate)}
@@ -353,7 +353,7 @@ export function AdminReportsManager({
                           <span>{departmentLabel(report)}</span>
                           <span>{workLocationLabel(report.workLocation)}</span>
                         </div>
-                        <p className="mt-2 line-clamp-2 break-words text-sm leading-5 text-[#475569] dark:text-muted-foreground">
+                        <p className="mt-2 line-clamp-2 break-words text-sm leading-5 text-foreground-muted dark:text-muted-foreground">
                           {report.summary.trim() || "No summary recorded."}
                         </p>
                       </div>
@@ -364,7 +364,7 @@ export function AdminReportsManager({
                     label="Activities"
                     value={report._count.activities}
                   />
-                  <div className="grid grid-cols-2 gap-2 text-xs text-[#64748b] dark:text-muted-foreground min-[860px]:block min-[860px]:space-y-1">
+                  <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground dark:text-muted-foreground min-[860px]:block min-[860px]:space-y-1">
                     <ReportCount
                       label="Comments"
                       value={report._count.comments}
@@ -416,7 +416,7 @@ function ReportOwnerAvatar({ report }: { report: AdminManagedReport }) {
 
   return (
     <div
-      className="h-10 w-10 shrink-0 rounded-full bg-[#2563eb] bg-cover bg-center text-center text-sm font-semibold leading-10 text-white"
+      className="h-10 w-10 shrink-0 rounded-full bg-primary bg-cover bg-center text-center text-sm font-semibold leading-10 text-white"
       style={
         report.user.image
           ? { backgroundImage: `url("${report.user.image}")` }
@@ -432,10 +432,10 @@ function ReportOwnerAvatar({ report }: { report: AdminManagedReport }) {
 function ReportCount({ label, value }: { label: string; value: number }) {
   return (
     <div className="min-w-0">
-      <div className="text-[11px] font-semibold uppercase text-[#94a3b8]">
+      <div className="text-[11px] font-semibold uppercase text-muted-foreground-subtle">
         {label}
       </div>
-      <div className="text-sm font-semibold text-[#0f172a] dark:text-foreground">
+      <div className="text-sm font-semibold text-foreground dark:text-foreground">
         {value.toLocaleString()}
       </div>
     </div>

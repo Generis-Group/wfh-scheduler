@@ -35,7 +35,7 @@ type CalendarPosition = {
 };
 
 const dateNavButtonClassName =
-  "flex h-8 w-8 items-center justify-center rounded-[6px] text-[#667085] transition-colors hover:bg-[#eef2f7] hover:text-[#111827] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#667085] dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground dark:disabled:hover:bg-transparent dark:disabled:hover:text-muted-foreground";
+  "flex h-8 w-8 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground dark:disabled:hover:bg-transparent dark:disabled:hover:text-muted-foreground";
 
 function twoDigit(value: number) {
   return String(value).padStart(2, "0");
@@ -205,7 +205,7 @@ export function ReportDateSwitcher({
     <div
       ref={switcherRef}
       className={cn(
-        "relative grid h-10 w-full min-w-0 grid-cols-[2rem_minmax(0,1fr)_2rem_2rem] items-center gap-0.5 rounded-[8px] bg-white p-1 shadow-none ring-1 ring-[#dfe4ee] min-[520px]:w-[300px] dark:bg-[#101d2e] dark:ring-[#263a55]",
+        "relative grid h-10 w-full min-w-0 grid-cols-[2rem_minmax(0,1fr)_2rem_2rem] items-center gap-0.5 rounded-[8px] bg-white p-1 shadow-none ring-1 ring-border min-[520px]:w-[300px] dark:bg-card dark:ring-border",
         className,
       )}
     >
@@ -225,15 +225,15 @@ export function ReportDateSwitcher({
       </button>
       <button
         type="button"
-        className="flex h-8 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-[6px] px-2 text-sm font-semibold text-[#111827] transition-colors hover:bg-[#f8fafc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-70 dark:text-foreground dark:hover:bg-white/5"
+        className="flex h-8 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-[6px] px-2 text-sm font-semibold text-foreground transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-70 dark:text-foreground dark:hover:bg-white/5"
         onClick={openPicker}
         aria-label="Open report date picker"
         disabled={disabled}
       >
         {pendingControl === "picker" ? (
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#475467] dark:text-muted-foreground" />
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-foreground-muted dark:text-muted-foreground" />
         ) : (
-          <CalendarDays className="h-4 w-4 shrink-0 text-[#475467] dark:text-muted-foreground" />
+          <CalendarDays className="h-4 w-4 shrink-0 text-foreground-muted dark:text-muted-foreground" />
         )}
         <span className="truncate">{formatDate(currentDate)}</span>
       </button>
@@ -288,7 +288,7 @@ export function ReportDateSwitcher({
               ref={pickerRef}
               role="dialog"
               aria-label="Report date picker"
-              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-[#dfe4ee] [scrollbar-gutter:stable] dark:bg-[#0f1b2a] dark:ring-[#263a55]"
+              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
               style={{
                 left: calendarPosition?.left ?? 0,
                 top: calendarPosition?.top ?? 0,
@@ -308,7 +308,7 @@ export function ReportDateSwitcher({
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <div className="text-sm font-semibold text-[#111827] dark:text-foreground">
+                <div className="text-sm font-semibold text-foreground dark:text-foreground">
                   {formatMonthLabel(pickerMonth)}
                 </div>
                 <button
@@ -323,7 +323,7 @@ export function ReportDateSwitcher({
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-              <div className="grid grid-cols-7 gap-1 px-1 pb-1 text-center text-[11px] font-semibold uppercase tracking-wide text-[#667085] dark:text-muted-foreground">
+              <div className="grid grid-cols-7 gap-1 px-1 pb-1 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground dark:text-muted-foreground">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                   (weekday) => (
                     <span key={weekday}>{weekday}</span>
@@ -340,12 +340,12 @@ export function ReportDateSwitcher({
                       key={calendarDay.value}
                       type="button"
                       className={cn(
-                        "flex h-9 items-center justify-center rounded-[7px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]",
+                        "flex h-9 items-center justify-center rounded-[7px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                         calendarDay.inCurrentMonth
-                          ? "text-[#111827] hover:bg-[#eff6ff] dark:text-foreground dark:hover:bg-white/10"
-                          : "text-[#98a2b3] hover:bg-[#f8fafc] dark:text-muted-foreground/70 dark:hover:bg-white/5",
+                          ? "text-foreground hover:bg-primary-subtle dark:text-foreground dark:hover:bg-white/10"
+                          : "text-muted-foreground-subtle hover:bg-surface-subtle dark:text-muted-foreground/70 dark:hover:bg-white/5",
                         isSelected &&
-                          "bg-[#2563eb] text-white hover:bg-[#1d4ed8] dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400",
+                          "bg-primary text-white hover:bg-primary dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400",
                         isFuture &&
                           "cursor-not-allowed opacity-35 hover:bg-transparent dark:hover:bg-transparent",
                       )}

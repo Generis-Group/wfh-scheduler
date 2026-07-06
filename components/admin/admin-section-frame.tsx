@@ -163,8 +163,8 @@ export function AdminSectionFrame({
               className={cn(
                 "reference-section-tab",
                 active
-                  ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#bfdbfe]"
-                  : "border-transparent text-[#475467] hover:text-[#111827] dark:text-muted-foreground dark:hover:text-foreground",
+                  ? "border-primary text-primary dark:border-[#60a5fa] dark:text-[#bfdbfe]"
+                  : "border-transparent text-foreground-muted hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground",
               )}
               aria-current={active ? "page" : undefined}
             >

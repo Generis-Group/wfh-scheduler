@@ -42,7 +42,7 @@ export function CardDescription({
   return (
     <p
       className={cn(
-        "text-sm leading-5 text-[#667085] dark:text-muted-foreground",
+        "text-sm leading-5 text-muted-foreground dark:text-muted-foreground",
         className,
       )}
       {...props}

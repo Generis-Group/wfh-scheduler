@@ -42,7 +42,7 @@ export function PaginationControls({
   return (
     <div
       className={cn(
-        "flex shrink-0 flex-wrap items-center justify-end gap-x-7 gap-y-2 text-sm text-[#555] dark:text-muted-foreground",
+        "flex shrink-0 flex-wrap items-center justify-end gap-x-7 gap-y-2 text-sm text-muted-foreground dark:text-muted-foreground",
         className,
       )}
       aria-label={`${itemLabel} pagination`}
@@ -50,7 +50,7 @@ export function PaginationControls({
     >
       <span
         className={cn(
-          "inline-flex h-[34px] min-w-[86px] items-center justify-end gap-1.5 text-xs font-semibold text-[#2563eb] transition-opacity dark:text-[#93c5fd]",
+          "inline-flex h-[34px] min-w-[86px] items-center justify-end gap-1.5 text-xs font-semibold text-primary transition-opacity dark:text-[#93c5fd]",
           isLoading ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         role={isLoading ? "status" : undefined}
@@ -60,7 +60,7 @@ export function PaginationControls({
         Loading
       </span>
       <label className="flex items-center gap-2 whitespace-nowrap">
-        <span className="text-sm text-[#64748b] dark:text-muted-foreground">
+        <span className="text-sm text-muted-foreground dark:text-muted-foreground">
           Rows
         </span>
         <Select
@@ -91,7 +91,7 @@ export function PaginationControls({
       >
         <button
           type="button"
-          className="grid h-[34px] min-w-[34px] place-items-center rounded-[8px] border-0 bg-transparent p-0 text-[#555] transition-colors hover:bg-[#eee] hover:text-[#111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-45 dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+          className="grid h-[34px] min-w-[34px] place-items-center rounded-[8px] border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-45 dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
           disabled={isLoading || currentPage === 1}
           aria-label="Previous page"
           title="Previous page"
@@ -104,7 +104,7 @@ export function PaginationControls({
           item.type === "dots" ? (
             <span
               key={item.key}
-              className="grid h-[34px] min-w-[34px] place-items-center rounded-[8px] text-[#aaa] dark:text-muted-foreground/70"
+              className="grid h-[34px] min-w-[34px] place-items-center rounded-[8px] text-muted-foreground-subtle dark:text-muted-foreground/70"
               aria-hidden="true"
             >
               ...
@@ -114,9 +114,9 @@ export function PaginationControls({
               key={item.page}
               type="button"
               className={cn(
-                "h-[34px] min-w-[34px] rounded-[8px] px-2 text-sm font-medium text-[#555] transition-colors hover:bg-[#eee] hover:text-[#111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-60 dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground",
+                "h-[34px] min-w-[34px] rounded-[8px] px-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60 dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground",
                 item.page === currentPage &&
-                  "bg-[#0b0b0b] text-white hover:bg-[#0b0b0b] hover:text-white dark:bg-[#020617] dark:text-white dark:hover:bg-[#020617] dark:hover:text-white",
+                  "bg-[#0b0b0b] text-white hover:bg-[#0b0b0b] hover:text-white dark:bg-background dark:text-white dark:hover:bg-background dark:hover:text-white",
               )}
               disabled={isLoading || item.page === currentPage}
               aria-current={item.page === currentPage ? "page" : undefined}
@@ -134,7 +134,7 @@ export function PaginationControls({
 
         <button
           type="button"
-          className="grid h-[34px] min-w-[34px] place-items-center rounded-[8px] border-0 bg-transparent p-0 text-[#555] transition-colors hover:bg-[#eee] hover:text-[#111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-45 dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+          className="grid h-[34px] min-w-[34px] place-items-center rounded-[8px] border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-45 dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
           disabled={isLoading || currentPage === pageCount}
           aria-label="Next page"
           title="Next page"

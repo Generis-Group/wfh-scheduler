@@ -406,8 +406,8 @@ export function SettingsPanel({
                 className={cn(
                   "reference-section-tab",
                   isActive
-                    ? "border-[#2563eb] text-[#2563eb] dark:border-[#60a5fa] dark:text-[#bfdbfe]"
-                    : "border-transparent text-[#475467] hover:text-[#111827] dark:text-muted-foreground dark:hover:text-foreground",
+                    ? "border-primary text-primary dark:border-[#60a5fa] dark:text-[#bfdbfe]"
+                    : "border-transparent text-foreground-muted hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground",
                 )}
                 aria-current={isActive ? "page" : undefined}
                 onClick={() => selectSection(section.id)}
@@ -480,7 +480,7 @@ export function SettingsPanel({
                     <Skeleton className="h-3.5 w-32 rounded-[4px]" />
                   </div>
                 ) : (
-                  <p className="text-xs text-[#64748b]">
+                  <p className="text-xs text-muted-foreground">
                     {selectedJiraSite
                       ? `Selected site: ${selectedJiraSite.name}`
                       : "Connect Jira to select a cloud site."}
@@ -519,7 +519,7 @@ export function SettingsPanel({
                     }))
                   }
                 />
-                <p className="text-xs text-[#64748b]">
+                <p className="text-xs text-muted-foreground">
                   Use `primary` unless a separate calendar should feed reports.
                 </p>
               </div>
@@ -536,7 +536,7 @@ export function SettingsPanel({
             <CardContent className="p-5">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex min-w-0 items-start gap-4">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-primary-subtle text-primary dark:bg-white/[0.06]">
                     <GoogleTasksLogo className="h-8 w-8" />
                   </span>
                   <div className="min-w-0">
@@ -551,7 +551,7 @@ export function SettingsPanel({
                 </div>
                 <Badge
                   variant="outline"
-                  className="shrink-0 bg-[#f4f7fb] text-[#475569]"
+                  className="shrink-0 bg-surface-subtle text-foreground-muted"
                 >
                   {settings.googleTaskListIds.length === 0
                     ? "All lists"
@@ -559,7 +559,7 @@ export function SettingsPanel({
                 </Badge>
               </div>
 
-              <div className="mt-4 grid max-h-52 min-w-0 gap-2 overflow-y-auto rounded-[8px] border border-[#dfe7f2] bg-white p-2 dark:border-[#263a55] dark:bg-[#0b1523]">
+              <div className="mt-4 grid max-h-52 min-w-0 gap-2 overflow-y-auto rounded-[8px] border border-border bg-white p-2 dark:border-border dark:bg-background">
                 {metadataLoading.google ? (
                   <>
                     <Skeleton className="h-10 rounded-[6px]" />
@@ -568,7 +568,7 @@ export function SettingsPanel({
                     <Skeleton className="h-10 rounded-[6px]" />
                   </>
                 ) : taskLists.length === 0 ? (
-                  <p className="col-span-full px-2 py-3 text-sm text-[#64748b]">
+                  <p className="col-span-full px-2 py-3 text-sm text-muted-foreground">
                     {providerErrors?.google
                       ? "Reconnect Google to load task lists."
                       : connectionState.google
@@ -579,9 +579,9 @@ export function SettingsPanel({
                   taskLists.map((list) => (
                     <label
                       key={list.id}
-                      className="flex h-11 items-center justify-between gap-3 rounded-[7px] bg-[#f8fafc] px-3 text-sm ring-1 ring-[#e6ebf3] transition-colors hover:bg-[#f3f8ff] dark:bg-white/[0.03] dark:ring-[#263a55] dark:hover:bg-white/[0.06]"
+                      className="flex h-11 items-center justify-between gap-3 rounded-[7px] bg-surface-subtle px-3 text-sm ring-1 ring-border transition-colors hover:bg-primary-subtle dark:bg-white/[0.03] dark:ring-border dark:hover:bg-white/[0.06]"
                     >
-                      <span className="min-w-0 truncate font-medium text-[#334155]">
+                      <span className="min-w-0 truncate font-medium text-foreground-muted">
                         {list.title}
                       </span>
                       <Checkbox
@@ -613,7 +613,7 @@ export function SettingsPanel({
             <Card>
               <CardHeader className="px-5 py-5">
                 <div className="flex items-start gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary-subtle text-primary dark:bg-white/[0.06]">
                     <Users className="h-5 w-5" />
                   </span>
                   <div>
@@ -639,14 +639,14 @@ export function SettingsPanel({
                       placeholder="GEN, OPS"
                       disabled={!canManageCompanySettings}
                     />
-                    <p className="text-xs text-[#64748b]">
+                    <p className="text-xs text-muted-foreground">
                       Leave empty to import matching Jira activity from every
                       accessible project.
                     </p>
                   </div>
                   <div className="flex justify-end">
                     <Button
-                      className="bg-[#2563eb] hover:bg-[#1d4ed8]"
+                      className="bg-primary hover:bg-primary"
                       disabled={isSavingCompany}
                     >
                       <Save className="mr-2 h-4 w-4" />
@@ -675,14 +675,14 @@ function SectionHeading({
 }) {
   return (
     <div className="flex items-start gap-4">
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-primary-subtle text-primary dark:bg-white/[0.06]">
         <Icon className="h-6 w-6" />
       </span>
       <div className="min-w-0 pt-1">
-        <h2 className="text-lg font-semibold tracking-normal text-[#111827] dark:text-foreground">
+        <h2 className="text-lg font-semibold tracking-normal text-foreground dark:text-foreground">
           {title}
         </h2>
-        <p className="mt-0.5 text-sm text-[#667085] dark:text-muted-foreground">
+        <p className="mt-0.5 text-sm text-muted-foreground dark:text-muted-foreground">
           {description}
         </p>
       </div>
@@ -792,7 +792,7 @@ function ProviderCard({
       <CardHeader className="px-5 py-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-[#eff6ff] text-[#2563eb] dark:bg-white/[0.06]">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-primary-subtle text-primary dark:bg-white/[0.06]">
               {logo}
             </span>
             <div className="min-w-0 pt-1">
@@ -808,7 +808,7 @@ function ProviderCard({
           <Button
             variant="outline"
             size="sm"
-            className="border border-[#dfe7f2] bg-white text-[#2563eb] hover:bg-[#eff6ff] dark:border-[#263a55] dark:bg-white/[0.04]"
+            className="border border-border bg-white text-primary hover:bg-primary-subtle dark:border-border dark:bg-white/[0.04]"
             disabled={!configured || disabled}
             title={configured ? connectLabel : configMessage}
             onClick={onConnect}
@@ -820,7 +820,7 @@ function ProviderCard({
             <Button
               variant="outline"
               size="sm"
-              className="border border-[#dfe7f2] bg-white text-[#111827] hover:bg-[#f8fafc] dark:border-[#263a55] dark:bg-white/[0.04]"
+              className="border border-border bg-white text-foreground hover:bg-surface-subtle dark:border-border dark:bg-white/[0.04]"
               disabled={disabled}
               onClick={onDisconnect}
             >
@@ -834,7 +834,7 @@ function ProviderCard({
           ) : null}
         </div>
         {!configured ? (
-          <p className="text-sm text-[#64748b]">{configMessage}</p>
+          <p className="text-sm text-muted-foreground">{configMessage}</p>
         ) : null}
         {error ? (
           <p className="rounded-[8px] border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -852,8 +852,8 @@ function ConnectionBadge({ connected }: { connected: boolean }) {
     <Badge
       className={
         connected
-          ? "border-[#b7e4bf] bg-[#ecfdf0] text-[#15803d] hover:bg-[#ecfdf0]"
-          : "border-[#fed7aa] bg-[#fff7ed] text-[#ea580c] hover:bg-[#fff7ed]"
+          ? "border-[#b7e4bf] bg-success-subtle text-success-subtle-foreground hover:bg-success-subtle"
+          : "border-[#fed7aa] bg-warning-subtle text-warning-subtle-foreground hover:bg-warning-subtle"
       }
       variant="outline"
     >
