@@ -286,7 +286,7 @@ describe("authenticated app shell loading boundaries", () => {
     fireEvent.click(reportsLink);
 
     expect(mockRouterPush).toHaveBeenCalledWith("/reports");
-    expect(reportsLink.className).toContain("bg-[#eff6ff]");
+    expect(reportsLink.className).toContain("bg-primary-subtle");
     expect(screen.queryByText("Current page content")).toBeNull();
     expect(screen.getByLabelText("Loading page")).toBeTruthy();
     expect(
@@ -518,7 +518,7 @@ describe("authenticated app shell loading boundaries", () => {
     fireEvent.click(adminLink);
 
     expect(mockRouterPush).toHaveBeenCalledWith("/admin/team");
-    expect(adminLink.className).toContain("bg-[#eff6ff]");
+    expect(adminLink.className).toContain("bg-primary-subtle");
     expect(screen.queryByText("Bug page content")).toBeNull();
     expect(screen.getByLabelText("Loading page")).toBeTruthy();
     expect(

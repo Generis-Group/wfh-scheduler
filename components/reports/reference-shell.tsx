@@ -586,7 +586,7 @@ export function ReferenceAppShell({
 
   const mobileNavOverlay = mobileNavOpen ? (
     <div
-      className="fixed inset-0 z-40 bg-[#0f172a]/30 backdrop-blur-[2px] xl:hidden"
+      className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[2px] xl:hidden"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           setMobileNavOpen(false);
@@ -595,14 +595,14 @@ export function ReferenceAppShell({
     >
       <aside
         ref={mobileNavRef}
-        className="flex h-full w-[min(13.5rem,calc(100vw-5.5rem))] flex-col border-r border-[#dfe5ef] bg-white shadow-[20px_0_60px_rgba(15,23,42,0.18)] dark:border-[#263a55] dark:bg-[#0f1b2a] dark:shadow-[20px_0_60px_rgba(0,0,0,0.38)]"
+        className="flex h-full w-[min(13.5rem,calc(100vw-5.5rem))] flex-col border-r border-border bg-card shadow-[20px_0_60px_rgba(15,23,42,0.18)] dark:shadow-[20px_0_60px_rgba(0,0,0,0.38)]"
         aria-label="Mobile navigation"
       >
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[#e5eaf2] px-3.5 dark:border-[#263a55]">
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3.5">
           <Link
             href={mobileLogoHref}
             {...routeLinkProps(mobileLogoHref, logoActiveKey)}
-            className="flex min-w-0 flex-1 items-center rounded-[8px] py-1 transition-colors hover:opacity-80"
+            className="flex min-w-0 flex-1 items-center rounded-lg py-1 transition-colors hover:opacity-80"
             aria-label="Generis home"
           >
             <span className="relative flex h-7 w-[132px] min-w-0 shrink items-center overflow-hidden">
@@ -616,7 +616,7 @@ export function ReferenceAppShell({
           </Link>
           <button
             type="button"
-            className="ml-auto flex h-8 w-8 items-center justify-center rounded-[8px] text-[#64748b] ring-1 ring-transparent transition-colors hover:bg-[#eef4fb] hover:text-[#0f172a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:text-[#94a3b8] dark:hover:bg-white/[0.08] dark:hover:text-[#e2e8f0]"
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground ring-1 ring-transparent transition-colors hover:bg-surface-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08] dark:hover:text-foreground"
             aria-label="Close navigation menu"
             onClick={() => {
               setMobileNavOpen(false);
@@ -641,10 +641,10 @@ export function ReferenceAppShell({
                 {...routeLinkProps(href, item.key, item.prefetch)}
                 role="menuitem"
                 className={cn(
-                  "flex min-h-10 min-w-0 items-center gap-2.5 rounded-[8px] px-3 py-2 text-[15px] font-semibold leading-5 transition-colors",
+                  "flex min-h-10 min-w-0 items-center gap-2.5 rounded-lg px-3 py-2 text-[15px] font-semibold leading-5 transition-colors",
                   activeItem
-                    ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
-                    : "text-[#475569] hover:bg-[#eef4fb] hover:text-[#0f172a] dark:text-[#94a3b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]",
+                    ? "bg-primary-subtle text-primary dark:text-primary-subtle-foreground"
+                    : "text-foreground-muted hover:bg-surface-subtle hover:text-foreground dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground",
                 )}
               >
                 <Icon className="h-[18px] w-[18px] shrink-0" />
@@ -658,13 +658,13 @@ export function ReferenceAppShell({
   ) : null;
 
   return (
-    <div className="reference-app-shell flex h-[100dvh] min-h-0 overflow-hidden bg-[#f6f8fb] text-[#111827] dark:bg-background dark:text-foreground">
-      <aside className="hidden h-full w-60 shrink-0 flex-col border-r border-[#dfe5ef] bg-white/96 dark:border-[#263a55] dark:bg-[#0b1422]/96 xl:flex">
-        <div className="flex h-12 shrink-0 items-center border-b border-[#e5eaf2] px-5 dark:border-[#263a55]">
+    <div className="reference-app-shell flex h-[100dvh] min-h-0 overflow-hidden bg-surface-subtle text-foreground dark:bg-background">
+      <aside className="hidden h-full w-60 shrink-0 flex-col border-r border-border bg-card/96 xl:flex">
+        <div className="flex h-12 shrink-0 items-center border-b border-border px-5">
           <Link
             href={logoHref}
             {...routeLinkProps(logoHref, logoActiveKey)}
-            className="flex items-center rounded-[8px] px-1.5 py-1 transition-colors hover:bg-[#f3f6fb] dark:hover:bg-white/[0.06]"
+            className="flex items-center rounded-lg px-1.5 py-1 transition-colors hover:bg-surface-subtle dark:hover:bg-white/[0.06]"
           >
             <span className="relative flex h-7 w-[136px] items-center overflow-hidden">
               <Image
@@ -691,10 +691,10 @@ export function ReferenceAppShell({
                 href={href}
                 {...routeLinkProps(href, item.key, item.prefetch)}
                 className={cn(
-                  "flex min-h-10 min-w-0 items-center gap-3 rounded-[8px] px-3 py-2 text-[15px] font-semibold leading-5 transition-colors",
+                  "flex min-h-10 min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-[15px] font-semibold leading-5 transition-colors",
                   activeItem
-                    ? "bg-[#eff6ff] text-[#2563eb] dark:bg-blue-400/10 dark:text-[#bfdbfe]"
-                    : "text-[#475569] hover:bg-[#f3f6fb] hover:text-[#111827] dark:text-[#93a4b8] dark:hover:bg-white/[0.06] dark:hover:text-foreground",
+                    ? "bg-primary-subtle text-primary dark:text-primary-subtle-foreground"
+                    : "text-foreground-muted hover:bg-surface-subtle hover:text-foreground dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground",
                 )}
                 aria-current={activeItem ? "page" : undefined}
               >
@@ -702,8 +702,8 @@ export function ReferenceAppShell({
                   className={cn(
                     "h-5 w-5 shrink-0",
                     activeItem
-                      ? "text-[#2563eb] dark:text-[#93c5fd]"
-                      : "text-[#667085] dark:text-[#93a4b8]",
+                      ? "text-primary dark:text-primary-subtle-foreground"
+                      : "text-muted-foreground",
                   )}
                 />
                 <span className="whitespace-nowrap">{item.label}</span>
@@ -713,13 +713,13 @@ export function ReferenceAppShell({
         </nav>
       </aside>
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 shrink-0 border-b border-[#dfe5ef] bg-white/94 backdrop-blur-xl dark:border-[#263a55] dark:bg-[#0b1422]/94">
+        <header className="sticky top-0 z-20 shrink-0 border-b border-border bg-card/94 backdrop-blur-xl">
           <div className="flex h-12 w-full items-center justify-between gap-3 px-[clamp(14px,1.8vw,28px)]">
             <div className="flex min-w-0 flex-1 items-center">
               <button
                 ref={mobileNavButtonRef}
                 type="button"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-white text-sm font-semibold text-[#111827] ring-1 ring-[#dfe5ef] transition-colors hover:bg-[#f6f8fb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] dark:bg-white/[0.06] dark:text-[#e2e8f0] dark:ring-white/[0.08] dark:hover:bg-white/[0.1] xl:hidden"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-card text-sm font-semibold text-foreground ring-1 ring-border transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-white/[0.06] dark:ring-white/[0.08] dark:hover:bg-white/[0.1] xl:hidden"
                 aria-label={
                   mobileNavOpen
                     ? "Close navigation menu"
@@ -745,17 +745,17 @@ export function ReferenceAppShell({
               <div ref={profileMenuRef} className="relative flex items-center">
                 {profileLoading ? (
                   <div
-                    className="flex min-w-0 items-center gap-2 rounded-[8px] px-1 py-0.5"
+                    className="flex min-w-0 items-center gap-2 rounded-lg px-1 py-0.5"
                     aria-label="Loading profile"
                     aria-busy="true"
                   >
                     <Skeleton className="h-8 w-8 rounded-full" />
-                    <Skeleton className="hidden h-4 w-28 rounded-[4px] sm:block" />
-                    <Skeleton className="h-4 w-4 rounded-[4px]" />
+                    <Skeleton className="hidden h-4 w-28 rounded-sm sm:block" />
+                    <Skeleton className="h-4 w-4 rounded-sm" />
                   </div>
                 ) : (
                   <button
-                    className="flex min-w-0 items-center gap-2 rounded-[8px] px-1 py-0.5 transition-colors hover:bg-[#f3f6fb] dark:hover:bg-white/[0.06] sm:px-1.5"
+                    className="flex min-w-0 items-center gap-2 rounded-lg px-1 py-0.5 transition-colors hover:bg-surface-subtle dark:hover:bg-white/[0.06] sm:px-1.5"
                     onClick={() => {
                       if (!profileOpen) {
                         updateProfileMenuPosition();
@@ -766,7 +766,7 @@ export function ReferenceAppShell({
                     aria-haspopup="menu"
                   >
                     <div
-                      className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111827] bg-cover bg-center text-xs font-semibold text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)] dark:bg-[#1d4ed8]"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground bg-cover bg-center text-xs font-semibold text-white shadow-[0_6px_14px_rgba(15,23,42,0.14)] dark:bg-primary"
                       style={
                         profileImage
                           ? { backgroundImage: `url("${profileImage}")` }
@@ -776,13 +776,13 @@ export function ReferenceAppShell({
                       {profileImage ? null : initials(displayName)}
                     </div>
                     <div className="hidden min-w-0 sm:block">
-                      <div className="max-w-[180px] truncate text-sm font-semibold leading-4 text-[#111827] dark:text-[#e2e8f0]">
+                      <div className="max-w-[180px] truncate text-sm font-semibold leading-4 text-foreground">
                         {displayName}
                       </div>
                     </div>
                     <ChevronDown
                       className={cn(
-                        "h-3.5 w-3.5 text-[#64748b] transition-transform dark:text-[#94a3b8]",
+                        "h-3.5 w-3.5 text-muted-foreground transition-transform",
                         profileOpen && "rotate-180",
                       )}
                     />
@@ -792,7 +792,7 @@ export function ReferenceAppShell({
                   ? createPortal(
                       <div
                         ref={profileMenuPanelRef}
-                        className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[10px] border border-[#dfe5ef] bg-[#ffffff] p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.14)] [scrollbar-gutter:stable] dark:border-[#24354c] dark:bg-[#0f1b2a] dark:shadow-[0_18px_45px_rgba(0,0,0,0.42)]"
+                        className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-1.5 shadow-surface-strong [scrollbar-gutter:stable]"
                         role="menu"
                         aria-label="Profile menu"
                         style={{
@@ -805,11 +805,11 @@ export function ReferenceAppShell({
                             : "hidden",
                         }}
                       >
-                        <div className="rounded-[8px] bg-[#f6f8fb] px-3 py-2 dark:bg-[#0b1523]">
-                          <div className="truncate text-sm font-semibold text-[#0f172a] dark:text-[#e2e8f0]">
+                        <div className="rounded-lg bg-surface-subtle px-3 py-2 dark:bg-background">
+                          <div className="truncate text-sm font-semibold text-foreground">
                             {displayName}
                           </div>
-                          <div className="text-xs text-[#64748b] dark:text-[#94a3b8]">
+                          <div className="text-xs text-muted-foreground">
                             {userEmail ??
                               (displayName ? "Signed in" : "Account")}
                           </div>
@@ -817,7 +817,7 @@ export function ReferenceAppShell({
                         <Link
                           href="/settings#account"
                           {...routeLinkProps("/settings#account", "settings")}
-                          className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#344054] transition-colors hover:bg-[#f6f8fb] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-foreground-muted transition-colors hover:bg-surface-subtle dark:text-foreground dark:hover:bg-white/[0.05]"
                         >
                           <CircleUser className="h-4 w-4" />
                           Account settings
@@ -826,14 +826,14 @@ export function ReferenceAppShell({
                           <Link
                             href="/change-password"
                             {...routeLinkProps("/change-password")}
-                            className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#344054] transition-colors hover:bg-[#f6f8fb] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-foreground-muted transition-colors hover:bg-surface-subtle dark:text-foreground dark:hover:bg-white/[0.05]"
                           >
                             <KeyRound className="h-4 w-4" />
                             Change password
                           </Link>
                         ) : null}
                         <button
-                          className="flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium text-[#344054] transition-colors hover:bg-[#f6f8fb] dark:text-[#d7e0ec] dark:hover:bg-[#17263a]"
+                          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-foreground-muted transition-colors hover:bg-surface-subtle dark:text-foreground dark:hover:bg-white/[0.05]"
                           onClick={() => {
                             signOut({ callbackUrl: "/login" });
                           }}
@@ -867,7 +867,7 @@ export function ReferenceAppShell({
           aria-hidden="true"
           className="pointer-events-none fixed inset-x-0 top-0 z-[80] h-0.5 overflow-hidden"
         >
-          <div className="reference-route-progress-bar h-full w-1/3 rounded-r-full bg-[#2563eb] shadow-[0_0_14px_rgba(37,99,235,0.45)] dark:bg-[#60a5fa]" />
+          <div className="reference-route-progress-bar h-full w-1/3 rounded-r-full bg-primary shadow-[0_0_14px_rgba(37,99,235,0.45)]" />
         </div>
       ) : null}
     </div>
@@ -1154,13 +1154,13 @@ export function ReferenceBadge({
     red: "bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-300",
     blue: "bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300",
     neutral:
-      "bg-[#f4f7fb] text-[#52647a] dark:bg-white/[0.045] dark:text-[#b5c2d3]",
+      "bg-surface-subtle text-muted-foreground dark:bg-white/[0.045] dark:text-muted-foreground",
   };
 
   return (
     <span
       className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-[7px] px-2.5 py-1 text-xs font-semibold leading-none",
+        "inline-flex items-center whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold leading-none",
         tones[tone],
         className,
       )}
@@ -1172,7 +1172,7 @@ export function ReferenceBadge({
 
 export function EmptyReferenceState({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-24 items-center justify-center rounded-[10px] border border-dashed border-[#cbd5e1] bg-[#f8fafc]/80 px-4 text-center text-sm text-[#64748b] dark:border-[#2b3c54] dark:bg-[#0b1523]/80 dark:text-muted-foreground">
+    <div className="flex min-h-24 items-center justify-center rounded-xl border border-dashed border-border-strong bg-surface-subtle/80 px-4 text-center text-sm text-muted-foreground dark:bg-background/80">
       {children}
     </div>
   );
