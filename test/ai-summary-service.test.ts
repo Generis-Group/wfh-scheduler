@@ -253,6 +253,72 @@ describe("AI summary service", () => {
     );
   });
 
+  it("keeps a descriptive work-type heading such as Bug Fixes instead of forcing Project Work", async () => {
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          heading: "Bug Fixes",
+          blocks: [
+            {
+              type: "bulletedList",
+              items: [
+                {
+                  text: "Resolved an issue with missing and multiple H1 tags.",
+                  activityTokens: ["ACTIVITY_1"],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+
+    const result = await generateDailyReportSummaryWithAI("user-1", {
+      ...report,
+      activities: [
+        {
+          ...baseActivity,
+          id: "jira-h1",
+          source: "JIRA",
+          title: "IT-4239: Fix Missing and Multiple H1 Tags",
+          description: "Corrected the missing and duplicate H1 tags.",
+        },
+      ],
+    });
+
+    expect(result.summary).toContain("## Bug Fixes");
+    expect(result.summary).not.toContain("## Project Work");
+    expect(result.summary).toContain(
+      "Resolved an issue with missing and multiple H1 tags. [IT-4239: Fix Missing and Multiple H1 Tags](https://generis.local/activity/jira-h1?source=JIRA)",
+    );
+  });
+
+  it("prompts Gemini to categorize corrective work separately from build work", async () => {
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          heading: "Project Work",
+          blocks: [
+            {
+              type: "paragraph",
+              text: "Continued build work.",
+              activityTokens: ["ACTIVITY_1"],
+            },
+          ],
+        },
+      ]),
+    );
+
+    await generateDailyReportSummaryWithAI("user-1", report);
+
+    expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
+      "Work categorization:",
+    );
+    expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
+      "Distinguish corrective work from build work",
+    );
+  });
+
   it("preserves inline activity token placement from text fields", async () => {
     generateContentMock.mockResolvedValue(
       response([
