@@ -37,12 +37,14 @@
     --surface-subtle: 210 40% 98%;
     --surface-muted: 214 32% 95%;
 
-    /* Text hierarchy between --foreground (#111827) and --muted-foreground. */
-    --foreground-muted: 215 19% 35%;
+    /* Text hierarchy between --foreground (#111827) and --muted-foreground;
+       centered on the #344054 / #475569 secondary-text family. */
+    --foreground-muted: 216 22% 31%;
     --muted-foreground-subtle: 215 20% 65%;
 
-    /* Borders: default lives in --border; strong is the emphasis/hover edge. */
-    --border-strong: 215 20% 78%;
+    /* Borders: default lives in --border; strong is the emphasis/hover edge
+       (#cbd5e1). */
+    --border-strong: 214 21% 84%;
 
     /* Brand tints for the #1d4ed8 / #eff6ff usages. */
     --primary-strong: 224 76% 48%;
@@ -72,7 +74,7 @@
     --destructive-subtle-foreground: 0 74% 42%;
 
     /* Shadow scale. */
-    --surface-shadow-sm: 0 1px 2px rgb(15 23 42 / 0.05);
+    --surface-shadow-sm: 0 1px 2px rgb(15 23 42 / 0.035);
   }
 
   .dark {
@@ -105,10 +107,10 @@
     --surface-subtle: 222 33% 10%;
     --surface-muted: 222 26% 13%;
 
-    --foreground-muted: 214 20% 74%;
+    --foreground-muted: 214 20% 76%;
     --muted-foreground-subtle: 215 16% 55%;
 
-    --border-strong: 217 24% 30%;
+    --border-strong: 214 28% 33%;
 
     --primary-strong: 217 91% 66%;
     --primary-subtle: 217 40% 18%;

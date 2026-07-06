@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex h-10 items-center justify-center whitespace-nowrap rounded-[8px] text-sm font-semibold transition-[background-color,border-color,color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex h-10 items-center justify-center whitespace-nowrap rounded-lg text-sm font-semibold transition-[background-color,border-color,color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
@@ -14,11 +14,11 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:
-          "border border-[#dfe5ef] bg-white text-[#344054] shadow-[0_1px_2px_rgba(15,23,42,0.035)] hover:border-[#cbd5e1] hover:bg-[#f8fafc] hover:text-[#111827] dark:border-[#263a55] dark:bg-white/[0.04] dark:text-foreground dark:hover:bg-white/[0.08]",
+          "border border-border bg-card text-foreground-muted shadow-surface-sm hover:border-border-strong hover:bg-surface-subtle hover:text-foreground dark:bg-white/[0.04] dark:text-foreground dark:hover:bg-white/[0.08]",
         secondary:
           "bg-secondary text-secondary-foreground shadow-none hover:bg-secondary/80",
         ghost:
-          "text-[#475569] hover:bg-[#f3f6fb] hover:text-[#111827] dark:text-muted-foreground dark:hover:bg-white/[0.08] dark:hover:text-foreground",
+          "text-foreground-muted hover:bg-surface-subtle hover:text-foreground dark:text-muted-foreground dark:hover:bg-white/[0.08] dark:hover:text-foreground",
       },
       size: {
         default: "px-4 py-2",

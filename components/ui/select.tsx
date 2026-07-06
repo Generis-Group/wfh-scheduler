@@ -206,7 +206,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
       <span
         ref={wrapperRef}
         className={cn(
-          "relative flex h-10 w-full min-w-0 items-center rounded-[8px] border border-[#dfe5ef] bg-[hsl(var(--field))] text-sm font-medium text-foreground shadow-none ring-0 transition-[background-color,border-color,box-shadow] focus-within:border-[#93b4f7] focus-within:ring-2 focus-within:ring-[#2563eb]/20 dark:border-[#263a55] dark:bg-[hsl(var(--field))]",
+          "relative flex h-10 w-full min-w-0 items-center rounded-lg border border-border bg-[hsl(var(--field))] text-sm font-medium text-foreground shadow-none ring-0 transition-[background-color,border-color,box-shadow] focus-within:border-ring/40 focus-within:ring-2 focus-within:ring-ring/20",
           open && "z-[80]",
           disabled && "cursor-not-allowed opacity-50",
           className,
@@ -272,7 +272,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           </span>
           <ChevronDown
             className={cn(
-              "h-4 w-4 shrink-0 text-[#667085] transition-transform dark:text-muted-foreground",
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
               open && "rotate-180",
             )}
             aria-hidden="true"
@@ -285,7 +285,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
                 id={listboxId}
                 role="listbox"
                 aria-labelledby={triggerId}
-                className="fixed z-[1000] overflow-y-auto rounded-[8px] border border-[#dfe5ef] bg-white p-1.5 text-sm shadow-[var(--surface-shadow-strong)] dark:border-[#263a55] dark:bg-[#0f1b2a]"
+                className="fixed z-[1000] overflow-y-auto rounded-lg border border-border bg-card p-1.5 text-sm shadow-surface-strong"
                 style={{
                   left: menuPosition?.left ?? 0,
                   top: menuPosition?.top ?? 0,
@@ -305,10 +305,10 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
                       aria-selected={selected}
                       disabled={option.disabled}
                       className={cn(
-                        "flex w-full items-center justify-between gap-2 rounded-[7px] px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] disabled:cursor-not-allowed disabled:opacity-45",
+                        "flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45",
                         selected
-                          ? "bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-400/10 dark:text-blue-100"
-                          : "text-[#344054] hover:bg-[#f6f8fb] dark:text-foreground dark:hover:bg-white/[0.055]",
+                          ? "bg-primary-subtle text-primary-subtle-foreground"
+                          : "text-foreground-muted hover:bg-surface-subtle dark:text-foreground dark:hover:bg-white/[0.055]",
                       )}
                       onClick={() => chooseOption(option.value)}
                     >
