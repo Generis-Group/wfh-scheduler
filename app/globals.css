@@ -237,96 +237,12 @@
     background-color: rgb(96 165 250 / 0.52);
   }
 
-  .dark .bg-white,
-  .dark [class*="bg-[#f7f9fc]"],
-  .dark [class*="bg-[#f8fafc]"],
-  .dark [class*="bg-[#fbfcfe]"] {
+  /* bg-white is a plain Tailwind class (not a token) still used across the
+     app; keep mapping it to the card surface in dark mode. The per-hex
+     compatibility patches that used to live here were removed once every
+     component moved onto design tokens, which carry their own dark values. */
+  .dark .bg-white {
     background-color: hsl(var(--card)) !important;
-  }
-
-  .dark [class*="bg-[#eef2f7]"],
-  .dark [class*="bg-[#eff6ff]"],
-  .dark [class*="bg-[#f3f8ff]"],
-  .dark [class*="bg-[#e2e8f0]"] {
-    background-color: hsl(var(--muted)) !important;
-  }
-
-  .dark [class*="bg-[#ecfdf0]"] {
-    background-color: rgb(6 78 59 / 0.32) !important;
-  }
-
-  .dark [class*="bg-[#fff7ed]"] {
-    background-color: rgb(124 45 18 / 0.32) !important;
-  }
-
-  .dark [class*="bg-[#fef2f2]"] {
-    background-color: rgb(127 29 29 / 0.32) !important;
-  }
-
-  .dark [class*="text-[#0f172a]"],
-  .dark [class*="text-[#111827]"],
-  .dark [class*="text-[#334155]"] {
-    color: hsl(var(--foreground)) !important;
-  }
-
-  .dark [class*="text-[#475569]"],
-  .dark [class*="text-[#64748b]"],
-  .dark [class*="text-[#94a3b8]"] {
-    color: hsl(var(--muted-foreground)) !important;
-  }
-
-  .dark [class*="text-[#2563eb]"] {
-    color: rgb(147 197 253) !important;
-  }
-
-  .dark [class*="text-[#15803d]"],
-  .dark [class*="text-[#16a34a]"] {
-    color: rgb(110 231 183) !important;
-  }
-
-  .dark [class*="text-[#ea580c]"] {
-    color: rgb(253 186 116) !important;
-  }
-
-  .dark [class*="text-[#dc2626]"],
-  .dark [class*="text-[#ef4444]"] {
-    color: rgb(252 165 165) !important;
-  }
-
-  .dark [class*="border-[#d8dee8]"],
-  .dark [class*="border-[#d9e1ec]"],
-  .dark [class*="border-[#dbe3ee]"],
-  .dark [class*="border-[#dbe5f4]"],
-  .dark [class*="border-[#dfe7f2]"],
-  .dark [class*="border-[#e2e8f0]"],
-  .dark [class*="border-[#e5eaf2]"],
-  .dark [class*="border-[#eef2f7]"],
-  .dark [class*="border-[#cbd5e1]"],
-  .dark [class*="border-[#bfdbfe]"],
-  .dark [class*="border-[#93c5fd]"],
-  .dark [class*="border-[#263a55]"],
-  .dark [class*="border-[#24354c]"],
-  .dark [class*="border-[#2b3c54]"],
-  .dark [class*="border-[#3a506d]"] {
-    border-color: hsl(var(--border) / 0.86) !important;
-  }
-
-  .dark [class*="divide-[#e2e8f0]"] > :not([hidden]) ~ :not([hidden]),
-  .dark [class*="divide-[#e5eaf2]"] > :not([hidden]) ~ :not([hidden]),
-  .dark [class*="divide-[#e6edf6]"] > :not([hidden]) ~ :not([hidden]),
-  .dark [class*="divide-[#263a55]"] > :not([hidden]) ~ :not([hidden]) {
-    border-color: hsl(var(--border) / 0.86) !important;
-  }
-
-  .dark [class*="ring-[#d9e1ec]"],
-  .dark [class*="ring-[#dbe5f4]"],
-  .dark [class*="ring-[#dfe4ee]"],
-  .dark [class*="ring-[#e1e6ef]"],
-  .dark [class*="ring-[#e5eaf2]"],
-  .dark [class*="ring-[#e6ebf3]"],
-  .dark [class*="ring-[#263a55]"],
-  .dark [class*="ring-[#3a506d]"] {
-    --tw-ring-color: hsl(var(--border) / 0.86) !important;
   }
 
   .dark input:not([type="checkbox"]):not([type="radio"]),

@@ -1,3 +1,16 @@
 {
-  "extends": ["next/core-web-vitals"]
+  "extends": ["next/core-web-vitals"],
+  "rules": {
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "Literal[value=/-\\[#(?!(?:93c5fd|bfdbfe|f5d7dc|60a5fa|8b5cf6|7c3aed|f3b8b2|eadcff|93b4f7|f8f3ff|0b0b0b|6d83d9|ff5c35|fca5a5|fb923c|86efac|0f9d58|ffb199|f4b9b0|dbe7ff|d8b4fe|b9d2ff|b7e4cf|9bb8f5|fed7aa|c7d2fe|b7e4bf|8ab7ff|facc15|b5c2d3|94a3b8|1f3047)\\])[0-9a-fA-F]{3,8}\\]/]",
+        "message": "Use a design token instead of a hardcoded hex color utility (e.g. bg-surface-subtle, text-foreground-muted, border-border). See app/globals.css for the token set. Intentional one-off accent colors can be added to the allowlist in .eslintrc.json."
+      },
+      {
+        "selector": "TemplateElement[value.raw=/-\\[#(?!(?:93c5fd|bfdbfe|f5d7dc|60a5fa|8b5cf6|7c3aed|f3b8b2|eadcff|93b4f7|f8f3ff|0b0b0b|6d83d9|ff5c35|fca5a5|fb923c|86efac|0f9d58|ffb199|f4b9b0|dbe7ff|d8b4fe|b9d2ff|b7e4cf|9bb8f5|fed7aa|c7d2fe|b7e4bf|8ab7ff|facc15|b5c2d3|94a3b8|1f3047)\\])[0-9a-fA-F]{3,8}\\]/]",
+        "message": "Use a design token instead of a hardcoded hex color utility (e.g. bg-surface-subtle, text-foreground-muted, border-border). See app/globals.css for the token set. Intentional one-off accent colors can be added to the allowlist in .eslintrc.json."
+      }
+    ]
+  }
 }
