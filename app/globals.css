@@ -308,17 +308,9 @@
     @apply mt-0.5 max-w-3xl text-[13px] leading-5 text-muted-foreground;
   }
 
-  .reference-toolbar {
-    @apply rounded-xl border border-border bg-card p-2.5 shadow-surface backdrop-blur;
-  }
-
   .reference-card {
     @apply rounded-xl border border-border bg-card shadow-surface;
     max-width: 100%;
-  }
-
-  .reference-card-muted {
-    @apply rounded-[10px] bg-muted/55 dark:bg-white/[0.035];
   }
 
   .dark .reference-app-shell {
@@ -336,17 +328,12 @@
     background-color: hsl(226 26% 7.5% / 0.96);
   }
 
-  .dark .reference-card,
-  .dark .reference-toolbar {
+  .dark .reference-card {
     border-color: hsl(var(--border) / 0.9);
     background-color: hsl(var(--card) / 0.97);
     box-shadow:
       0 18px 44px rgb(0 0 0 / 0.24),
       inset 0 1px 0 rgb(255 255 255 / 0.025);
-  }
-
-  .dark .reference-card-muted {
-    background-color: rgb(255 255 255 / 0.045);
   }
 
   .reference-content-scroll {
@@ -587,18 +574,6 @@
         -140% 0,
         0 0;
     }
-  }
-
-  .reference-label {
-    @apply mb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground;
-  }
-
-  .reference-table-head {
-    @apply border-b border-border/70 bg-transparent text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground;
-  }
-
-  .reference-table-row {
-    @apply rounded-lg bg-transparent transition-colors hover:bg-muted/50 dark:hover:bg-white/[0.04];
   }
 
   .reference-divider {
