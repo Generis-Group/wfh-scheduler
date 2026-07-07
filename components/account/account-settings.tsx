@@ -139,7 +139,7 @@ export function AccountSettings({
       <Card className="flex flex-col overflow-hidden min-[1080px]:min-h-[414px]">
         <CardHeader className="px-5 py-5">
           <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary-subtle text-primary dark:bg-white/[0.06]">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-subtle text-primary dark:bg-white/[0.06]">
               <UserRound className="h-5 w-5" />
             </span>
             <div>
@@ -152,7 +152,7 @@ export function AccountSettings({
         </CardHeader>
         <CardContent className="flex flex-1 flex-col px-5 pb-5">
           <form className="flex flex-1 flex-col gap-5" onSubmit={saveProfile}>
-            <div className="relative flex min-h-[114px] flex-wrap items-center gap-5 rounded-[8px] border border-border bg-white px-5 py-4 shadow-[inset_0_1px_0_rgba(15,23,42,0.02)] dark:border-border dark:bg-background">
+            <div className="relative flex min-h-[114px] flex-wrap items-center gap-5 rounded-lg border border-border bg-white px-5 py-4 shadow-[inset_0_1px_0_rgba(15,23,42,0.02)] dark:border-border dark:bg-background">
               <button
                 type="button"
                 className="group relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-primary bg-cover bg-center text-[30px] font-semibold text-white shadow-[0_20px_45px_rgba(29,78,216,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-primary"
@@ -247,7 +247,7 @@ export function AccountSettings({
         <Card className="overflow-hidden">
           <CardHeader className="px-5 py-5">
             <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary-subtle text-primary dark:bg-white/[0.06]">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-subtle text-primary dark:bg-white/[0.06]">
                 <KeyRound className="h-5 w-5" />
               </span>
               <div>

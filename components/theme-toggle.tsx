@@ -13,7 +13,7 @@ export function ThemeToggle() {
       type="button"
       variant="ghost"
       size="icon"
-      className="h-8 w-8 rounded-[8px] text-muted-foreground hover:bg-surface-subtle dark:text-muted-foreground-subtle dark:hover:bg-white/[0.08]"
+      className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-surface-subtle dark:text-muted-foreground-subtle dark:hover:bg-white/[0.08]"
       onClick={toggleTheme}
       aria-label="Toggle color theme"
       title="Toggle color theme"

@@ -130,10 +130,10 @@ const planLocationOptions = plannedWorkLocationValues.map((value) => ({
 }));
 
 const weekNavButtonClassName =
-  "inline-flex h-9 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-foreground-muted ring-1 ring-border transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-white/[0.04] dark:text-foreground dark:ring-border dark:hover:bg-white/[0.08]";
+  "inline-flex h-9 items-center gap-2 rounded-lg bg-white px-3 text-sm font-semibold text-foreground-muted ring-1 ring-border transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-white/[0.04] dark:text-foreground dark:ring-border dark:hover:bg-white/[0.08]";
 
 const calendarViewButtonClassName =
-  "inline-flex h-8 min-w-0 items-center justify-center rounded-[7px] px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+  "inline-flex h-8 min-w-0 items-center justify-center rounded-md px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
 function displayName(user: CalendarUser) {
   return user.name || user.email || "Employee";
@@ -561,7 +561,7 @@ function WeekPicker({
         aria-label="Jump to week"
         aria-expanded={open}
         aria-controls="work-location-week-picker"
-        className="flex h-9 w-full min-w-0 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-foreground shadow-none ring-1 ring-border transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-card dark:text-foreground dark:ring-border dark:hover:bg-white/5"
+        className="flex h-9 w-full min-w-0 items-center gap-2 rounded-lg bg-white px-3 text-sm font-semibold text-foreground shadow-none ring-1 ring-border transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-card dark:text-foreground dark:ring-border dark:hover:bg-white/5"
         onClick={() => {
           if (open) {
             setOpen(false);
@@ -588,7 +588,7 @@ function WeekPicker({
             <div
               ref={pickerMenuRef}
               id="work-location-week-picker"
-              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
+              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-lg bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
               style={{
                 left: pickerPosition?.left ?? 0,
                 top: pickerPosition?.top ?? 0,
@@ -641,7 +641,7 @@ function WeekPicker({
                       key={calendarDay.value}
                       type="button"
                       className={cn(
-                        "flex h-9 items-center justify-center rounded-[7px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                        "flex h-9 items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                         calendarDay.inCurrentMonth
                           ? "text-foreground hover:bg-primary-subtle dark:text-foreground dark:hover:bg-white/10"
                           : "text-muted-foreground-subtle hover:bg-surface-subtle dark:text-muted-foreground/70 dark:hover:bg-white/5",
@@ -771,7 +771,7 @@ function MonthPicker({
         aria-label="Jump to month"
         aria-expanded={open}
         aria-controls="work-location-month-picker"
-        className="flex h-10 w-full min-w-0 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-foreground shadow-none ring-1 ring-border transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-card dark:text-foreground dark:ring-border dark:hover:bg-white/5"
+        className="flex h-10 w-full min-w-0 items-center gap-2 rounded-lg bg-white px-3 text-sm font-semibold text-foreground shadow-none ring-1 ring-border transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-card dark:text-foreground dark:ring-border dark:hover:bg-white/5"
         onClick={() => {
           if (open) {
             setOpen(false);
@@ -798,7 +798,7 @@ function MonthPicker({
             <div
               ref={pickerMenuRef}
               id="work-location-month-picker"
-              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
+              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-lg bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
               style={{
                 left: pickerPosition?.left ?? 0,
                 top: pickerPosition?.top ?? 0,
@@ -837,7 +837,7 @@ function MonthPicker({
                       key={month.key}
                       type="button"
                       className={cn(
-                        "flex h-10 items-center justify-center rounded-[7px] text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                        "flex h-10 items-center justify-center rounded-md text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                         selected
                           ? "bg-primary text-white hover:bg-primary dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400"
                           : "text-foreground-muted hover:bg-primary-subtle hover:text-primary-subtle-foreground dark:text-foreground dark:hover:bg-white/10 dark:hover:text-blue-100",
@@ -871,7 +871,7 @@ function LocationCell({ day }: { day: CalendarDay }) {
   return (
     <span
       className={cn(
-        "inline-flex max-w-full flex-col rounded-[7px] px-2.5 py-1 text-xs font-semibold",
+        "inline-flex max-w-full flex-col rounded-md px-2.5 py-1 text-xs font-semibold",
         locationTone(day.workLocation),
       )}
     >
@@ -892,7 +892,7 @@ function WfhNameBar({ entry }: { entry: WfhCalendarEntry }) {
   if (entry.coverage === "full") {
     return (
       <div
-        className="flex h-5 min-w-0 items-center rounded-[6px] bg-emerald-500/15 px-1.5 text-[10px] font-semibold text-emerald-900 ring-1 ring-emerald-500/20 dark:bg-emerald-400/16 dark:text-emerald-100 dark:ring-emerald-300/15"
+        className="flex h-5 min-w-0 items-center rounded-sm bg-emerald-500/15 px-1.5 text-[10px] font-semibold text-emerald-900 ring-1 ring-emerald-500/20 dark:bg-emerald-400/16 dark:text-emerald-100 dark:ring-emerald-300/15"
         title={label}
       >
         <span className="min-w-0 truncate">{entry.shortName}</span>
@@ -902,12 +902,12 @@ function WfhNameBar({ entry }: { entry: WfhCalendarEntry }) {
 
   return (
     <div
-      className="relative h-5 min-w-0 rounded-[6px] bg-muted ring-1 ring-border dark:bg-white/[0.035] dark:ring-white/[0.055]"
+      className="relative h-5 min-w-0 rounded-sm bg-muted ring-1 ring-border dark:bg-white/[0.035] dark:ring-white/[0.055]"
       title={label}
     >
       <div
         className={cn(
-          "absolute inset-y-0 flex min-w-0 items-center rounded-[6px] px-1.5 text-[10px] font-semibold ring-1",
+          "absolute inset-y-0 flex min-w-0 items-center rounded-sm px-1.5 text-[10px] font-semibold ring-1",
           entry.coverage === "am"
             ? "left-0 w-1/2 bg-cyan-500/15 text-cyan-900 ring-cyan-500/20 dark:bg-cyan-400/16 dark:text-cyan-100 dark:ring-cyan-300/15"
             : "right-0 w-1/2 bg-blue-500/15 text-blue-900 ring-blue-500/20 dark:bg-blue-400/16 dark:text-blue-100 dark:ring-blue-300/15",
@@ -1031,7 +1031,7 @@ function WfhCalendarGrid({
           {["Mon", "Tue", "Wed", "Thu", "Fri"].map((weekday) => (
             <div
               key={weekday}
-              className="bg-surface-subtle px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground first:rounded-tl-[7px] last:rounded-tr-[7px] dark:bg-white/[0.035] dark:text-muted-foreground"
+              className="bg-surface-subtle px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground first:rounded-tl-md last:rounded-tr-md dark:bg-white/[0.035] dark:text-muted-foreground"
             >
               {weekday}
             </div>
@@ -1054,10 +1054,10 @@ function WfhCalendarGrid({
                       "bg-surface-subtle text-muted-foreground-subtle dark:bg-white/[0.018] dark:text-muted-foreground/70",
                     weekIndex === weeks.length - 1 &&
                       dayIndex === 0 &&
-                      "rounded-bl-[7px]",
+                      "rounded-bl-md",
                     weekIndex === weeks.length - 1 &&
                       dayIndex === week.length - 1 &&
-                      "rounded-br-[7px]",
+                      "rounded-br-md",
                   )}
                 >
                   <div className="flex min-w-0 items-center justify-between gap-2">
@@ -1085,7 +1085,7 @@ function WfhCalendarGrid({
                         type="button"
                         aria-label={`Show all WFH people for ${dateLabel}`}
                         aria-expanded={isOpen}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-muted text-foreground-muted ring-1 ring-border transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-white/[0.055] dark:text-foreground dark:ring-white/[0.08] dark:hover:bg-white/[0.09]"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-muted text-foreground-muted ring-1 ring-border transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-white/[0.055] dark:text-foreground dark:ring-white/[0.08] dark:hover:bg-white/[0.09]"
                         onClick={(event) =>
                           toggleOverflowMenu(calendarDay.date, event)
                         }
@@ -1106,7 +1106,7 @@ function WfhCalendarGrid({
               ref={overflowMenuRef}
               role="dialog"
               aria-label={`WFH people for ${openOverflowDateLabel}`}
-              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
+              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-lg bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
               style={{
                 left: openOverflowMenu.left,
                 top: openOverflowMenu.top,
@@ -1121,7 +1121,7 @@ function WfhCalendarGrid({
                 {openOverflowEntries.map((entry) => (
                   <div
                     key={`${entry.id}:overflow`}
-                    className="flex min-w-0 items-center justify-between gap-2 rounded-[7px] px-2 py-1.5 text-sm text-foreground dark:text-foreground"
+                    className="flex min-w-0 items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-foreground dark:text-foreground"
                   >
                     <span className="min-w-0 truncate font-semibold">
                       {entry.name}
@@ -1347,7 +1347,7 @@ export function WorkLocationCalendar({
           <div
             role="tablist"
             aria-label="Location view"
-            className="inline-flex min-w-0 rounded-[8px] bg-surface-subtle p-1 ring-1 ring-border dark:bg-white/[0.04] dark:ring-border"
+            className="inline-flex min-w-0 rounded-lg bg-surface-subtle p-1 ring-1 ring-border dark:bg-white/[0.04] dark:ring-border"
           >
             <button
               type="button"
@@ -1431,7 +1431,7 @@ export function WorkLocationCalendar({
                 <div
                   key={date}
                   className={cn(
-                    "grid min-w-0 gap-2 rounded-[8px] bg-surface-subtle p-2.5 transition-colors dark:bg-white/[0.035]",
+                    "grid min-w-0 gap-2 rounded-lg bg-surface-subtle p-2.5 transition-colors dark:bg-white/[0.035]",
                     plan &&
                       "bg-primary-subtle dark:bg-blue-400/[0.075]",
                   )}
@@ -1490,7 +1490,7 @@ export function WorkLocationCalendar({
                   onChange={(event) => setEmployeeSearch(event.target.value)}
                   placeholder="Search by name, email, or department"
                   aria-label="Search people"
-                  className="h-10 w-full rounded-[8px] bg-[hsl(var(--field))] pl-9 pr-3 text-sm font-medium text-foreground shadow-none ring-1 ring-border transition-colors placeholder:text-muted-foreground-subtle hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-border dark:hover:bg-white/5"
+                  className="h-10 w-full rounded-lg bg-[hsl(var(--field))] pl-9 pr-3 text-sm font-medium text-foreground shadow-none ring-1 ring-border transition-colors placeholder:text-muted-foreground-subtle hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-border dark:hover:bg-white/5"
                 />
               </span>
             </label>
@@ -1592,7 +1592,7 @@ export function WorkLocationCalendar({
             </table>
           </div>
           {filteredRows.length === 0 ? (
-            <div className="mt-3 rounded-[8px] border border-dashed border-border-strong bg-surface-subtle px-4 py-6 text-center text-sm text-muted-foreground dark:border-border dark:bg-white/[0.03] dark:text-muted-foreground">
+            <div className="mt-3 rounded-lg border border-dashed border-border-strong bg-surface-subtle px-4 py-6 text-center text-sm text-muted-foreground dark:border-border dark:bg-white/[0.03] dark:text-muted-foreground">
               {rows.length === 0
                 ? "No employees found for this department view."
                 : "No people match your search."}
@@ -1631,7 +1631,7 @@ export function WorkLocationCalendar({
                   onChange={(event) => setEmployeeSearch(event.target.value)}
                   placeholder="Search by name, email, or department"
                   aria-label="Search people"
-                  className="h-10 w-full rounded-[8px] bg-[hsl(var(--field))] pl-9 pr-3 text-sm font-medium text-foreground shadow-none ring-1 ring-border transition-colors placeholder:text-muted-foreground-subtle hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-border dark:hover:bg-white/5"
+                  className="h-10 w-full rounded-lg bg-[hsl(var(--field))] pl-9 pr-3 text-sm font-medium text-foreground shadow-none ring-1 ring-border transition-colors placeholder:text-muted-foreground-subtle hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-[hsl(var(--field))] dark:text-foreground dark:ring-border dark:hover:bg-white/5"
                 />
               </span>
             </label>
@@ -1671,7 +1671,7 @@ export function WorkLocationCalendar({
             entriesByDate={calendarEntriesByDate}
           />
           {filteredMonthRows.length === 0 ? (
-            <div className="mt-3 rounded-[8px] border border-dashed border-border-strong bg-surface-subtle px-4 py-6 text-center text-sm text-muted-foreground dark:border-border dark:bg-white/[0.03] dark:text-muted-foreground">
+            <div className="mt-3 rounded-lg border border-dashed border-border-strong bg-surface-subtle px-4 py-6 text-center text-sm text-muted-foreground dark:border-border dark:bg-white/[0.03] dark:text-muted-foreground">
               {monthRows.length === 0
                 ? "No employees found for this department view."
                 : "No people match your search."}

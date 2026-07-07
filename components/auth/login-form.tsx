@@ -25,7 +25,7 @@ type SignupDepartment = {
 };
 
 const oauthButtonClassName =
-  "flex h-10 w-full items-center justify-center gap-3 rounded-[8px] border border-border bg-white px-3 text-sm font-semibold text-foreground-muted shadow-[0_1px_2px_rgba(15,23,42,0.035)] transition-colors hover:border-border-strong hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-border dark:bg-white/[0.04] dark:text-foreground dark:hover:bg-white/[0.08]";
+  "flex h-10 w-full items-center justify-center gap-3 rounded-lg border border-border bg-white px-3 text-sm font-semibold text-foreground-muted shadow-[0_1px_2px_rgba(15,23,42,0.035)] transition-colors hover:border-border-strong hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-border dark:bg-white/[0.04] dark:text-foreground dark:hover:bg-white/[0.08]";
 
 export function LoginForm({
   oauthConfig,
@@ -300,12 +300,12 @@ export function LoginForm({
               </div>
               <div className="space-y-2">
                 <Label>Department</Label>
-                <div className="grid max-h-36 gap-2 overflow-y-auto rounded-[8px] border border-border bg-white p-2 dark:border-border dark:bg-white/[0.03]">
+                <div className="grid max-h-36 gap-2 overflow-y-auto rounded-lg border border-border bg-white p-2 dark:border-border dark:bg-white/[0.03]">
                   {departments?.length ? (
                     departments.map((department) => (
                       <label
                         key={department.id}
-                        className="flex min-h-8 items-center gap-2 rounded-[7px] px-2 text-sm font-medium text-foreground-muted transition-colors hover:bg-surface-subtle dark:text-foreground dark:hover:bg-white/[0.06]"
+                        className="flex min-h-8 items-center gap-2 rounded-md px-2 text-sm font-medium text-foreground-muted transition-colors hover:bg-surface-subtle dark:text-foreground dark:hover:bg-white/[0.06]"
                       >
                         <input
                           type="checkbox"
@@ -373,7 +373,7 @@ export function LoginForm({
               </Button>
             </form>
           ) : null}
-          <p className="rounded-[8px] bg-surface-subtle px-3 py-2 text-xs font-medium text-muted-foreground dark:bg-white/[0.035] dark:text-muted-foreground">
+          <p className="rounded-lg bg-surface-subtle px-3 py-2 text-xs font-medium text-muted-foreground dark:bg-white/[0.035] dark:text-muted-foreground">
             Only @generisgp.com accounts can sign in.
           </p>
           {!oauthConfig.google || !oauthConfig.atlassian ? (

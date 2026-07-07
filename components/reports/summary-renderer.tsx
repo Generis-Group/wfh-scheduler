@@ -148,14 +148,14 @@ function renderActivityReference(
         <summary className="summary-activity-reference cursor-pointer list-none [&::-webkit-details-marker]:hidden">
           {content}
         </summary>
-        <span className="absolute left-0 top-full z-30 mt-1 flex w-56 flex-col rounded-[10px] bg-white p-1 text-sm shadow-[0_16px_38px_rgba(15,23,42,0.16)] ring-1 ring-border dark:bg-card dark:ring-border">
+        <span className="absolute left-0 top-full z-30 mt-1 flex w-56 flex-col rounded-xl bg-white p-1 text-sm shadow-[0_16px_38px_rgba(15,23,42,0.16)] ring-1 ring-border dark:bg-card dark:ring-border">
           {links.map((item) => (
             <a
               key={item.href}
               href={item.href}
               target="_blank"
               rel="noreferrer"
-              className="rounded-[7px] px-3 py-2 text-left font-medium text-foreground-muted hover:bg-primary-subtle hover:text-primary-subtle-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
+              className="rounded-md px-3 py-2 text-left font-medium text-foreground-muted hover:bg-primary-subtle hover:text-primary-subtle-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-foreground dark:hover:bg-blue-400/10 dark:hover:text-blue-200"
             >
               {item.label}
             </a>

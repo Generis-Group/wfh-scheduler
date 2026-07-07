@@ -4,7 +4,7 @@ export function SummaryEditorToolbarSkeleton() {
   return (
     <div className="mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
       {Array.from({ length: 5 }).map((_, index) => (
-        <Skeleton key={index} className="h-7 w-7 rounded-[7px]" />
+        <Skeleton key={index} className="h-7 w-7 rounded-md" />
       ))}
     </div>
   );
@@ -19,12 +19,12 @@ export function SummaryEditorBodySkeleton() {
       role="status"
     >
       <div className="summary-tiptap-skeleton-body">
-        <Skeleton className="h-4 w-11/12 rounded-[4px]" />
-        <Skeleton className="mt-3 h-4 w-4/5 rounded-[4px]" />
-        <Skeleton className="mt-3 h-4 w-9/12 rounded-[4px]" />
-        <Skeleton className="mt-7 h-4 w-10/12 rounded-[4px]" />
-        <Skeleton className="mt-3 h-4 w-7/12 rounded-[4px]" />
-        <Skeleton className="mt-7 h-4 w-8/12 rounded-[4px]" />
+        <Skeleton className="h-4 w-11/12 rounded-sm" />
+        <Skeleton className="mt-3 h-4 w-4/5 rounded-sm" />
+        <Skeleton className="mt-3 h-4 w-9/12 rounded-sm" />
+        <Skeleton className="mt-7 h-4 w-10/12 rounded-sm" />
+        <Skeleton className="mt-3 h-4 w-7/12 rounded-sm" />
+        <Skeleton className="mt-7 h-4 w-8/12 rounded-sm" />
       </div>
     </div>
   );

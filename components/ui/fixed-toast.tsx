@@ -18,7 +18,7 @@ export function FixedToast({ message, onDismiss, className }: FixedToastProps) {
   return (
     <div
       className={cn(
-        "fixed bottom-5 right-5 z-50 flex max-w-[min(420px,calc(100vw-2.5rem))] items-start gap-3 rounded-[12px] bg-white px-4 py-3 text-sm font-medium text-foreground-muted shadow-[0_18px_42px_rgba(15,23,42,0.18)] ring-1 ring-border dark:bg-card dark:text-foreground dark:ring-border",
+        "fixed bottom-5 right-5 z-50 flex max-w-[min(420px,calc(100vw-2.5rem))] items-start gap-3 rounded-xl bg-white px-4 py-3 text-sm font-medium text-foreground-muted shadow-[0_18px_42px_rgba(15,23,42,0.18)] ring-1 ring-border dark:bg-card dark:text-foreground dark:ring-border",
         className,
       )}
       role="status"
@@ -27,7 +27,7 @@ export function FixedToast({ message, onDismiss, className }: FixedToastProps) {
       <span className="min-w-0 flex-1">{message}</span>
       <button
         type="button"
-        className="-mr-1 -mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+        className="-mr-1 -mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
         aria-label="Dismiss message"
         onClick={onDismiss}
       >

@@ -122,9 +122,9 @@ const defaultDepartmentPageSize = defaultPaginationPageSize;
 const dirtyControlClassName =
   "bg-primary-subtle ring-[#93c5fd] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.08),0_0_0_3px_rgba(37,99,235,0.08)] dark:bg-blue-400/10 dark:ring-blue-300/45";
 const teamMemberCheckboxClass =
-  "h-4 w-4 [&_span]:rounded-[4px] [&_svg]:h-3 [&_svg]:w-3";
+  "h-4 w-4 [&_span]:rounded-sm [&_svg]:h-3 [&_svg]:w-3";
 const teamActionCheckboxClass =
-  "h-3.5 w-3.5 [&_span]:rounded-[4px] [&_svg]:h-2.5 [&_svg]:w-2.5";
+  "h-3.5 w-3.5 [&_span]:rounded-sm [&_svg]:h-2.5 [&_svg]:w-2.5";
 const teamBulkActionOptions: Array<{
   value: TeamBulkAction;
   label: string;
@@ -1289,7 +1289,7 @@ export function AdminUsers({
                 <CardTitle>Team members</CardTitle>
               </CardHeader>
               <CardContent className="flex min-h-0 flex-1 flex-col gap-1.5 px-2 pb-0 pt-0">
-                <div className="grid gap-2 rounded-[8px] bg-surface-subtle/70 p-1.5 dark:bg-white/[0.025] min-[900px]:grid-cols-[minmax(240px,1fr)_auto] min-[900px]:items-center">
+                <div className="grid gap-2 rounded-lg bg-surface-subtle/70 p-1.5 dark:bg-white/[0.025] min-[900px]:grid-cols-[minmax(240px,1fr)_auto] min-[900px]:items-center">
                   <div className="relative min-w-0">
                     <Search
                       className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground dark:text-muted-foreground"
@@ -1305,7 +1305,7 @@ export function AdminUsers({
                   </div>
 
                   <div className="flex min-w-0 items-center justify-between gap-2">
-                    <label className="inline-flex h-8 min-w-0 items-center gap-2 rounded-[7px] px-2 text-xs font-semibold text-foreground-muted dark:text-muted-foreground min-[900px]:hidden">
+                    <label className="inline-flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs font-semibold text-foreground-muted dark:text-muted-foreground min-[900px]:hidden">
                       <Checkbox
                         checked={allVisibleUsersSelected}
                         disabled={visibleUserIds.length === 0}
@@ -1365,7 +1365,7 @@ export function AdminUsers({
                     <span>Reviewer dept.</span>
                   </div>
                   {filteredUsers.length === 0 ? (
-                    <div className="rounded-[8px] bg-surface-subtle py-5 text-center text-xs text-muted-foreground dark:bg-background">
+                    <div className="rounded-lg bg-surface-subtle py-5 text-center text-xs text-muted-foreground dark:bg-background">
                       {users.length === 0
                         ? "No users have been created yet."
                         : "No team members match this search."}
@@ -1401,7 +1401,7 @@ export function AdminUsers({
                           aria-label={`${userLabel} assignments`}
                           data-selected={userSelected}
                           className={cn(
-                            "reference-team-member-row-grid cursor-pointer rounded-[8px] bg-surface-subtle/82 px-2 py-1.5 shadow-[0_4px_14px_rgba(15,23,42,0.028)] transition-colors hover:bg-primary-subtle dark:bg-white/[0.035] dark:hover:bg-blue-400/10 min-[900px]:min-h-14",
+                            "reference-team-member-row-grid cursor-pointer rounded-lg bg-surface-subtle/82 px-2 py-1.5 shadow-[0_4px_14px_rgba(15,23,42,0.028)] transition-colors hover:bg-primary-subtle dark:bg-white/[0.035] dark:hover:bg-blue-400/10 min-[900px]:min-h-14",
                             userSelected &&
                               "bg-primary-subtle ring-1 ring-[#bfdbfe] shadow-[0_4px_14px_rgba(15,23,42,0.04)] dark:bg-blue-400/10 dark:ring-blue-300/25",
                           )}
@@ -1616,7 +1616,7 @@ export function AdminUsers({
               <Card className="ring-0 shadow-[0_12px_34px_rgba(15,23,42,0.055)] dark:ring-0 min-[1180px]:self-start">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 p-2 pb-1">
                   <CardTitle>Actions</CardTitle>
-                  <span className="rounded-[999px] bg-primary-subtle px-2 py-0.5 text-[11px] font-semibold text-primary dark:bg-blue-400/10 dark:text-[#bfdbfe]">
+                  <span className="rounded-full bg-primary-subtle px-2 py-0.5 text-[11px] font-semibold text-primary dark:bg-blue-400/10 dark:text-[#bfdbfe]">
                     {selectedUsers.length} selected
                   </span>
                 </CardHeader>
@@ -1638,7 +1638,7 @@ export function AdminUsers({
                         <label
                           key={action.value}
                           className={cn(
-                            "flex h-8 items-center gap-2 rounded-[7px] px-2 text-xs font-semibold transition-colors",
+                            "flex h-8 items-center gap-2 rounded-md px-2 text-xs font-semibold transition-colors",
                             !disabled &&
                               "cursor-pointer hover:bg-primary-subtle dark:hover:bg-white/[0.05]",
                             checked &&
@@ -1757,7 +1757,7 @@ export function AdminUsers({
                         {pagedDepartments.map((department) => (
                           <div
                             key={department.id}
-                            className="flex min-w-0 items-center gap-1.5 rounded-[8px] bg-surface-subtle px-2 py-1.5 ring-1 ring-border dark:bg-white/[0.04] dark:ring-white/[0.08]"
+                            className="flex min-w-0 items-center gap-1.5 rounded-lg bg-surface-subtle px-2 py-1.5 ring-1 ring-border dark:bg-white/[0.04] dark:ring-white/[0.08]"
                             title={department.name}
                           >
                             <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground-muted dark:text-foreground">
@@ -1765,7 +1765,7 @@ export function AdminUsers({
                             </span>
                             <button
                               type="button"
-                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:pointer-events-none disabled:opacity-50 dark:text-muted-foreground dark:hover:bg-red-400/10 dark:hover:text-red-300"
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:pointer-events-none disabled:opacity-50 dark:text-muted-foreground dark:hover:bg-red-400/10 dark:hover:text-red-300"
                               aria-label={`Remove ${department.name} department`}
                               title={`Remove ${department.name} department`}
                               disabled={
@@ -1799,7 +1799,7 @@ export function AdminUsers({
                   />
                   {departmentToDelete ? (
                     <div
-                      className="rounded-[8px] bg-red-50 p-2 ring-1 ring-red-200 dark:bg-red-400/10 dark:ring-red-400/25"
+                      className="rounded-lg bg-red-50 p-2 ring-1 ring-red-200 dark:bg-red-400/10 dark:ring-red-400/25"
                       aria-live="polite"
                     >
                       <div className="text-xs font-semibold text-red-700 dark:text-red-200">
@@ -1870,7 +1870,7 @@ function TemporaryCredentialsPopup({
 
   return (
     <aside
-      className="fixed right-4 top-4 z-50 w-[min(560px,calc(100vw-2rem))] rounded-[12px] bg-white p-4 text-sm text-foreground shadow-[0_24px_70px_rgba(15,23,42,0.22)] ring-1 ring-border dark:bg-card dark:text-foreground dark:ring-white/[0.08]"
+      className="fixed right-4 top-4 z-50 w-[min(560px,calc(100vw-2rem))] rounded-xl bg-white p-4 text-sm text-foreground shadow-[0_24px_70px_rgba(15,23,42,0.22)] ring-1 ring-border dark:bg-card dark:text-foreground dark:ring-white/[0.08]"
       role="dialog"
       aria-labelledby="temporary-password-title"
       aria-live="polite"
@@ -1894,7 +1894,7 @@ function TemporaryCredentialsPopup({
         </div>
         <button
           type="button"
-          className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+          className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
           aria-label="Close temporary password"
           onClick={onDismiss}
         >
@@ -1907,7 +1907,7 @@ function TemporaryCredentialsPopup({
           {credentials.map((credential) => (
             <div
               key={`${credential.email}-${credential.password}`}
-              className="grid gap-2 rounded-[8px] bg-surface-subtle p-2 ring-1 ring-border dark:bg-white/[0.04] dark:ring-white/[0.08] sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+              className="grid gap-2 rounded-lg bg-surface-subtle p-2 ring-1 ring-border dark:bg-white/[0.04] dark:ring-white/[0.08] sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
             >
               <div className="min-w-0">
                 <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground dark:text-muted-foreground">

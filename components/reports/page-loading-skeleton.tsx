@@ -50,7 +50,7 @@ function LoadingHeader({
   return (
     <div className="reference-page-header shrink-0">
       <div className="min-w-0">
-        <LoadingBar className={`h-7 ${titleWidth} max-w-full rounded-[4px]`} />
+        <LoadingBar className={`h-7 ${titleWidth} max-w-full rounded-sm`} />
       </div>
       {actions ? <div className="shrink-0">{actions}</div> : null}
     </div>
@@ -60,8 +60,8 @@ function LoadingHeader({
 function HeaderActionSkeletons() {
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <LoadingBar className="h-10 w-32 rounded-[8px]" />
-      <LoadingBar className="h-10 w-36 rounded-[8px]" />
+      <LoadingBar className="h-10 w-32 rounded-lg" />
+      <LoadingBar className="h-10 w-36 rounded-lg" />
     </div>
   );
 }
@@ -75,8 +75,8 @@ function DateToolbarSkeleton({
     <LoadingCard className="mb-3 shrink-0">
       <div className="grid gap-2 min-[760px]:h-10 min-[760px]:grid-cols-[minmax(240px,300px)_auto] min-[760px]:items-center min-[760px]:justify-between">
         <div className="flex max-w-[300px] gap-2">
-          <LoadingBar className="h-10 w-10 shrink-0 rounded-[8px]" />
-          <LoadingBar className="h-10 flex-1 rounded-[8px]" />
+          <LoadingBar className="h-10 w-10 shrink-0 rounded-lg" />
+          <LoadingBar className="h-10 flex-1 rounded-lg" />
         </div>
         {showTrailingActions ? <HeaderActionSkeletons /> : null}
       </div>
@@ -87,8 +87,8 @@ function DateToolbarSkeleton({
 function PaginationFooterSkeleton() {
   return (
     <div className="reference-paginated-footer flex justify-end gap-7 px-3 pb-3 pt-5">
-      <LoadingBar className="h-[34px] w-28 rounded-[8px]" />
-      <LoadingBar className="h-[34px] w-36 rounded-[8px]" />
+      <LoadingBar className="h-[34px] w-28 rounded-lg" />
+      <LoadingBar className="h-[34px] w-36 rounded-lg" />
     </div>
   );
 }
@@ -100,50 +100,50 @@ function DailySkeleton() {
         titleWidth="w-72"
         actions={
           <div className="flex flex-wrap gap-2 max-[639px]:w-full max-[639px]:flex-col max-[639px]:items-stretch">
-            <LoadingBar className="h-10 w-32 rounded-[8px] max-[639px]:w-full" />
-            <LoadingBar className="h-10 w-36 rounded-[8px] max-[639px]:w-full" />
+            <LoadingBar className="h-10 w-32 rounded-lg max-[639px]:w-full" />
+            <LoadingBar className="h-10 w-36 rounded-lg max-[639px]:w-full" />
           </div>
         }
       />
       <LoadingCard className="mb-3 shrink-0 max-[639px]:p-2.5">
         <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
           <div className="flex w-full gap-2 sm:w-[300px]">
-            <LoadingBar className="h-10 w-10 shrink-0 rounded-[7px]" />
-            <LoadingBar className="h-10 flex-1 rounded-[7px]" />
+            <LoadingBar className="h-10 w-10 shrink-0 rounded-md" />
+            <LoadingBar className="h-10 flex-1 rounded-md" />
           </div>
-          <LoadingBar className="h-10 w-full rounded-[7px] sm:w-[220px]" />
+          <LoadingBar className="h-10 w-full rounded-md sm:w-[220px]" />
         </div>
       </LoadingCard>
       <div className="daily-report-layout grid grid-cols-[minmax(0,1fr)] gap-3 min-[1200px]:min-h-0 min-[1200px]:flex-1 min-[1200px]:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)] min-[1500px]:grid-cols-[minmax(0,1.18fr)_minmax(480px,0.82fr)]">
         <LoadingCard className="daily-report-panel flex min-h-[520px] min-w-0 max-w-full flex-col min-[1200px]:min-h-0">
           <div className="grid gap-3 min-[900px]:flex min-[900px]:items-start min-[900px]:justify-between">
             <div className="flex items-center gap-2">
-              <LoadingBar className="h-6 w-24 rounded-[4px]" />
+              <LoadingBar className="h-6 w-24 rounded-sm" />
               <LoadingBar className="h-6 w-14 rounded-full" />
             </div>
             <div className="grid min-w-0 grid-cols-2 gap-2 min-[900px]:flex min-[900px]:w-auto">
-              <LoadingBar className="h-9 min-w-0 rounded-[7px] min-[900px]:w-28" />
-              <LoadingBar className="h-9 min-w-0 rounded-[7px] min-[900px]:w-28" />
+              <LoadingBar className="h-9 min-w-0 rounded-md min-[900px]:w-28" />
+              <LoadingBar className="h-9 min-w-0 rounded-md min-[900px]:w-28" />
             </div>
           </div>
-          <LoadingBar className="mt-3 h-9 rounded-[7px]" />
+          <LoadingBar className="mt-3 h-9 rounded-md" />
           <div className="daily-work-items-list reference-row-scroll mt-3 min-h-[320px] space-y-2 p-1 min-[1200px]:min-h-0 min-[1200px]:flex-1">
             {Array.from({ length: 5 }).map((_, index) => (
               <div
                 key={index}
-                className="flex min-w-0 flex-col gap-2 rounded-[8px] bg-white px-3 py-2.5 ring-1 ring-border dark:bg-card dark:ring-border min-[900px]:grid min-[900px]:min-h-[68px] min-[900px]:grid-cols-[24px_34px_minmax(0,1fr)_58px_28px] min-[900px]:items-center min-[900px]:gap-2.5"
+                className="flex min-w-0 flex-col gap-2 rounded-lg bg-white px-3 py-2.5 ring-1 ring-border dark:bg-card dark:ring-border min-[900px]:grid min-[900px]:min-h-[68px] min-[900px]:grid-cols-[24px_34px_minmax(0,1fr)_58px_28px] min-[900px]:items-center min-[900px]:gap-2.5"
               >
                 <div className="flex min-w-0 items-start gap-2.5 min-[900px]:contents">
-                  <LoadingBar className="mt-1 h-4 w-4 shrink-0 rounded-[4px] min-[900px]:mt-0" />
-                  <LoadingBar className="h-8 w-8 shrink-0 rounded-[7px]" />
+                  <LoadingBar className="mt-1 h-4 w-4 shrink-0 rounded-sm min-[900px]:mt-0" />
+                  <LoadingBar className="h-8 w-8 shrink-0 rounded-md" />
                   <div className="min-w-0 flex-1 min-[900px]:flex-none">
-                    <LoadingBar className="h-4 w-full max-w-[360px] rounded-[4px]" />
-                    <LoadingBar className="mt-2 h-3 w-28 max-w-full rounded-[4px]" />
+                    <LoadingBar className="h-4 w-full max-w-[360px] rounded-sm" />
+                    <LoadingBar className="mt-2 h-3 w-28 max-w-full rounded-sm" />
                   </div>
                 </div>
                 <div className="flex min-w-0 items-center justify-between gap-2 pl-[3.875rem] min-[900px]:contents min-[900px]:pl-0">
                   <LoadingBar className="h-6 w-20 rounded-full" />
-                  <LoadingBar className="h-7 w-7 shrink-0 rounded-[7px]" />
+                  <LoadingBar className="h-7 w-7 shrink-0 rounded-md" />
                 </div>
               </div>
             ))}
@@ -151,16 +151,16 @@ function DailySkeleton() {
         </LoadingCard>
         <LoadingCard className="daily-report-panel daily-summary-panel flex min-h-[520px] min-w-0 max-w-full flex-col min-[1200px]:min-h-0">
           <div className="flex items-center justify-between gap-3">
-            <LoadingBar className="h-6 w-28 rounded-[4px]" />
-            <LoadingBar className="h-8 w-24 rounded-[7px]" />
+            <LoadingBar className="h-6 w-28 rounded-sm" />
+            <LoadingBar className="h-8 w-24 rounded-md" />
           </div>
-          <div className="mt-3 flex min-h-0 flex-1 flex-col rounded-[8px] bg-white ring-1 ring-border dark:bg-card dark:ring-border">
-            <LoadingBar className="m-3 h-5 w-40 rounded-[4px]" />
-            <LoadingBar className="mx-3 h-4 w-[82%] rounded-[4px]" />
-            <LoadingBar className="mx-3 mt-2 h-4 w-[74%] rounded-[4px]" />
-            <LoadingBar className="mx-3 mt-2 h-4 w-[88%] rounded-[4px]" />
+          <div className="mt-3 flex min-h-0 flex-1 flex-col rounded-lg bg-white ring-1 ring-border dark:bg-card dark:ring-border">
+            <LoadingBar className="m-3 h-5 w-40 rounded-sm" />
+            <LoadingBar className="mx-3 h-4 w-[82%] rounded-sm" />
+            <LoadingBar className="mx-3 mt-2 h-4 w-[74%] rounded-sm" />
+            <LoadingBar className="mx-3 mt-2 h-4 w-[88%] rounded-sm" />
             <div className="mt-auto border-t border-border p-3 dark:border-border">
-              <LoadingBar className="h-9 rounded-[7px]" />
+              <LoadingBar className="h-9 rounded-md" />
             </div>
           </div>
         </LoadingCard>
@@ -175,10 +175,10 @@ function ReportsSkeleton() {
       <LoadingHeader titleWidth="w-64" />
       <LoadingCard className="mb-3 shrink-0">
         <div className="grid gap-3 min-[980px]:grid-cols-[minmax(260px,1fr)_190px_320px_150px]">
-          <LoadingBar className="h-11 rounded-[8px]" />
-          <LoadingBar className="h-11 rounded-[8px]" />
-          <LoadingBar className="h-11 rounded-[8px]" />
-          <LoadingBar className="h-11 rounded-[8px]" />
+          <LoadingBar className="h-11 rounded-lg" />
+          <LoadingBar className="h-11 rounded-lg" />
+          <LoadingBar className="h-11 rounded-lg" />
+          <LoadingBar className="h-11 rounded-lg" />
         </div>
       </LoadingCard>
       <section className="reference-card reference-paginated-surface min-[1024px]:flex-1">
@@ -186,10 +186,10 @@ function ReportsSkeleton() {
           <div
             className={`sticky top-0 z-10 hidden border-b border-border bg-white px-4 py-3 dark:border-border dark:bg-card ${reportHistorySkeletonGridClass}`}
           >
-            <LoadingBar className="h-4 w-16 rounded-[4px]" />
-            <LoadingBar className="h-4 w-16 rounded-[4px]" />
-            <LoadingBar className="h-4 w-20 rounded-[4px]" />
-            <LoadingBar className="ml-auto h-4 w-16 rounded-[4px]" />
+            <LoadingBar className="h-4 w-16 rounded-sm" />
+            <LoadingBar className="h-4 w-16 rounded-sm" />
+            <LoadingBar className="h-4 w-20 rounded-sm" />
+            <LoadingBar className="ml-auto h-4 w-16 rounded-sm" />
           </div>
           <div className="divide-y divide-border dark:divide-border">
             {Array.from({ length: 5 }).map((_, index) => (
@@ -198,17 +198,17 @@ function ReportsSkeleton() {
                 className={`space-y-3 px-4 py-3 min-[860px]:min-h-[86px] min-[860px]:space-y-0 ${reportHistorySkeletonGridClass}`}
               >
                 <div>
-                  <LoadingBar className="h-4 w-24 rounded-[4px]" />
-                  <LoadingBar className="mt-2 h-3 w-12 rounded-[4px]" />
+                  <LoadingBar className="h-4 w-24 rounded-sm" />
+                  <LoadingBar className="mt-2 h-3 w-12 rounded-sm" />
                 </div>
-                <LoadingBar className="h-6 w-20 rounded-[7px]" />
+                <LoadingBar className="h-6 w-20 rounded-md" />
                 <div className="min-w-0">
-                  <LoadingBar className="h-5 w-full max-w-[360px] rounded-[4px]" />
-                  <LoadingBar className="mt-2 h-4 w-32 rounded-[4px]" />
+                  <LoadingBar className="h-5 w-full max-w-[360px] rounded-sm" />
+                  <LoadingBar className="mt-2 h-4 w-32 rounded-sm" />
                 </div>
                 <div className="flex justify-start gap-3 min-[860px]:justify-end">
-                  <LoadingBar className="h-9 w-20 rounded-[7px]" />
-                  <LoadingBar className="h-8 w-8 rounded-[8px]" />
+                  <LoadingBar className="h-9 w-20 rounded-md" />
+                  <LoadingBar className="h-8 w-8 rounded-lg" />
                 </div>
               </div>
             ))}
@@ -230,28 +230,28 @@ function ReviewTableSkeleton() {
         <thead className="sticky top-0 z-10 bg-white dark:bg-card">
           <tr className="border-b border-border dark:border-border">
             <th className="w-[32px] px-1 py-2 min-[700px]:w-[36px] min-[700px]:px-2">
-              <LoadingBar className="h-4 w-4 rounded-[4px]" />
+              <LoadingBar className="h-4 w-4 rounded-sm" />
             </th>
             <th className="w-[43%] px-2 py-2 min-[700px]:w-[30%] min-[980px]:w-[24%] min-[1180px]:w-[22%]">
-              <LoadingBar className="h-4 w-20 rounded-[4px]" />
+              <LoadingBar className="h-4 w-20 rounded-sm" />
             </th>
             <th className="hidden w-[15%] px-2 py-2 min-[760px]:table-cell">
-              <LoadingBar className="h-4 w-24 rounded-[4px]" />
+              <LoadingBar className="h-4 w-24 rounded-sm" />
             </th>
             <th className="w-[24%] px-2 py-2 min-[700px]:w-[16%] min-[980px]:w-[12%]">
-              <LoadingBar className="h-4 w-16 rounded-[4px]" />
+              <LoadingBar className="h-4 w-16 rounded-sm" />
             </th>
             <th className="hidden w-[16%] px-2 py-2 min-[1180px]:table-cell">
-              <LoadingBar className="h-4 w-14 rounded-[4px]" />
+              <LoadingBar className="h-4 w-14 rounded-sm" />
             </th>
             <th className="hidden w-[12%] px-2 py-2 min-[980px]:table-cell">
-              <LoadingBar className="h-4 w-20 rounded-[4px]" />
+              <LoadingBar className="h-4 w-20 rounded-sm" />
             </th>
             <th className="hidden w-[16%] px-2 py-2 min-[700px]:table-cell min-[980px]:w-[14%]">
-              <LoadingBar className="h-4 w-20 rounded-[4px]" />
+              <LoadingBar className="h-4 w-20 rounded-sm" />
             </th>
             <th className="w-[58px] px-1 py-2 min-[700px]:w-[68px] min-[700px]:px-2">
-              <LoadingBar className="ml-auto h-4 w-14 rounded-[4px]" />
+              <LoadingBar className="ml-auto h-4 w-14 rounded-sm" />
             </th>
           </tr>
         </thead>
@@ -262,32 +262,32 @@ function ReviewTableSkeleton() {
               className="h-14 border-b border-border last:border-b-0 dark:border-border"
             >
               <td className="px-1 py-2.5 min-[700px]:px-2">
-                <LoadingBar className="h-4 w-4 rounded-[4px]" />
+                <LoadingBar className="h-4 w-4 rounded-sm" />
               </td>
               <td className="min-w-0 px-2 py-2.5">
                 <div className="flex min-w-0 items-center gap-2 min-[700px]:gap-3">
                   <LoadingBar className="h-2 w-2 rounded-full" />
                   <LoadingBar className="h-8 w-8 rounded-full" />
-                  <LoadingBar className="h-4 w-28 rounded-[4px]" />
+                  <LoadingBar className="h-4 w-28 rounded-sm" />
                 </div>
               </td>
               <td className="hidden px-2 py-2.5 min-[760px]:table-cell">
-                <LoadingBar className="h-4 w-16 rounded-[4px]" />
+                <LoadingBar className="h-4 w-16 rounded-sm" />
               </td>
               <td className="px-2 py-2.5">
-                <LoadingBar className="h-6 w-20 rounded-[7px]" />
+                <LoadingBar className="h-6 w-20 rounded-md" />
               </td>
               <td className="hidden px-2 py-2.5 min-[1180px]:table-cell">
                 <LoadingBar className="h-6 w-16 rounded-full" />
               </td>
               <td className="hidden px-2 py-2.5 min-[980px]:table-cell">
-                <LoadingBar className="h-4 w-14 rounded-[4px]" />
+                <LoadingBar className="h-4 w-14 rounded-sm" />
               </td>
               <td className="hidden px-2 py-2.5 min-[700px]:table-cell">
-                <LoadingBar className="h-4 w-20 rounded-[4px]" />
+                <LoadingBar className="h-4 w-20 rounded-sm" />
               </td>
               <td className="px-1 py-2.5 text-right min-[700px]:px-2">
-                <LoadingBar className="ml-auto h-8 w-8 rounded-[7px]" />
+                <LoadingBar className="ml-auto h-8 w-8 rounded-md" />
               </td>
             </tr>
           ))}
@@ -305,14 +305,14 @@ function ReviewSkeleton() {
       <section className="reference-card reference-paginated-surface min-[1024px]:flex-1">
         <div className="grid shrink-0 gap-3 p-3 min-[1180px]:grid-cols-[auto_minmax(0,1fr)] min-[1180px]:items-start">
           <div className="flex min-w-0 items-center gap-3 pt-1">
-            <LoadingBar className="h-7 w-40 rounded-[4px]" />
-            <LoadingBar className="h-9 w-36 rounded-[9px]" />
+            <LoadingBar className="h-7 w-40 rounded-sm" />
+            <LoadingBar className="h-9 w-36 rounded-lg" />
           </div>
           <div className="grid w-full gap-2 min-[760px]:grid-cols-[minmax(220px,1fr)_minmax(190px,260px)] min-[1040px]:grid-cols-[minmax(220px,1fr)_minmax(190px,260px)_minmax(232px,280px)_auto] min-[1180px]:justify-self-end">
-            <LoadingBar className="h-10 rounded-[8px]" />
-            <LoadingBar className="h-10 rounded-[8px]" />
-            <LoadingBar className="h-10 rounded-[8px]" />
-            <LoadingBar className="h-10 w-16 rounded-[8px]" />
+            <LoadingBar className="h-10 rounded-lg" />
+            <LoadingBar className="h-10 rounded-lg" />
+            <LoadingBar className="h-10 rounded-lg" />
+            <LoadingBar className="h-10 w-16 rounded-lg" />
           </div>
         </div>
         <ReviewTableSkeleton />
@@ -327,37 +327,37 @@ export function AdminTeamSectionSkeleton() {
     <div className="reference-admin-team-layout grid items-start gap-3 min-[1180px]:h-full min-[1180px]:min-h-0 min-[1180px]:items-stretch">
       <section className="reference-card reference-paginated-surface min-[1180px]:h-full min-[1180px]:self-stretch">
         <div className="p-2.5 pb-1">
-          <LoadingBar className="h-6 w-36 rounded-[4px]" />
+          <LoadingBar className="h-6 w-36 rounded-sm" />
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-2 pb-0 pt-0">
-          <div className="grid gap-2 rounded-[8px] bg-surface-subtle/70 p-1.5 dark:bg-white/[0.025] min-[900px]:grid-cols-[minmax(240px,1fr)_auto] min-[900px]:items-center">
-            <LoadingBar className="h-8 rounded-[8px]" />
+          <div className="grid gap-2 rounded-lg bg-surface-subtle/70 p-1.5 dark:bg-white/[0.025] min-[900px]:grid-cols-[minmax(240px,1fr)_auto] min-[900px]:items-center">
+            <LoadingBar className="h-8 rounded-lg" />
             <div className="grid gap-2 min-[520px]:grid-cols-[auto_auto] min-[520px]:items-center min-[900px]:justify-end">
-              <LoadingBar className="h-4 w-24 rounded-[4px]" />
-              <LoadingBar className="h-8 w-[104px] rounded-[7px]" />
+              <LoadingBar className="h-4 w-24 rounded-sm" />
+              <LoadingBar className="h-8 w-[104px] rounded-md" />
             </div>
           </div>
           <div className="reference-paginated-viewport reference-visible-rows-viewport reference-team-member-viewport space-y-1 pr-1 min-[1180px]:mt-1">
             <div className="reference-team-member-header reference-team-member-row-grid sticky top-0 z-10 hidden bg-white px-2 dark:bg-card min-[900px]:grid">
-              <LoadingBar className="h-4 w-4 rounded-[4px]" />
-              <LoadingBar className="h-3 w-24 rounded-[4px]" />
-              <LoadingBar className="h-3 w-12 rounded-[4px]" />
-              <LoadingBar className="h-3 w-24 rounded-[4px]" />
-              <LoadingBar className="h-3 w-24 rounded-[4px]" />
+              <LoadingBar className="h-4 w-4 rounded-sm" />
+              <LoadingBar className="h-3 w-24 rounded-sm" />
+              <LoadingBar className="h-3 w-12 rounded-sm" />
+              <LoadingBar className="h-3 w-24 rounded-sm" />
+              <LoadingBar className="h-3 w-24 rounded-sm" />
             </div>
             {Array.from({ length: 5 }).map((_, index) => (
               <div
                 key={index}
-                className="reference-team-member-row-grid rounded-[8px] bg-surface-subtle/82 px-2 py-1.5 dark:bg-white/[0.035] min-[900px]:min-h-14"
+                className="reference-team-member-row-grid rounded-lg bg-surface-subtle/82 px-2 py-1.5 dark:bg-white/[0.035] min-[900px]:min-h-14"
               >
-                <LoadingBar className="h-4 w-4 rounded-[4px]" />
+                <LoadingBar className="h-4 w-4 rounded-sm" />
                 <div className="min-w-0">
-                  <LoadingBar className="h-4 w-32 rounded-[4px]" />
-                  <LoadingBar className="mt-2 h-3 w-40 max-w-full rounded-[4px]" />
+                  <LoadingBar className="h-4 w-32 rounded-sm" />
+                  <LoadingBar className="mt-2 h-3 w-40 max-w-full rounded-sm" />
                 </div>
-                <LoadingBar className="col-span-2 h-8 rounded-[8px] min-[900px]:col-span-1" />
-                <LoadingBar className="col-span-2 h-8 rounded-[8px] min-[900px]:col-span-1" />
-                <LoadingBar className="col-span-2 h-8 rounded-[8px] min-[900px]:col-span-1" />
+                <LoadingBar className="col-span-2 h-8 rounded-lg min-[900px]:col-span-1" />
+                <LoadingBar className="col-span-2 h-8 rounded-lg min-[900px]:col-span-1" />
+                <LoadingBar className="col-span-2 h-8 rounded-lg min-[900px]:col-span-1" />
               </div>
             ))}
           </div>
@@ -366,25 +366,25 @@ export function AdminTeamSectionSkeleton() {
       </section>
       <div className="min-w-0 space-y-2 min-[1180px]:grid min-[1180px]:h-full min-[1180px]:min-h-0 min-[1180px]:grid-rows-[auto_minmax(0,1fr)] min-[1180px]:content-stretch min-[1180px]:gap-2 min-[1180px]:space-y-0">
         <LoadingCard className="p-2">
-          <LoadingBar className="h-6 w-40 rounded-[4px]" />
-          <LoadingBar className="mt-2 h-4 w-56 max-w-full rounded-[4px]" />
+          <LoadingBar className="h-6 w-40 rounded-sm" />
+          <LoadingBar className="mt-2 h-4 w-56 max-w-full rounded-sm" />
           <div className="mt-3 space-y-1.5">
-            <LoadingBar className="h-8 rounded-[8px]" />
-            <LoadingBar className="h-8 rounded-[8px]" />
-            <LoadingBar className="h-8 rounded-[8px]" />
-            <LoadingBar className="h-8 rounded-[8px]" />
+            <LoadingBar className="h-8 rounded-lg" />
+            <LoadingBar className="h-8 rounded-lg" />
+            <LoadingBar className="h-8 rounded-lg" />
+            <LoadingBar className="h-8 rounded-lg" />
           </div>
         </LoadingCard>
         <LoadingCard className="p-2 min-[1180px]:self-end">
           <div className="flex items-center justify-between gap-2">
-            <LoadingBar className="h-6 w-20 rounded-[4px]" />
+            <LoadingBar className="h-6 w-20 rounded-sm" />
             <LoadingBar className="h-5 w-16 rounded-full" />
           </div>
           <div className="mt-3 space-y-2">
-            <LoadingBar className="h-8 rounded-[7px]" />
-            <LoadingBar className="h-8 rounded-[7px]" />
-            <LoadingBar className="h-8 rounded-[7px]" />
-            <LoadingBar className="h-8 rounded-[8px]" />
+            <LoadingBar className="h-8 rounded-md" />
+            <LoadingBar className="h-8 rounded-md" />
+            <LoadingBar className="h-8 rounded-md" />
+            <LoadingBar className="h-8 rounded-lg" />
           </div>
         </LoadingCard>
       </div>
@@ -397,20 +397,20 @@ export function AdminDepartmentsSectionSkeleton() {
     <div className="grid items-start gap-3 min-[900px]:grid-cols-[minmax(0,1fr)]">
       <div className="min-w-0 min-[900px]:flex min-[900px]:h-full min-[900px]:min-h-0 min-[900px]:flex-col">
         <LoadingCard className="min-[900px]:flex min-[900px]:min-h-0 min-[900px]:flex-1 min-[900px]:flex-col">
-          <LoadingBar className="h-6 w-32 rounded-[4px]" />
-          <LoadingBar className="mt-2 h-4 w-[min(34rem,90%)] rounded-[4px]" />
+          <LoadingBar className="h-6 w-32 rounded-sm" />
+          <LoadingBar className="mt-2 h-4 w-[min(34rem,90%)] rounded-sm" />
           <div className="mt-3 flex gap-2">
-            <LoadingBar className="h-8 flex-1 rounded-[8px]" />
-            <LoadingBar className="h-8 w-16 rounded-[7px]" />
+            <LoadingBar className="h-8 flex-1 rounded-lg" />
+            <LoadingBar className="h-8 w-16 rounded-md" />
           </div>
           <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-hidden pr-1">
             {Array.from({ length: 8 }).map((_, index) => (
               <div
                 key={index}
-                className="flex min-h-10 items-center gap-2 rounded-[8px] bg-surface-subtle px-2 py-1.5 ring-1 ring-border dark:bg-white/[0.04] dark:ring-white/[0.08]"
+                className="flex min-h-10 items-center gap-2 rounded-lg bg-surface-subtle px-2 py-1.5 ring-1 ring-border dark:bg-white/[0.04] dark:ring-white/[0.08]"
               >
-                <LoadingBar className="h-4 flex-1 rounded-[4px]" />
-                <LoadingBar className="h-7 w-7 rounded-[7px]" />
+                <LoadingBar className="h-4 flex-1 rounded-sm" />
+                <LoadingBar className="h-7 w-7 rounded-md" />
               </div>
             ))}
           </div>
@@ -426,9 +426,9 @@ export function AdminReportsSectionSkeleton() {
     <section className="reference-card reference-paginated-surface p-0 min-[1024px]:h-full">
       <div className="shrink-0 border-b border-border p-3 dark:border-border">
         <div className="flex flex-col gap-3 min-[820px]:flex-row min-[820px]:items-center">
-          <LoadingBar className="h-10 min-w-0 flex-1 rounded-[8px]" />
-          <LoadingBar className="h-10 w-full rounded-[8px] min-[820px]:w-44" />
-          <LoadingBar className="h-4 w-24 rounded-[4px] min-[820px]:ml-auto" />
+          <LoadingBar className="h-10 min-w-0 flex-1 rounded-lg" />
+          <LoadingBar className="h-10 w-full rounded-lg min-[820px]:w-44" />
+          <LoadingBar className="h-4 w-24 rounded-sm min-[820px]:ml-auto" />
         </div>
       </div>
       <div className="min-h-0 min-[1024px]:flex-1 min-[1024px]:overflow-hidden">
@@ -440,20 +440,20 @@ export function AdminReportsSectionSkeleton() {
                   <LoadingBar className="h-10 w-10 shrink-0 rounded-full" />
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <LoadingBar className="h-4 w-32 rounded-[4px]" />
-                      <LoadingBar className="h-6 w-20 rounded-[7px]" />
+                      <LoadingBar className="h-4 w-32 rounded-sm" />
+                      <LoadingBar className="h-6 w-20 rounded-md" />
                     </div>
-                    <LoadingBar className="mt-2 h-3 w-56 max-w-full rounded-[4px]" />
-                    <LoadingBar className="mt-2 h-4 w-full max-w-[520px] rounded-[4px]" />
+                    <LoadingBar className="mt-2 h-3 w-56 max-w-full rounded-sm" />
+                    <LoadingBar className="mt-2 h-4 w-full max-w-[520px] rounded-sm" />
                   </div>
                 </div>
               </div>
-              <LoadingBar className="h-9 w-24 rounded-[7px]" />
+              <LoadingBar className="h-9 w-24 rounded-md" />
               <div className="grid grid-cols-2 gap-2 min-[860px]:block min-[860px]:space-y-2">
-                <LoadingBar className="h-8 rounded-[7px]" />
-                <LoadingBar className="h-8 rounded-[7px]" />
+                <LoadingBar className="h-8 rounded-md" />
+                <LoadingBar className="h-8 rounded-md" />
               </div>
-              <LoadingBar className="h-9 rounded-[7px] min-[860px]:w-28" />
+              <LoadingBar className="h-9 rounded-md min-[860px]:w-28" />
             </article>
           ))}
         </div>
@@ -490,14 +490,14 @@ function AdminSkeleton({
         titleWidth="w-72"
         actions={
           section === "team" ? (
-            <LoadingBar className="h-10 w-32 rounded-[8px]" />
+            <LoadingBar className="h-10 w-32 rounded-lg" />
           ) : null
         }
       />
       <div className="reference-section-tabs">
-        <LoadingBar className="h-8 w-36 rounded-[4px]" />
-        <LoadingBar className="h-8 w-32 rounded-[4px]" />
-        <LoadingBar className="h-8 w-44 rounded-[4px]" />
+        <LoadingBar className="h-8 w-36 rounded-sm" />
+        <LoadingBar className="h-8 w-32 rounded-sm" />
+        <LoadingBar className="h-8 w-44 rounded-sm" />
       </div>
       <AdminSectionSkeleton section={section} />
     </>
@@ -508,21 +508,21 @@ function BugComposerSkeleton() {
   return (
     <LoadingCard className="min-[980px]:flex min-[980px]:h-full min-[980px]:min-h-0 min-[980px]:flex-col">
       <div className="flex items-start gap-3">
-        <LoadingBar className="h-10 w-10 shrink-0 rounded-[10px]" />
+        <LoadingBar className="h-10 w-10 shrink-0 rounded-xl" />
         <div className="min-w-0 flex-1">
-          <LoadingBar className="h-6 w-44 rounded-[4px]" />
-          <LoadingBar className="mt-2 h-4 w-64 max-w-full rounded-[4px]" />
+          <LoadingBar className="h-6 w-44 rounded-sm" />
+          <LoadingBar className="mt-2 h-4 w-64 max-w-full rounded-sm" />
         </div>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <LoadingBar className="h-10 rounded-[8px]" />
-        <LoadingBar className="h-10 rounded-[8px]" />
+        <LoadingBar className="h-10 rounded-lg" />
+        <LoadingBar className="h-10 rounded-lg" />
       </div>
-      <LoadingBar className="mt-3 h-10 rounded-[8px]" />
-      <LoadingBar className="mt-3 min-h-[180px] flex-1 rounded-[8px]" />
+      <LoadingBar className="mt-3 h-10 rounded-lg" />
+      <LoadingBar className="mt-3 min-h-[180px] flex-1 rounded-lg" />
       <div className="mt-4 flex flex-wrap justify-end gap-2">
-        <LoadingBar className="h-9 w-32 rounded-[8px]" />
-        <LoadingBar className="h-9 w-28 rounded-[8px]" />
+        <LoadingBar className="h-9 w-32 rounded-lg" />
+        <LoadingBar className="h-9 w-28 rounded-lg" />
       </div>
     </LoadingCard>
   );
@@ -534,22 +534,22 @@ function BugInboxSkeleton() {
       <div className="border-b border-border p-3 pb-2 dark:border-border">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <LoadingBar className="h-6 w-40 rounded-[4px]" />
-            <LoadingBar className="mt-2 h-3 w-24 rounded-[4px]" />
+            <LoadingBar className="h-6 w-40 rounded-sm" />
+            <LoadingBar className="mt-2 h-3 w-24 rounded-sm" />
           </div>
-          <LoadingBar className="h-8 w-32 rounded-[8px]" />
+          <LoadingBar className="h-8 w-32 rounded-lg" />
         </div>
       </div>
       <div className="space-y-2 p-3 min-[980px]:flex min-[980px]:min-h-0 min-[980px]:flex-1 min-[980px]:flex-col min-[980px]:gap-2 min-[980px]:space-y-0">
-        <LoadingBar className="h-9 rounded-[8px]" />
+        <LoadingBar className="h-9 rounded-lg" />
         <div className="min-h-0 space-y-2 overflow-hidden pr-1 min-[980px]:flex-1">
           {Array.from({ length: 5 }).map((_, index) => (
             <div
               key={index}
-              className="rounded-[8px] bg-surface-subtle p-3 ring-1 ring-border dark:bg-white/[0.035] dark:ring-border"
+              className="rounded-lg bg-surface-subtle p-3 ring-1 ring-border dark:bg-white/[0.035] dark:ring-border"
             >
-              <LoadingBar className="h-4 w-[70%] rounded-[4px]" />
-              <LoadingBar className="mt-2 h-3 w-[52%] rounded-[4px]" />
+              <LoadingBar className="h-4 w-[70%] rounded-sm" />
+              <LoadingBar className="mt-2 h-3 w-[52%] rounded-sm" />
               <LoadingBar className="mt-3 h-5 w-24 rounded-full" />
             </div>
           ))}
@@ -574,9 +574,9 @@ function BugsSkeleton() {
 function SettingsTabsSkeleton() {
   return (
     <div className="reference-section-tabs">
-      <LoadingBar className="h-8 w-28 rounded-[4px]" />
-      <LoadingBar className="h-8 w-36 rounded-[4px]" />
-      <LoadingBar className="h-8 w-28 rounded-[4px]" />
+      <LoadingBar className="h-8 w-28 rounded-sm" />
+      <LoadingBar className="h-8 w-36 rounded-sm" />
+      <LoadingBar className="h-8 w-28 rounded-sm" />
     </div>
   );
 }
@@ -587,46 +587,46 @@ function SettingsAccountSkeleton() {
       <LoadingCard className="flex min-h-[414px] flex-col overflow-hidden p-0">
         <div className="px-5 py-5">
           <div className="flex items-start gap-3">
-            <LoadingBar className="h-10 w-10 shrink-0 rounded-[10px]" />
+            <LoadingBar className="h-10 w-10 shrink-0 rounded-xl" />
             <div>
-              <LoadingBar className="h-6 w-24 rounded-[4px]" />
-              <LoadingBar className="mt-2 h-4 w-64 max-w-full rounded-[4px]" />
+              <LoadingBar className="h-6 w-24 rounded-sm" />
+              <LoadingBar className="mt-2 h-4 w-64 max-w-full rounded-sm" />
             </div>
           </div>
         </div>
         <div className="flex flex-1 flex-col px-5 pb-5">
-          <div className="flex min-h-[114px] flex-wrap items-center gap-5 rounded-[8px] border border-border bg-white px-5 py-4 dark:border-border dark:bg-background">
+          <div className="flex min-h-[114px] flex-wrap items-center gap-5 rounded-lg border border-border bg-white px-5 py-4 dark:border-border dark:bg-background">
             <LoadingBar className="h-20 w-20 shrink-0 rounded-full" />
             <div className="min-w-0 flex-1 basis-48">
-              <LoadingBar className="h-5 w-44 rounded-[4px]" />
-              <LoadingBar className="mt-2 h-4 w-56 max-w-full rounded-[4px]" />
+              <LoadingBar className="h-5 w-44 rounded-sm" />
+              <LoadingBar className="mt-2 h-4 w-56 max-w-full rounded-sm" />
             </div>
           </div>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <LoadingBar className="h-11 rounded-[8px]" />
-            <LoadingBar className="h-11 rounded-[8px]" />
+            <LoadingBar className="h-11 rounded-lg" />
+            <LoadingBar className="h-11 rounded-lg" />
           </div>
           <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5 dark:border-border">
-            <LoadingBar className="h-4 w-36 rounded-[4px]" />
-            <LoadingBar className="h-10 w-40 rounded-[8px]" />
+            <LoadingBar className="h-4 w-36 rounded-sm" />
+            <LoadingBar className="h-10 w-40 rounded-lg" />
           </div>
         </div>
       </LoadingCard>
       <LoadingCard className="overflow-hidden p-0">
         <div className="px-5 py-5">
           <div className="flex items-start gap-3">
-            <LoadingBar className="h-10 w-10 shrink-0 rounded-[10px]" />
+            <LoadingBar className="h-10 w-10 shrink-0 rounded-xl" />
             <div>
-              <LoadingBar className="h-6 w-28 rounded-[4px]" />
-              <LoadingBar className="mt-2 h-4 w-56 max-w-full rounded-[4px]" />
+              <LoadingBar className="h-6 w-28 rounded-sm" />
+              <LoadingBar className="mt-2 h-4 w-56 max-w-full rounded-sm" />
             </div>
           </div>
         </div>
         <div className="space-y-4 px-5 pb-5">
-          <LoadingBar className="h-10 rounded-[8px]" />
-          <LoadingBar className="h-10 rounded-[8px]" />
-          <LoadingBar className="h-10 rounded-[8px]" />
-          <LoadingBar className="h-10 rounded-[8px]" />
+          <LoadingBar className="h-10 rounded-lg" />
+          <LoadingBar className="h-10 rounded-lg" />
+          <LoadingBar className="h-10 rounded-lg" />
+          <LoadingBar className="h-10 rounded-lg" />
         </div>
       </LoadingCard>
     </div>
@@ -642,10 +642,10 @@ function SettingsIntegrationsSkeleton() {
             <div className="px-5 py-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 items-start gap-4">
-                  <LoadingBar className="h-12 w-12 shrink-0 rounded-[10px]" />
+                  <LoadingBar className="h-12 w-12 shrink-0 rounded-xl" />
                   <div className="min-w-0 pt-1">
-                    <LoadingBar className="h-6 w-40 rounded-[4px]" />
-                    <LoadingBar className="mt-2 h-4 w-64 max-w-full rounded-[4px]" />
+                    <LoadingBar className="h-6 w-40 rounded-sm" />
+                    <LoadingBar className="mt-2 h-4 w-64 max-w-full rounded-sm" />
                   </div>
                 </div>
                 <LoadingBar className="h-6 w-24 shrink-0 rounded-full" />
@@ -653,11 +653,11 @@ function SettingsIntegrationsSkeleton() {
             </div>
             <div className="space-y-4 px-5 pb-5">
               <div className="flex flex-wrap gap-2">
-                <LoadingBar className="h-9 w-32 rounded-[8px]" />
-                <LoadingBar className="h-9 w-28 rounded-[8px]" />
+                <LoadingBar className="h-9 w-32 rounded-lg" />
+                <LoadingBar className="h-9 w-28 rounded-lg" />
               </div>
-              <LoadingBar className="h-10 rounded-[8px]" />
-              <LoadingBar className="h-4 w-52 max-w-full rounded-[4px]" />
+              <LoadingBar className="h-10 rounded-lg" />
+              <LoadingBar className="h-4 w-52 max-w-full rounded-sm" />
             </div>
           </LoadingCard>
         ))}
@@ -665,17 +665,17 @@ function SettingsIntegrationsSkeleton() {
       <LoadingCard className="overflow-hidden p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
-            <LoadingBar className="h-12 w-12 shrink-0 rounded-[10px]" />
+            <LoadingBar className="h-12 w-12 shrink-0 rounded-xl" />
             <div>
-              <LoadingBar className="h-6 w-40 rounded-[4px]" />
-              <LoadingBar className="mt-2 h-4 w-72 max-w-full rounded-[4px]" />
+              <LoadingBar className="h-6 w-40 rounded-sm" />
+              <LoadingBar className="mt-2 h-4 w-72 max-w-full rounded-sm" />
             </div>
           </div>
           <LoadingBar className="h-6 w-20 rounded-full" />
         </div>
-        <div className="mt-4 grid max-h-52 gap-2 overflow-hidden rounded-[8px] border border-border bg-white p-2 dark:border-border dark:bg-background">
+        <div className="mt-4 grid max-h-52 gap-2 overflow-hidden rounded-lg border border-border bg-white p-2 dark:border-border dark:bg-background">
           {Array.from({ length: 4 }).map((_, index) => (
-            <LoadingBar key={index} className="h-10 rounded-[6px]" />
+            <LoadingBar key={index} className="h-10 rounded-sm" />
           ))}
         </div>
       </LoadingCard>
@@ -687,26 +687,26 @@ function SettingsCompanySkeleton() {
   return (
     <div className="min-w-0 space-y-4 min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:overflow-hidden">
       <div className="flex items-start gap-4">
-        <LoadingBar className="h-12 w-12 shrink-0 rounded-[10px]" />
+        <LoadingBar className="h-12 w-12 shrink-0 rounded-xl" />
         <div className="min-w-0 pt-1">
-          <LoadingBar className="h-6 w-28 rounded-[4px]" />
-          <LoadingBar className="mt-2 h-4 w-72 max-w-full rounded-[4px]" />
+          <LoadingBar className="h-6 w-28 rounded-sm" />
+          <LoadingBar className="mt-2 h-4 w-72 max-w-full rounded-sm" />
         </div>
       </div>
       <LoadingCard className="p-0">
         <div className="px-5 py-5">
           <div className="flex items-start gap-3">
-            <LoadingBar className="h-10 w-10 shrink-0 rounded-[10px]" />
+            <LoadingBar className="h-10 w-10 shrink-0 rounded-xl" />
             <div>
-              <LoadingBar className="h-6 w-40 rounded-[4px]" />
-              <LoadingBar className="mt-2 h-4 w-64 max-w-full rounded-[4px]" />
+              <LoadingBar className="h-6 w-40 rounded-sm" />
+              <LoadingBar className="mt-2 h-4 w-64 max-w-full rounded-sm" />
             </div>
           </div>
         </div>
         <div className="px-5 pb-5">
-          <LoadingBar className="h-10 rounded-[8px]" />
+          <LoadingBar className="h-10 rounded-lg" />
           <div className="mt-4 flex justify-end">
-            <LoadingBar className="h-10 w-44 rounded-[8px]" />
+            <LoadingBar className="h-10 w-44 rounded-lg" />
           </div>
         </div>
       </LoadingCard>

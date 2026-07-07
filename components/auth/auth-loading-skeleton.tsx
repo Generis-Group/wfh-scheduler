@@ -34,25 +34,25 @@ export function AuthLoadingSkeleton({
           aria-label="Loading"
         >
           <CardHeader className="space-y-2 px-5 pt-5 text-center">
-            <Skeleton className="mx-auto h-8 w-52 rounded-[4px]" />
-            <Skeleton className="h-4 w-72 max-w-full rounded-[4px]" />
+            <Skeleton className="mx-auto h-8 w-52 rounded-sm" />
+            <Skeleton className="h-4 w-72 max-w-full rounded-sm" />
           </CardHeader>
           <CardContent className="space-y-4 px-5 pb-5">
             {Array.from({ length: fields }).map((_, index) => (
               <div key={index} className="space-y-2">
-                <Skeleton className="h-4 w-24 rounded-[4px]" />
-                <Skeleton className="h-10 w-full rounded-[7px]" />
+                <Skeleton className="h-4 w-24 rounded-sm" />
+                <Skeleton className="h-10 w-full rounded-md" />
               </div>
             ))}
-            <Skeleton className="h-10 w-full rounded-[7px]" />
+            <Skeleton className="h-10 w-full rounded-md" />
             {oauthActions ? (
               <>
                 <div className="space-y-2">
-                  <Skeleton className="h-10 rounded-[7px]" />
-                  <Skeleton className="h-10 rounded-[7px]" />
+                  <Skeleton className="h-10 rounded-md" />
+                  <Skeleton className="h-10 rounded-md" />
                 </div>
-                <Skeleton className="h-8 w-full rounded-[8px]" />
-                <Skeleton className="h-3 w-72 max-w-full rounded-[4px]" />
+                <Skeleton className="h-8 w-full rounded-lg" />
+                <Skeleton className="h-3 w-72 max-w-full rounded-sm" />
               </>
             ) : null}
           </CardContent>

@@ -62,8 +62,8 @@ type ReportStatusBadgeProps = {
 };
 
 const activitySourceIconSizeClassNames = {
-  sm: "h-8 w-8 rounded-[7px] [&_svg]:h-3.5 [&_svg]:w-3.5",
-  md: "h-9 w-9 rounded-[8px] [&_svg]:h-4 [&_svg]:w-4",
+  sm: "h-8 w-8 rounded-md [&_svg]:h-3.5 [&_svg]:w-3.5",
+  md: "h-9 w-9 rounded-lg [&_svg]:h-4 [&_svg]:w-4",
 };
 
 function activitySourceIconTone(source?: string | null) {
@@ -296,7 +296,7 @@ export function ReportSearchField({
   return (
     <label
       className={cn(
-        "relative flex h-9 min-w-0 items-center rounded-[8px] border border-border bg-white text-sm shadow-none transition-[border-color,box-shadow] focus-within:border-[#93b4f7] focus-within:ring-2 focus-within:ring-primary/20 dark:border-border dark:bg-background",
+        "relative flex h-9 min-w-0 items-center rounded-lg border border-border bg-white text-sm shadow-none transition-[border-color,box-shadow] focus-within:border-[#93b4f7] focus-within:ring-2 focus-within:ring-primary/20 dark:border-border dark:bg-background",
         className,
       )}
     >

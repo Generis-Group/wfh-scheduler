@@ -35,7 +35,7 @@ type CalendarPosition = {
 };
 
 const dateNavButtonClassName =
-  "flex h-8 w-8 items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground dark:disabled:hover:bg-transparent dark:disabled:hover:text-muted-foreground";
+  "flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground dark:disabled:hover:bg-transparent dark:disabled:hover:text-muted-foreground";
 
 function twoDigit(value: number) {
   return String(value).padStart(2, "0");
@@ -205,7 +205,7 @@ export function ReportDateSwitcher({
     <div
       ref={switcherRef}
       className={cn(
-        "relative grid h-10 w-full min-w-0 grid-cols-[2rem_minmax(0,1fr)_2rem_2rem] items-center gap-0.5 rounded-[8px] bg-white p-1 shadow-none ring-1 ring-border min-[520px]:w-[300px] dark:bg-card dark:ring-border",
+        "relative grid h-10 w-full min-w-0 grid-cols-[2rem_minmax(0,1fr)_2rem_2rem] items-center gap-0.5 rounded-lg bg-white p-1 shadow-none ring-1 ring-border min-[520px]:w-[300px] dark:bg-card dark:ring-border",
         className,
       )}
     >
@@ -225,7 +225,7 @@ export function ReportDateSwitcher({
       </button>
       <button
         type="button"
-        className="flex h-8 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-[6px] px-2 text-sm font-semibold text-foreground transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-70 dark:text-foreground dark:hover:bg-white/5"
+        className="flex h-8 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-sm px-2 text-sm font-semibold text-foreground transition-colors hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-70 dark:text-foreground dark:hover:bg-white/5"
         onClick={openPicker}
         aria-label="Open report date picker"
         disabled={disabled}
@@ -288,7 +288,7 @@ export function ReportDateSwitcher({
               ref={pickerRef}
               role="dialog"
               aria-label="Report date picker"
-              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-[8px] bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
+              className="fixed z-[1000] overflow-y-auto overscroll-contain rounded-lg bg-white p-2 shadow-[0_18px_42px_rgba(15,23,42,0.16)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
               style={{
                 left: calendarPosition?.left ?? 0,
                 top: calendarPosition?.top ?? 0,
@@ -340,7 +340,7 @@ export function ReportDateSwitcher({
                       key={calendarDay.value}
                       type="button"
                       className={cn(
-                        "flex h-9 items-center justify-center rounded-[7px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                        "flex h-9 items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                         calendarDay.inCurrentMonth
                           ? "text-foreground hover:bg-primary-subtle dark:text-foreground dark:hover:bg-white/10"
                           : "text-muted-foreground-subtle hover:bg-surface-subtle dark:text-muted-foreground/70 dark:hover:bg-white/5",

@@ -876,7 +876,7 @@ function SortableHeader({
     <button
       type="button"
       className={cn(
-        "-ml-1 inline-flex max-w-full items-center gap-1 rounded-[6px] px-1 py-0.5 text-left font-semibold uppercase tracking-[0.02em] text-inherit transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:text-foreground",
+        "-ml-1 inline-flex max-w-full items-center gap-1 rounded-sm px-1 py-0.5 text-left font-semibold uppercase tracking-[0.02em] text-inherit transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:text-foreground",
         active && "text-primary-subtle-foreground dark:text-[#93c5fd]",
       )}
       onClick={() => onSort(sortKey)}
@@ -914,7 +914,7 @@ function ReviewerRowMenuButton({
       role="menuitem"
       disabled={disabled}
       className={cn(
-        "flex w-full items-center gap-2 rounded-[7px] px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60",
+        "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60",
         tone === "danger"
           ? "text-destructive hover:bg-destructive-subtle dark:text-red-300 dark:hover:bg-red-400/10"
           : "text-foreground-muted hover:bg-surface-subtle dark:text-foreground dark:hover:bg-white/5",
@@ -1914,7 +1914,7 @@ export function ReviewerDashboard({
               <div className="flex flex-wrap items-center gap-2 min-[760px]:flex-nowrap">
                 <Button
                   variant="outline"
-                  className="h-10 min-w-[118px] shrink-0 justify-center rounded-[8px] bg-white px-3 text-xs shadow-none ring-1 ring-border dark:bg-background dark:ring-border"
+                  className="h-10 min-w-[118px] shrink-0 justify-center rounded-lg bg-white px-3 text-xs shadow-none ring-1 ring-border dark:bg-background dark:ring-border"
                   onClick={sendEmailDigest}
                   disabled={isSendingDigest}
                   hidden={!canUseReviewerActions}
@@ -1923,7 +1923,7 @@ export function ReviewerDashboard({
                   {isSendingDigest ? "Sending..." : "Email digest"}
                 </Button>
                 <Button
-                  className="h-10 min-w-[96px] shrink-0 justify-center rounded-[8px] bg-primary px-3 text-xs font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,0.2)] hover:bg-primary"
+                  className="h-10 min-w-[96px] shrink-0 justify-center rounded-lg bg-primary px-3 text-xs font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,0.2)] hover:bg-primary"
                   onClick={downloadCsv}
                 >
                   <Download className="mr-1.5 h-3.5 w-3.5" />
@@ -1945,14 +1945,14 @@ export function ReviewerDashboard({
                 </h2>
                 <div className="min-h-9 min-w-0 flex-1">
                   {selectedRows.length > 0 ? (
-                    <div className="inline-flex h-9 max-w-full items-center gap-2 rounded-[9px] bg-primary-subtle px-2 py-1.5 ring-1 ring-border dark:bg-blue-400/10 dark:ring-blue-300/15">
+                    <div className="inline-flex h-9 max-w-full items-center gap-2 rounded-lg bg-primary-subtle px-2 py-1.5 ring-1 ring-border dark:bg-blue-400/10 dark:ring-blue-300/15">
                       <span className="shrink-0 px-1 text-xs font-semibold text-foreground-muted dark:text-muted-foreground">
                         {selectedRows.length} selected
                       </span>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 shrink-0 rounded-[7px] bg-white px-3 text-xs dark:bg-background"
+                        className="h-7 shrink-0 rounded-md bg-white px-3 text-xs dark:bg-background"
                         onClick={markSelectedReadState}
                       >
                         {selectedReadAction ? "Mark as read" : "Mark as unread"}
@@ -1988,7 +1988,7 @@ export function ReviewerDashboard({
                 </Select>
 
                 <div
-                  className="grid h-10 w-full grid-cols-3 rounded-[7px] bg-white p-0.5 ring-1 ring-border dark:bg-background dark:ring-border"
+                  className="grid h-10 w-full grid-cols-3 rounded-md bg-white p-0.5 ring-1 ring-border dark:bg-background dark:ring-border"
                   aria-label="Filter by report status"
                   role="group"
                 >
@@ -1997,7 +1997,7 @@ export function ReviewerDashboard({
                       key={option.value}
                       type="button"
                       className={cn(
-                        "rounded-[6px] px-2 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:text-foreground",
+                        "rounded-sm px-2 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:text-foreground",
                         statusFilter === option.value &&
                           "bg-primary-subtle text-primary dark:bg-blue-400/10 dark:text-[#93c5fd]",
                       )}
@@ -2011,7 +2011,7 @@ export function ReviewerDashboard({
                 {hasActiveTableControls ? (
                   <button
                     type="button"
-                    className="h-10 rounded-[7px] px-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+                    className="h-10 rounded-md px-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
                     onClick={clearTableControls}
                   >
                     Clear
@@ -2247,7 +2247,7 @@ export function ReviewerDashboard({
                                 type="button"
                                 variant="outline"
                                 size="icon"
-                                className="h-8 w-8 rounded-[7px] bg-surface-subtle p-0 text-muted-foreground hover:text-primary"
+                                className="h-8 w-8 rounded-md bg-surface-subtle p-0 text-muted-foreground hover:text-primary"
                                 aria-label={`More actions for ${employeeLabel(row)}`}
                                 aria-haspopup="menu"
                                 aria-expanded={
@@ -2295,7 +2295,7 @@ export function ReviewerDashboard({
           />
           <div
             ref={rowActionMenuRef}
-            className="fixed z-50 overflow-y-auto overscroll-contain rounded-[10px] bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
+            className="fixed z-50 overflow-y-auto overscroll-contain rounded-xl bg-white p-1 text-sm shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-1 ring-border [scrollbar-gutter:stable] dark:bg-card dark:ring-border"
             style={{
               top: rowActionMenu.top,
               left: rowActionMenu.left,
@@ -2640,7 +2640,7 @@ function WeeklyWorkLocationBreakdown({
   return (
     <section
       aria-label="Weekly work location breakdown"
-      className="report-pdf-card mt-5 rounded-[10px] border border-border bg-primary-subtle p-4 dark:border-border dark:bg-white/[0.03]"
+      className="report-pdf-card mt-5 rounded-xl border border-border bg-primary-subtle p-4 dark:border-border dark:bg-white/[0.03]"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -2713,7 +2713,7 @@ function CompactMetric({
   return (
     <div
       className={cn(
-        "flex min-w-[86px] items-baseline justify-between gap-3 rounded-[8px] px-3 py-2 ring-1",
+        "flex min-w-[86px] items-baseline justify-between gap-3 rounded-lg px-3 py-2 ring-1",
         toneClass,
       )}
     >
@@ -2792,7 +2792,7 @@ function WeeklyReportDayTabs({
             key={weekDate}
             type="button"
             className={cn(
-              "relative flex h-[76px] min-w-0 flex-col items-center justify-center rounded-[10px] border px-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+              "relative flex h-[76px] min-w-0 flex-col items-center justify-center rounded-xl border px-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
               selected
                 ? "border-[#8ab7ff] bg-primary-subtle text-primary shadow-[0_10px_22px_rgba(37,99,235,0.08)] dark:border-blue-300/30 dark:bg-blue-400/10 dark:text-blue-100"
                 : "border-border bg-white text-foreground hover:border-border hover:bg-surface-subtle dark:border-border dark:bg-card dark:text-foreground dark:hover:bg-white/[0.06]",
@@ -2826,7 +2826,7 @@ function WeeklyReportDayTabs({
         );
       })}
 
-      <div className="flex min-h-[76px] items-center gap-4 rounded-[10px] border border-border bg-white px-5 py-3 dark:border-border dark:bg-card min-[720px]:col-span-2 min-[1120px]:col-span-1">
+      <div className="flex min-h-[76px] items-center gap-4 rounded-xl border border-border bg-white px-5 py-3 dark:border-border dark:bg-card min-[720px]:col-span-2 min-[1120px]:col-span-1">
         <WeeklyProgressRing
           submittedCount={submittedCount}
           expectedDays={expectedDays}
@@ -2953,7 +2953,7 @@ function WeeklyReportDayCard({
   const dayActivities = includedActivities(report ?? null);
 
   return (
-    <section className="weekly-report-day report-pdf-card overflow-hidden rounded-[10px] border border-border bg-white shadow-[0_10px_30px_rgba(15,23,42,0.07)] dark:border-border dark:bg-card">
+    <section className="weekly-report-day report-pdf-card overflow-hidden rounded-xl border border-border bg-white shadow-[0_10px_30px_rgba(15,23,42,0.07)] dark:border-border dark:bg-card">
       <div className="px-6 py-6 min-[900px]:px-7">
         <div className="flex flex-wrap items-center gap-4">
           <h3 className="text-[24px] font-semibold leading-tight text-foreground dark:text-foreground">
@@ -3063,7 +3063,7 @@ function WeeklyReportArchivePage({
             <EmptyReferenceState>{state.message}</EmptyReferenceState>
           </div>
         ) : state.reports.length ? (
-          <div className="mt-4 divide-y divide-border overflow-hidden rounded-[10px] border border-border dark:divide-border dark:border-border min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:overflow-y-auto min-[1024px]:overscroll-contain min-[1024px]:[scrollbar-gutter:stable]">
+          <div className="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border dark:divide-border dark:border-border min-[1024px]:min-h-0 min-[1024px]:flex-1 min-[1024px]:overflow-y-auto min-[1024px]:overscroll-contain min-[1024px]:[scrollbar-gutter:stable]">
             {state.reports.map((report) => (
               <div
                 key={report.id}
@@ -3082,7 +3082,7 @@ function WeeklyReportArchivePage({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-9 rounded-[8px] bg-white px-4 text-sm font-semibold text-primary dark:bg-background"
+                  className="h-9 rounded-lg bg-white px-4 text-sm font-semibold text-primary dark:bg-background"
                   onClick={() => {
                     void onOpenReport(report, state.employee);
                   }}
@@ -3209,10 +3209,10 @@ function WeeklyReportReviewPage({
           Back to review dashboard
         </button>
 
-        <article className="report-pdf-document weekly-report-document rounded-[12px] border border-border bg-white p-6 shadow-[0_16px_46px_rgba(15,23,42,0.08)] dark:border-border dark:bg-card min-[900px]:p-9">
+        <article className="report-pdf-document weekly-report-document rounded-xl border border-border bg-white p-6 shadow-[0_16px_46px_rgba(15,23,42,0.08)] dark:border-border dark:bg-card min-[900px]:p-9">
           <header className="report-pdf-header flex flex-col gap-4 border-b border-border pb-8 dark:border-border min-[720px]:flex-row min-[720px]:items-start min-[720px]:justify-between">
             <div className="flex min-w-0 items-center gap-5">
-              <span className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-[12px] bg-primary-subtle text-primary dark:bg-blue-400/10 dark:text-blue-100">
+              <span className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-xl bg-primary-subtle text-primary dark:bg-blue-400/10 dark:text-blue-100">
                 <FileText className="h-7 w-7" aria-hidden="true" />
               </span>
               <div className="min-w-0">
@@ -3231,7 +3231,7 @@ function WeeklyReportReviewPage({
             <div className="report-pdf-actions">
               <Button
                 variant="outline"
-                className="h-12 rounded-[9px] bg-white px-5 text-[15px] font-semibold text-primary ring-1 ring-border hover:bg-primary-subtle dark:bg-background dark:ring-border"
+                className="h-12 rounded-lg bg-white px-5 text-[15px] font-semibold text-primary ring-1 ring-border hover:bg-primary-subtle dark:bg-background dark:ring-border"
                 onClick={onPrint}
               >
                 <Download className="mr-2 h-5 w-5" />
@@ -3446,7 +3446,7 @@ function ReportReviewPage({
       }
       actions={
         <Button
-          className="h-10 rounded-[8px] bg-primary px-5 text-sm font-semibold text-white hover:bg-primary"
+          className="h-10 rounded-lg bg-primary px-5 text-sm font-semibold text-white hover:bg-primary"
           onClick={onPrint}
           disabled={!report}
         >

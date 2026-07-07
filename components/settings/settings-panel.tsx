@@ -476,8 +476,8 @@ export function SettingsPanel({
                 </Select>
                 {metadataLoading.atlassian ? (
                   <div className="space-y-2">
-                    <Skeleton className="h-3.5 w-48 rounded-[4px]" />
-                    <Skeleton className="h-3.5 w-32 rounded-[4px]" />
+                    <Skeleton className="h-3.5 w-48 rounded-sm" />
+                    <Skeleton className="h-3.5 w-32 rounded-sm" />
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">
@@ -536,7 +536,7 @@ export function SettingsPanel({
             <CardContent className="p-5">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex min-w-0 items-start gap-4">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-primary-subtle text-primary dark:bg-white/[0.06]">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-subtle text-primary dark:bg-white/[0.06]">
                     <GoogleTasksLogo className="h-8 w-8" />
                   </span>
                   <div className="min-w-0">
@@ -559,13 +559,13 @@ export function SettingsPanel({
                 </Badge>
               </div>
 
-              <div className="mt-4 grid max-h-52 min-w-0 gap-2 overflow-y-auto rounded-[8px] border border-border bg-white p-2 dark:border-border dark:bg-background">
+              <div className="mt-4 grid max-h-52 min-w-0 gap-2 overflow-y-auto rounded-lg border border-border bg-white p-2 dark:border-border dark:bg-background">
                 {metadataLoading.google ? (
                   <>
-                    <Skeleton className="h-10 rounded-[6px]" />
-                    <Skeleton className="h-10 rounded-[6px]" />
-                    <Skeleton className="h-10 rounded-[6px]" />
-                    <Skeleton className="h-10 rounded-[6px]" />
+                    <Skeleton className="h-10 rounded-sm" />
+                    <Skeleton className="h-10 rounded-sm" />
+                    <Skeleton className="h-10 rounded-sm" />
+                    <Skeleton className="h-10 rounded-sm" />
                   </>
                 ) : taskLists.length === 0 ? (
                   <p className="col-span-full px-2 py-3 text-sm text-muted-foreground">
@@ -579,7 +579,7 @@ export function SettingsPanel({
                   taskLists.map((list) => (
                     <label
                       key={list.id}
-                      className="flex h-11 items-center justify-between gap-3 rounded-[7px] bg-surface-subtle px-3 text-sm ring-1 ring-border transition-colors hover:bg-primary-subtle dark:bg-white/[0.03] dark:ring-border dark:hover:bg-white/[0.06]"
+                      className="flex h-11 items-center justify-between gap-3 rounded-md bg-surface-subtle px-3 text-sm ring-1 ring-border transition-colors hover:bg-primary-subtle dark:bg-white/[0.03] dark:ring-border dark:hover:bg-white/[0.06]"
                     >
                       <span className="min-w-0 truncate font-medium text-foreground-muted">
                         {list.title}
@@ -613,7 +613,7 @@ export function SettingsPanel({
             <Card>
               <CardHeader className="px-5 py-5">
                 <div className="flex items-start gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary-subtle text-primary dark:bg-white/[0.06]">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-subtle text-primary dark:bg-white/[0.06]">
                     <Users className="h-5 w-5" />
                   </span>
                   <div>
@@ -675,7 +675,7 @@ function SectionHeading({
 }) {
   return (
     <div className="flex items-start gap-4">
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-primary-subtle text-primary dark:bg-white/[0.06]">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-subtle text-primary dark:bg-white/[0.06]">
         <Icon className="h-6 w-6" />
       </span>
       <div className="min-w-0 pt-1">
@@ -792,7 +792,7 @@ function ProviderCard({
       <CardHeader className="px-5 py-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-primary-subtle text-primary dark:bg-white/[0.06]">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-subtle text-primary dark:bg-white/[0.06]">
               {logo}
             </span>
             <div className="min-w-0 pt-1">
@@ -837,7 +837,7 @@ function ProviderCard({
           <p className="text-sm text-muted-foreground">{configMessage}</p>
         ) : null}
         {error ? (
-          <p className="rounded-[8px] border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         ) : null}

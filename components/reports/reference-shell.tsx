@@ -641,10 +641,10 @@ export function ReferenceAppShell({
                 {...routeLinkProps(href, item.key, item.prefetch)}
                 role="menuitem"
                 className={cn(
-                  "flex min-h-10 min-w-0 items-center gap-2.5 rounded-lg px-3 py-2 text-[15px] font-semibold leading-5 transition-colors",
+                  "flex min-h-10 min-w-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm leading-5 transition-colors",
                   activeItem
-                    ? "bg-primary-subtle text-primary dark:text-primary-subtle-foreground"
-                    : "text-foreground-muted hover:bg-surface-subtle hover:text-foreground dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground",
+                    ? "bg-primary-subtle font-semibold text-primary dark:text-primary-subtle-foreground"
+                    : "font-medium text-foreground-muted hover:bg-muted/60 hover:text-foreground dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground",
                 )}
               >
                 <Icon className="h-[18px] w-[18px] shrink-0" />
@@ -691,16 +691,16 @@ export function ReferenceAppShell({
                 href={href}
                 {...routeLinkProps(href, item.key, item.prefetch)}
                 className={cn(
-                  "flex min-h-10 min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-[15px] font-semibold leading-5 transition-colors",
+                  "flex min-h-10 min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-sm leading-5 transition-colors",
                   activeItem
-                    ? "bg-primary-subtle text-primary dark:text-primary-subtle-foreground"
-                    : "text-foreground-muted hover:bg-surface-subtle hover:text-foreground dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground",
+                    ? "bg-primary-subtle font-semibold text-primary shadow-surface-sm dark:text-primary-subtle-foreground"
+                    : "font-medium text-foreground-muted hover:bg-muted/60 hover:text-foreground dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground",
                 )}
                 aria-current={activeItem ? "page" : undefined}
               >
                 <Icon
                   className={cn(
-                    "h-5 w-5 shrink-0",
+                    "h-[18px] w-[18px] shrink-0",
                     activeItem
                       ? "text-primary dark:text-primary-subtle-foreground"
                       : "text-muted-foreground",

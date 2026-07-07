@@ -645,7 +645,7 @@ export const summaryEditorExtensions = [
 
 function buttonTone(active: boolean, className = "", activeClassName = "") {
   return cn(
-    "inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-surface-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground",
+    "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground",
     "disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted-foreground dark:disabled:hover:bg-transparent dark:disabled:hover:text-muted-foreground",
     active &&
       (activeClassName ||
@@ -966,7 +966,7 @@ const SummaryEditorComponent = forwardRef<
           />
           {disabled ? (
             <div
-              className="absolute inset-0 z-10 flex items-center justify-center rounded-[8px] bg-white dark:bg-card"
+              className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white dark:bg-card"
               role="status"
               aria-live="polite"
             >

@@ -65,7 +65,7 @@ export function PaginationControls({
         </span>
         <Select
           aria-label="Rows per page"
-          className="h-[34px] w-[74px] rounded-[8px] bg-white text-sm dark:bg-[hsl(var(--field))] [&_button]:px-2.5 [&_button]:text-left"
+          className="h-[34px] w-[74px] rounded-lg bg-white text-sm dark:bg-[hsl(var(--field))] [&_button]:px-2.5 [&_button]:text-left"
           disabled={isLoading}
           menuPlacement={pageSizeMenuPlacement}
           value={String(normalizedPageSize)}
@@ -91,7 +91,7 @@ export function PaginationControls({
       >
         <button
           type="button"
-          className="grid h-[34px] min-w-[34px] place-items-center rounded-[8px] border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-45 dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+          className="grid h-[34px] min-w-[34px] place-items-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-45 dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
           disabled={isLoading || currentPage === 1}
           aria-label="Previous page"
           title="Previous page"
@@ -104,7 +104,7 @@ export function PaginationControls({
           item.type === "dots" ? (
             <span
               key={item.key}
-              className="grid h-[34px] min-w-[34px] place-items-center rounded-[8px] text-muted-foreground-subtle dark:text-muted-foreground/70"
+              className="grid h-[34px] min-w-[34px] place-items-center rounded-lg text-muted-foreground-subtle dark:text-muted-foreground/70"
               aria-hidden="true"
             >
               ...
@@ -114,7 +114,7 @@ export function PaginationControls({
               key={item.page}
               type="button"
               className={cn(
-                "h-[34px] min-w-[34px] rounded-[8px] px-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60 dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground",
+                "h-[34px] min-w-[34px] rounded-lg px-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60 dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground",
                 item.page === currentPage &&
                   "bg-[#0b0b0b] text-white hover:bg-[#0b0b0b] hover:text-white dark:bg-background dark:text-white dark:hover:bg-background dark:hover:text-white",
               )}
@@ -134,7 +134,7 @@ export function PaginationControls({
 
         <button
           type="button"
-          className="grid h-[34px] min-w-[34px] place-items-center rounded-[8px] border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-45 dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
+          className="grid h-[34px] min-w-[34px] place-items-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-45 dark:text-muted-foreground dark:hover:bg-white/10 dark:hover:text-foreground"
           disabled={isLoading || currentPage === pageCount}
           aria-label="Next page"
           title="Next page"
