@@ -359,7 +359,13 @@ describe("AI summary service", () => {
       "Production tasks are common. Use Production Updates specifically",
     );
     expect(contents).toContain(
-      "Prefer specific, grounded headings over broad catch-all headings",
+      "Headings must describe a category of work, not repeat or paraphrase one task",
+    );
+    expect(contents).toContain(
+      "Keep headings short, usually two to four words",
+    );
+    expect(contents).toContain(
+      "verify that every item genuinely belongs under its heading",
     );
   });
 
