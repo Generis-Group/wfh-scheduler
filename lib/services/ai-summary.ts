@@ -209,12 +209,11 @@ function buildSummaryPrompt(
     "- Never include raw URLs, markdown, HTML, tables, code, or unknown tokens.",
     "",
     "Work categorization:",
-    "- Choose each section heading from the nature of the work in the item title, description, status, and note. Examples of descriptive category headings: Bug Fixes, Website Updates, Feature Development, Maintenance, Documentation, Data and Reporting, Meetings and Follow-Up, Production Updates.",
+    "- Generate contextually appropriate section headings from the nature of the work in the item title, description, status, and note.",
+    "- Production tasks are common. Use Production Updates specifically for routine production/event/site content update tasks.",
     "- Only use a category when the items genuinely fit it; do not force items into a category that does not match.",
-    "- Distinguish corrective work from build work: fixing something broken, incorrect, or misconfigured (for example fixing tags, markup, layout, links, errors, or regressions) belongs under a fixes or maintenance category, not under project or feature work.",
-    "- Reserve a generic heading such as Project Work only for substantial build or feature work that does not fit a more specific category. Do not use Project Work as a catch-all for bug fixes, small corrections, or routine maintenance.",
-    "- Prefer a specific descriptive category over a generic one whenever the type of work is clear from the item.",
-    "- It is fine to use several small categories when the work spans different types; do not collapse unrelated work into one generic section.",
+    "- Prefer specific, grounded headings over broad catch-all headings when the item text clearly supports a better theme.",
+    "- It is fine to use several small categories when the work spans different types; do not collapse unrelated work into one section when the item context points to different themes.",
     "",
     "Blocker definition:",
     "- A blocker means work is truly unable to proceed or is on hold because of missing approval, access, information, an external dependency, an outage, or an unresolved decision.",
@@ -229,20 +228,20 @@ function buildSummaryPrompt(
     "Terminology grounding:",
     "- Do not invent product, program, event, client, or workstream names.",
     "- Use specific product, program, event, client, or workstream names only when they appear in the selected work item title, description, or note.",
-    "- If an item says Create Program, do not rename it On-Demand Program or another more specific proper name.",
-    "- Describing the type of work in a heading (for example Bug Fixes or Maintenance) is encouraged and is not the same as inventing a name.",
+    "- Do not make a task sound more specific than the selected work item text supports.",
+    "- Describing the type of work in a heading is encouraged and is not the same as inventing a name.",
     "",
     "Production update policy:",
     "- Routine production tasks are simple event/site content updates.",
     "- If there are 1-6 routine production updates, enumerate them.",
     "- If there are 7-15, group by event/site or update type and call out only notable examples.",
     "- If there are 16+, summarize by category and include at most 3-5 representative examples.",
-    "- Google Tasks are not always routine production. Creating a program, restructuring major content, importing sessions/speakers, or major agenda/data work is substantial and should be highlighted separately.",
+    "- A task is not routine production just because it comes from one source. Substantial creation, restructuring, imports, or major agenda/data work should be highlighted separately.",
     "",
     "Preferred section order when applicable:",
     "1. Production Updates",
-    "2. Feature or project work, and other work-type categories such as Bug Fixes or Maintenance, named from selected work item wording",
-    "3. Meetings and Follow-Up",
+    "2. Other sections with headings generated from the selected work item context",
+    "3. Meetings, follow-ups, or event participation when applicable",
     "4. Blockers, only when actual blockers exist",
     "",
     `Limits: use at most ${maxSectionCount} sections and at most ${maxItemsPerList} items in any list.`,
@@ -599,6 +598,21 @@ function headingReferenceText(references: ActivityReference[]) {
     .join(" ");
 }
 
+function stripSourcePrefix(value: string) {
+  return value.replace(/^\s*[A-Z][A-Z0-9]+-\d+\s*[:\-]\s*/i, "").trim();
+}
+
+function groundedFallbackHeading(references: ActivityReference[]) {
+  const reference = references[0];
+  const sourceText =
+    reference?.activity.title ??
+    reference?.activity.description ??
+    reference?.activity.employeeNote ??
+    "";
+
+  return cleanText(stripSourcePrefix(sourceText), 80) || "Selected Work";
+}
+
 function blockReferences(
   block: StructuredBlock,
   referencesByToken: Map<string, ActivityReference>,
@@ -644,23 +658,7 @@ function fallbackHeadingForReferences(references: ActivityReference[]) {
     return "Production Updates";
   }
 
-  if (referenceText.includes("program")) {
-    return "Program Work";
-  }
-
-  if (/\b(bug|bugs|fix|fixes|fixed|fixing|hotfix|regression)\b/.test(referenceText)) {
-    return "Bug Fixes";
-  }
-
-  if (
-    referenceText.includes("meeting") ||
-    referenceText.includes("follow-up") ||
-    referenceText.includes("follow up")
-  ) {
-    return "Meetings and Follow-Up";
-  }
-
-  return "Project Work";
+  return groundedFallbackHeading(references);
 }
 
 function groundedHeading(

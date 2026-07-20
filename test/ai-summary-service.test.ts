@@ -188,14 +188,14 @@ describe("AI summary service", () => {
       ],
     });
 
-    expect(result.summary).toContain("## Program Work");
+    expect(result.summary).toContain("## Create Program");
     expect(result.summary).not.toContain("On-Demand Program Work");
     expect(result.summary).toContain(
       "Logged program creation work. [IT-4231: Create Program](https://generis.local/activity/jira-program?source=JIRA)",
     );
   });
 
-  it("merges duplicate generic headings after heading grounding", async () => {
+  it("grounds unsupported heading qualifiers from the referenced work item text", async () => {
     generateContentMock.mockResolvedValue(
       response([
         {
@@ -244,7 +244,10 @@ describe("AI summary service", () => {
       ],
     });
 
-    expect(result.summary.match(/^## Project Work$/gm)).toHaveLength(1);
+    expect(result.summary).toContain("## Add clear button to erase work items");
+    expect(result.summary).toContain(
+      "## Build reviewer work location breakdown",
+    );
     expect(result.summary).toContain(
       "Added a clear button to erase work items.",
     );
@@ -253,7 +256,43 @@ describe("AI summary service", () => {
     );
   });
 
-  it("keeps a descriptive work-type heading such as Bug Fixes instead of forcing Project Work", async () => {
+  it("keeps Feature Development for actual implementation work", async () => {
+    generateContentMock.mockResolvedValue(
+      response([
+        {
+          heading: "Feature Development",
+          blocks: [
+            {
+              type: "paragraph",
+              text: "Implemented persistence for the WFH calendar.",
+              activityTokens: ["ACTIVITY_1"],
+            },
+          ],
+        },
+      ]),
+    );
+
+    const result = await generateDailyReportSummaryWithAI("user-1", {
+      ...report,
+      activities: [
+        {
+          ...baseActivity,
+          id: "jira-wfh-calendar",
+          source: "JIRA",
+          title: "IT-4400: Add WFH calendar persistence",
+          description: "Implemented saved monthly WFH calendar state.",
+          status: "In Progress",
+        },
+      ],
+    });
+
+    expect(result.summary).toContain("## Feature Development");
+    expect(result.summary).toContain(
+      "Implemented persistence for the WFH calendar.",
+    );
+  });
+
+  it("keeps a descriptive work-type heading when Gemini chooses one", async () => {
     generateContentMock.mockResolvedValue(
       response([
         {
@@ -287,17 +326,16 @@ describe("AI summary service", () => {
     });
 
     expect(result.summary).toContain("## Bug Fixes");
-    expect(result.summary).not.toContain("## Project Work");
     expect(result.summary).toContain(
       "Resolved an issue with missing and multiple H1 tags. [IT-4239: Fix Missing and Multiple H1 Tags](https://generis.local/activity/jira-h1?source=JIRA)",
     );
   });
 
-  it("prompts Gemini to categorize corrective work separately from build work", async () => {
+  it("prompts Gemini to create contextual headings without phrase-specific category rules", async () => {
     generateContentMock.mockResolvedValue(
       response([
         {
-          heading: "Project Work",
+          heading: "Implementation Work",
           blocks: [
             {
               type: "paragraph",
@@ -311,11 +349,17 @@ describe("AI summary service", () => {
 
     await generateDailyReportSummaryWithAI("user-1", report);
 
-    expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
-      "Work categorization:",
+    const contents = generateContentMock.mock.calls[0]?.[0].contents;
+
+    expect(contents).toContain("Work categorization:");
+    expect(contents).toContain(
+      "Generate contextually appropriate section headings",
     );
-    expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
-      "Distinguish corrective work from build work",
+    expect(contents).toContain(
+      "Production tasks are common. Use Production Updates specifically",
+    );
+    expect(contents).toContain(
+      "Prefer specific, grounded headings over broad catch-all headings",
     );
   });
 
@@ -438,7 +482,7 @@ describe("AI summary service", () => {
     expect(generateContentMock).toHaveBeenCalledWith(
       expect.objectContaining({
         contents: expect.stringContaining(
-          "Google Tasks are not always routine production.",
+          "A task is not routine production just because it comes from one source.",
         ),
       }),
     );
@@ -452,7 +496,7 @@ describe("AI summary service", () => {
     generateContentMock.mockResolvedValue(
       response([
         {
-          heading: "Project Work",
+          heading: "Implementation Work",
           blocks: [
             {
               type: "paragraph",
@@ -527,7 +571,6 @@ describe("AI summary service", () => {
       ],
     });
 
-    expect(result.summary).toContain("## Daily Work");
     expect(result.summary).toContain("Continued the summary generation work.");
     expect(result.summary).not.toContain("## Blockers");
     expect(result.summary).not.toContain(
@@ -613,7 +656,6 @@ describe("AI summary service", () => {
       ],
     });
 
-    expect(result.summary).toContain("## Daily Work");
     expect(result.summary).not.toContain("## Blockers");
     expect(result.summary).not.toContain("No blockers");
   });
