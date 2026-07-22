@@ -10,7 +10,11 @@ vi.mock("@/lib/integrations/google", () => ({
 
 vi.mock("server-only", () => ({}));
 
-import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
+import {
+  getGeminiClient,
+  getGeminiModel,
+  getGeminiThinkingConfig,
+} from "@/lib/integrations/gemini";
 import { GEMINI_OAUTH_SCOPES, GOOGLE_OAUTH_SCOPE } from "@/lib/oauth-scopes";
 
 const originalEnv = {
@@ -115,9 +119,10 @@ describe("Gemini integration", () => {
     );
   });
 
-  it("keeps the existing default Gemini model", () => {
+  it("uses one stable Gemini model and thinking configuration by default", () => {
     delete process.env.GEMINI_MODEL;
 
-    expect(getGeminiModel()).toBe("gemini-2.5-flash");
+    expect(getGeminiModel()).toBe("gemini-3.5-flash");
+    expect(getGeminiThinkingConfig()).toEqual({ thinkingLevel: "low" });
   });
 });

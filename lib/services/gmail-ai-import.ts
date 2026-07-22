@@ -9,7 +9,11 @@ import {
   uniqueActivitySourceLinks,
 } from "@/lib/activity-source-links";
 import { HttpError } from "@/lib/http";
-import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
+import {
+  getGeminiClient,
+  getGeminiModel,
+  getGeminiThinkingConfig,
+} from "@/lib/integrations/gemini";
 import type { NormalizedActivity } from "@/lib/normalizers";
 import {
   formatImportedActivityTitle,
@@ -1400,11 +1404,7 @@ export async function extractGmailActivitiesWithAI(
       config: {
         maxOutputTokens: 4000,
         responseMimeType: "application/json",
-        thinkingConfig: {
-          thinkingBudget: 0,
-        },
-        temperature: 0,
-        topP: 0.8,
+        thinkingConfig: getGeminiThinkingConfig(),
       },
     });
 

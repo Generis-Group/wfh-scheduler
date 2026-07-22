@@ -12,6 +12,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/integrations/gemini", () => ({
   getGeminiClient: getGeminiClientMock,
   getGeminiModel: getGeminiModelMock,
+  getGeminiThinkingConfig: () => ({ thinkingLevel: "low" }),
 }));
 
 import { generateDepartmentReportSummaries } from "@/lib/services/department-report-summary";
@@ -72,7 +73,7 @@ describe("department report AI summaries", () => {
         contents: expect.stringContaining("Do not list every task separately"),
         config: expect.objectContaining({
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingBudget: 0 },
+          thinkingConfig: { thinkingLevel: "low" },
         }),
       }),
     );

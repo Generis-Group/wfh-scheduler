@@ -10,6 +10,7 @@ const { generateContentMock, getGeminiClientMock, getGeminiModelMock } =
 vi.mock("@/lib/integrations/gemini", () => ({
   getGeminiClient: getGeminiClientMock,
   getGeminiModel: getGeminiModelMock,
+  getGeminiThinkingConfig: () => ({ thinkingLevel: "low" }),
 }));
 
 import {

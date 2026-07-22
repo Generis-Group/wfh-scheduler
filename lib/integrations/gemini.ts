@@ -5,7 +5,7 @@ import { HttpError } from "@/lib/http";
 import { getGoogleClient } from "@/lib/integrations/google";
 import { GEMINI_OAUTH_SCOPES } from "@/lib/oauth-scopes";
 
-const defaultGeminiModel = "gemini-2.5-flash";
+const defaultGeminiModel = "gemini-3.5-flash";
 const geminiApiBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
 
 type GeminiGenerateContentConfig = {
@@ -14,6 +14,7 @@ type GeminiGenerateContentConfig = {
   responseMimeType?: string;
   thinkingConfig?: {
     thinkingBudget?: number;
+    thinkingLevel?: "minimal" | "low" | "medium" | "high";
   };
   temperature?: number;
   topP?: number;
@@ -52,6 +53,10 @@ type GoogleApiError = {
 
 export function getGeminiModel() {
   return process.env.GEMINI_MODEL?.trim() || defaultGeminiModel;
+}
+
+export function getGeminiThinkingConfig() {
+  return { thinkingLevel: "low" as const };
 }
 
 function getGeminiQuotaProject() {

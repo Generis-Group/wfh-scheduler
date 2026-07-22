@@ -12,6 +12,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/integrations/gemini", () => ({
   getGeminiClient: getGeminiClientMock,
   getGeminiModel: getGeminiModelMock,
+  getGeminiThinkingConfig: () => ({ thinkingLevel: "low" }),
 }));
 
 import { generateDailyReportSummaryWithAI } from "@/lib/services/ai-summary";
@@ -118,12 +119,10 @@ describe("AI summary service", () => {
     expect(generateContentMock).toHaveBeenCalledWith(
       expect.objectContaining({
         model: "gemini-test-model",
-        contents: expect.stringContaining("Production update policy:"),
+        contents: expect.stringContaining("Grouping rules, in priority order:"),
         config: expect.objectContaining({
-          thinkingConfig: { thinkingBudget: 0 },
+          thinkingConfig: { thinkingLevel: "low" },
           responseMimeType: "application/json",
-          temperature: 0.1,
-          topP: 0.8,
         }),
       }),
     );
@@ -134,10 +133,10 @@ describe("AI summary service", () => {
       "Completion wording:",
     );
     expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
-      "Terminology grounding:",
+      "Accuracy rules:",
     );
     expect(generateContentMock.mock.calls[0]?.[0].contents).not.toContain(
-      "Major project/workstream sections such as On-Demand Program Work",
+      "Current summary being replaced:",
     );
     expect(generateContentMock.mock.calls[0]?.[0].contents).toContain(
       '"activityTokens":["ACTIVITY_1"]',
@@ -158,7 +157,7 @@ describe("AI summary service", () => {
     );
   });
 
-  it("grounds unsupported section heading qualifiers to referenced work item text", async () => {
+  it("does not rewrite Gemini's contextual heading with a task title", async () => {
     generateContentMock.mockResolvedValue(
       response([
         {
@@ -188,14 +187,14 @@ describe("AI summary service", () => {
       ],
     });
 
-    expect(result.summary).toContain("## Create Program");
-    expect(result.summary).not.toContain("On-Demand Program Work");
+    expect(result.summary).toContain("## On-Demand Program Work");
+    expect(result.summary).not.toContain("## Create Program");
     expect(result.summary).toContain(
       "Logged program creation work. [IT-4231: Create Program](https://generis.local/activity/jira-program?source=JIRA)",
     );
   });
 
-  it("grounds unsupported heading qualifiers from the referenced work item text", async () => {
+  it("preserves sanitized contextual headings without hardcoded categories", async () => {
     generateContentMock.mockResolvedValue(
       response([
         {
@@ -244,10 +243,8 @@ describe("AI summary service", () => {
       ],
     });
 
-    expect(result.summary).toContain("## Add clear button to erase work items");
-    expect(result.summary).toContain(
-      "## Build reviewer work location breakdown",
-    );
+    expect(result.summary).toContain("## Daily Product Work");
+    expect(result.summary).toContain("## Project Execution");
     expect(result.summary).toContain(
       "Added a clear button to erase work items.",
     );
@@ -331,7 +328,7 @@ describe("AI summary service", () => {
     );
   });
 
-  it("prompts Gemini to create contextual headings without phrase-specific category rules", async () => {
+  it("prompts Gemini to consolidate real workstreams without absorbing unrelated work", async () => {
     generateContentMock.mockResolvedValue(
       response([
         {
@@ -351,21 +348,21 @@ describe("AI summary service", () => {
 
     const contents = generateContentMock.mock.calls[0]?.[0].contents;
 
-    expect(contents).toContain("Work categorization:");
+    expect(contents).toContain("Grouping rules, in priority order:");
     expect(contents).toContain(
-      "Generate contextually appropriate section headings",
+      "put them in one section for that shared workstream",
     );
     expect(contents).toContain(
-      "Production tasks are common. Use Production Updates specifically",
+      "Do not split one shared workstream into separate sections",
     );
     expect(contents).toContain(
-      "Headings must describe a category of work, not repeat or paraphrase one task",
+      "Never place an item under a named workstream unless its own title, description, or note supports that relationship",
     );
     expect(contents).toContain(
-      "Keep headings short, usually two to four words",
+      "Use the fewest sections that remain accurate",
     );
     expect(contents).toContain(
-      "verify that every item genuinely belongs under its heading",
+      "every item fits its section",
     );
   });
 
@@ -435,7 +432,7 @@ describe("AI summary service", () => {
     expect(generateContentMock).toHaveBeenCalledWith(
       expect.objectContaining({
         contents: expect.stringContaining(
-          "If there are 16+, summarize by category and include at most 3-5 representative examples.",
+          "Limits: use at most 5 sections and at most 8 items in any list.",
         ),
       }),
     );
@@ -488,7 +485,7 @@ describe("AI summary service", () => {
     expect(generateContentMock).toHaveBeenCalledWith(
       expect.objectContaining({
         contents: expect.stringContaining(
-          "A task is not routine production just because it comes from one source.",
+          "Do not classify substantial feature creation, restructuring, imports, major data work, or unrelated technical work as production updates.",
         ),
       }),
     );
@@ -690,8 +687,7 @@ describe("AI summary service", () => {
 
     const result = await generateDailyReportSummaryWithAI("user-1", report);
 
-    expect(result.summary).toContain("## Production Updates");
-    expect(result.summary).not.toContain("## Unsafe Heading");
+    expect(result.summary).toContain("## Unsafe Heading");
     expect(result.summary).toContain(
       "Reviewed external link markup code table.",
     );
@@ -746,9 +742,7 @@ describe("AI summary service", () => {
       expect.objectContaining({
         config: expect.objectContaining({
           maxOutputTokens: 6000,
-          thinkingConfig: { thinkingBudget: 0 },
-          temperature: 0.1,
-          topP: 0.8,
+          thinkingConfig: { thinkingLevel: "low" },
         }),
       }),
     );
@@ -757,9 +751,7 @@ describe("AI summary service", () => {
       expect.objectContaining({
         config: expect.objectContaining({
           maxOutputTokens: 2400,
-          thinkingConfig: { thinkingBudget: 0 },
-          temperature: 0,
-          topP: 0.8,
+          thinkingConfig: { thinkingLevel: "low" },
         }),
       }),
     );

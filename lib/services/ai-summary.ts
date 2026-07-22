@@ -1,6 +1,10 @@
 import "server-only";
 
-import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
+import {
+  getGeminiClient,
+  getGeminiModel,
+  getGeminiThinkingConfig,
+} from "@/lib/integrations/gemini";
 import { HttpError } from "@/lib/http";
 import {
   summaryActivityReferenceHref,
@@ -187,35 +191,33 @@ function buildSummaryPrompt(
   references: ActivityReference[],
   compact = false,
 ) {
-  const existingSummary = truncateField(report.summary);
   const maxSectionCount = compact ? 3 : maxSections;
   const maxItemsPerList = compact ? 5 : maxListItems;
 
   return [
-    "Create a daily work summary from the selected work items.",
-    "Return JSON only.",
-    "Use this JSON shape exactly:",
+    "You organize one employee's selected work items into a clear daily report.",
+    "Infer the relationships between items from all available titles, descriptions, notes, and statuses before choosing any section headings.",
+    "Return JSON only in this exact shape:",
     '{"sections":[{"heading":"Section title","blocks":[{"type":"paragraph","text":"Plain text","activityTokens":["ACTIVITY_1"]},{"type":"bulletedList","items":[{"text":"Plain text","activityTokens":["ACTIVITY_2"]}]},{"type":"numberedList","items":[{"text":"Plain text","activityTokens":[]}]},{"type":"blockquote","text":"Plain text","activityTokens":[]}]}]}',
     "For paragraph and blockquote blocks, use text and activityTokens.",
     "For bulletedList and numberedList blocks, use items with text and activityTokens.",
     "",
-    "Formatting intent:",
-    "- Group the selected work items into sections by the type of work they represent, and give each section a concise heading that describes that type of work.",
-    "- Do not create two sections with the same heading; combine items that share a category.",
-    "- Prefer bullets outside of short narrative context.",
-    "- Use paragraphs only for major work that needs a little explanation.",
-    "- Use blockquotes only for actual blockers, risks, or follow-up notes.",
-    "- Add activity reference tokens inline only where they support the sentence.",
-    "- Never include raw URLs, markdown, HTML, tables, code, or unknown tokens.",
+    "Grouping rules, in priority order:",
+    "- When multiple items clearly belong to the same named project, program, event, client, product, or workstream, put them in one section for that shared workstream even when the individual tasks involve different kinds of work.",
+    "- Do not split one shared workstream into separate sections merely because its items include implementation, fixes, testing, planning, documentation, or coordination.",
+    "- Never place an item under a named workstream unless its own title, description, or note supports that relationship. An item's source, position in the list, generic vocabulary, or use of the same tool is not enough.",
+    "- When no shared workstream is supported, group related items by a broad, accurate type of work. Keep unrelated outliers separate rather than forcing them into a nearby section.",
+    "- Routine event or site content changes belong under Production Updates. Do not classify substantial feature creation, restructuring, imports, major data work, or unrelated technical work as production updates.",
+    "- Use the fewest sections that remain accurate. Merge duplicate or near-duplicate sections, but never trade accuracy for fewer headings.",
+    "- Every selected work item must be represented in exactly one section, and every activity token must appear exactly once in the output.",
+    "- Before returning JSON, silently verify both directions: every item fits its section, and every section contains only items that fit it.",
     "",
-    "Work categorization:",
-    "- Generate contextually appropriate section headings from the nature of the work in the item title, description, status, and note.",
-    "- Production tasks are common. Use Production Updates specifically for routine production/event/site content update tasks.",
-    "- Headings must describe a category of work, not repeat or paraphrase one task, ticket, feature, product, tool, or implementation detail.",
-    "- Keep headings short, usually two to four words. Choose the least specific heading that still meaningfully describes every item in the section.",
-    "- Classify each item by its actual kind and purpose of work. Shared words, systems, sources, or nearby context do not by themselves make items part of the same category.",
-    "- Before returning a section, verify that every item genuinely belongs under its heading. Move an outlier to a better section rather than stretching the heading or treating it as a catch-all.",
-    "- Unrelated work must remain in separate sections. When the section limit requires broader grouping, use a broader category only if it remains accurate for every included item.",
+    "Heading rules:",
+    "- Prefer the exact concise project or workstream name when one is supported across the section's items.",
+    "- Otherwise use a broad category that truthfully covers all items in that section.",
+    "- Keep headings concise, normally two to four words, in title case.",
+    "- A heading must not be a sentence, status update, or paraphrase of one task. Do not use a task title as a heading unless that title is itself clearly the shared project or workstream name.",
+    "- Do not create multiple headings for the same project or use the same heading twice.",
     "",
     "Blocker definition:",
     "- A blocker means work is truly unable to proceed or is on hold because of missing approval, access, information, an external dependency, an outage, or an unresolved decision.",
@@ -227,33 +229,22 @@ function buildSummaryPrompt(
     "- For in-progress, open, pending, review, testing, not done, or ambiguous work, use neutral wording such as worked on, continued, advanced, reviewed, investigated, drafted, or started.",
     "- When a sentence combines items with mixed or unclear completion states, do not use a completion verb for the whole group.",
     "",
-    "Terminology grounding:",
+    "Accuracy rules:",
     "- Do not invent product, program, event, client, or workstream names.",
     "- Use specific product, program, event, client, or workstream names only when they appear in the selected work item title, description, or note.",
-    "- Do not make a task sound more specific than the selected work item text supports.",
-    "- Describing the type of work in a heading is encouraged and is not the same as inventing a name.",
+    "- Do not invent relationships, outcomes, completion states, or details that the work items do not support.",
     "",
-    "Production update policy:",
-    "- Routine production tasks are simple event/site content updates.",
-    "- If there are 1-6 routine production updates, enumerate them.",
-    "- If there are 7-15, group by event/site or update type and call out only notable examples.",
-    "- If there are 16+, summarize by category and include at most 3-5 representative examples.",
-    "- A task is not routine production just because it comes from one source. Substantial creation, restructuring, imports, or major agenda/data work should be highlighted separately.",
-    "",
-    "Preferred section order when applicable:",
-    "1. Production Updates",
-    "2. Other sections with headings generated from the selected work item context",
-    "3. Meetings, follow-ups, or event participation when applicable",
-    "4. Blockers, only when actual blockers exist",
+    "Writing and formatting:",
+    "- Write concise, professional first-person prose.",
+    "- Prefer bullets for distinct updates. Use a short paragraph when several items form one coherent outcome or need context.",
+    "- Use blockquotes only for true blockers, risks, or important follow-up notes.",
+    "- Put each activity token immediately after the statement it supports.",
+    "- Never include raw URLs, markdown, HTML, tables, code, or unknown tokens.",
     "",
     `Limits: use at most ${maxSectionCount} sections and at most ${maxItemsPerList} items in any list.`,
-    "Keep wording concise and professional in first person.",
     "",
     `Report date: ${reportDateLabel(report.reportDate)}`,
     `Work location: ${workLocationLabel(report.workLocation)}`,
-    existingSummary
-      ? `Current summary being replaced: ${existingSummary}`
-      : null,
     "",
     "Selected work items:",
     references.map(activityPromptLine).join("\n"),
@@ -484,212 +475,6 @@ function isBlockersSection(heading: string) {
   return normalized === "blocker" || normalized === "blockers";
 }
 
-// Generic, descriptive words that are allowed in a heading without needing to
-// appear verbatim in the referenced work items. These describe the *type* of
-// work (a category) rather than a specific product, program, or client name,
-// so they should survive terminology grounding. Proper nouns and invented
-// qualifiers are intentionally absent so grounding still catches them.
-const genericHeadingWords = new Set([
-  "activity",
-  "activities",
-  "agenda",
-  "blocker",
-  "blockers",
-  "bug",
-  "bugs",
-  "build",
-  "calendar",
-  "cleanup",
-  "config",
-  "configuration",
-  "content",
-  "coordination",
-  "correction",
-  "corrections",
-  "daily",
-  "data",
-  "deploy",
-  "deployment",
-  "design",
-  "development",
-  "documentation",
-  "docs",
-  "enhancement",
-  "enhancements",
-  "feature",
-  "features",
-  "fix",
-  "fixes",
-  "fixing",
-  "follow",
-  "followup",
-  "hardware",
-  "implementation",
-  "improvement",
-  "improvements",
-  "incident",
-  "incidents",
-  "infrastructure",
-  "integration",
-  "integrations",
-  "item",
-  "items",
-  "maintenance",
-  "meeting",
-  "meetings",
-  "migration",
-  "onboarding",
-  "operations",
-  "ops",
-  "planning",
-  "production",
-  "program",
-  "programs",
-  "project",
-  "projects",
-  "qa",
-  "release",
-  "releases",
-  "reporting",
-  "reports",
-  "research",
-  "review",
-  "reviews",
-  "session",
-  "sessions",
-  "setup",
-  "site",
-  "speaker",
-  "speakers",
-  "support",
-  "task",
-  "tasks",
-  "testing",
-  "up",
-  "update",
-  "updates",
-  "website",
-  "work",
-  "workflow",
-  "workstream",
-]);
-
-function comparableWords(value?: string | null) {
-  return Array.from(
-    new Set(
-      (value ?? "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, " ")
-        .split(" ")
-        .filter((word) => word.length > 2),
-    ),
-  );
-}
-
-function headingReferenceText(references: ActivityReference[]) {
-  return references
-    .map((reference) =>
-      [
-        reference.activity.title,
-        reference.activity.description,
-        reference.activity.employeeNote,
-      ]
-        .filter(Boolean)
-        .join(" "),
-    )
-    .join(" ");
-}
-
-function stripSourcePrefix(value: string) {
-  return value.replace(/^\s*[A-Z][A-Z0-9]+-\d+\s*[:\-]\s*/i, "").trim();
-}
-
-function groundedFallbackHeading(references: ActivityReference[]) {
-  const reference = references[0];
-  const sourceText =
-    reference?.activity.title ??
-    reference?.activity.description ??
-    reference?.activity.employeeNote ??
-    "";
-
-  return cleanText(stripSourcePrefix(sourceText), 80) || "Selected Work";
-}
-
-function blockReferences(
-  block: StructuredBlock,
-  referencesByToken: Map<string, ActivityReference>,
-) {
-  if (block.type === "paragraph" || block.type === "blockquote") {
-    return inlineActivityReferences(block.segments, referencesByToken);
-  }
-
-  if (block.type === "bulletedList" || block.type === "numberedList") {
-    return block.items.flatMap((item) =>
-      inlineActivityReferences(item.segments, referencesByToken),
-    );
-  }
-
-  return [];
-}
-
-function sectionReferences(
-  blocks: StructuredBlock[],
-  referencesByToken: Map<string, ActivityReference>,
-) {
-  const seen = new Set<string>();
-  const references: ActivityReference[] = [];
-
-  for (const reference of blocks.flatMap((block) =>
-    blockReferences(block, referencesByToken),
-  )) {
-    if (seen.has(reference.token)) {
-      continue;
-    }
-
-    seen.add(reference.token);
-    references.push(reference);
-  }
-
-  return references;
-}
-
-function fallbackHeadingForReferences(references: ActivityReference[]) {
-  const referenceText = headingReferenceText(references).toLowerCase();
-
-  if (referenceText.includes("production")) {
-    return "Production Updates";
-  }
-
-  return groundedFallbackHeading(references);
-}
-
-function groundedHeading(
-  heading: string,
-  blocks: StructuredBlock[],
-  referencesByToken: Map<string, ActivityReference>,
-) {
-  if (isBlockersSection(heading)) {
-    return heading;
-  }
-
-  const references = sectionReferences(blocks, referencesByToken);
-
-  if (references.length === 0) {
-    return heading;
-  }
-
-  const allowedWords = new Set(
-    comparableWords(headingReferenceText(references)),
-  );
-  const unsupportedSpecificWord = comparableWords(heading).some(
-    (word) => !genericHeadingWords.has(word) && !allowedWords.has(word),
-  );
-
-  return unsupportedSpecificWord
-    ? fallbackHeadingForReferences(references)
-    : heading;
-}
-
 function inlineHasActivityReference(
   segments: StructuredInline[],
   referencesByToken: Map<string, ActivityReference>,
@@ -851,12 +636,8 @@ function normalizeStructuredSummary(
         .map((block) => normalizeBlock(block, validTokens))
         .filter((block): block is StructuredBlock => Boolean(block))
         .slice(0, maxBlocksPerSection);
-      const safeHeading = heading
-        ? groundedHeading(heading, blocks, referencesByToken)
-        : "";
-
-      return safeHeading && blocks.length > 0
-        ? [{ heading: safeHeading, blocks }]
+      return heading && blocks.length > 0
+        ? [{ heading, blocks }]
         : [];
     })
     .map((section) => normalizeBlockerReferences(section, referencesByToken))
@@ -955,11 +736,7 @@ async function generateStructuredSummary(
       config: {
         maxOutputTokens: compact ? 2400 : 6000,
         responseMimeType: "application/json",
-        thinkingConfig: {
-          thinkingBudget: 0,
-        },
-        temperature: compact ? 0 : 0.1,
-        topP: 0.8,
+        thinkingConfig: getGeminiThinkingConfig(),
       },
     });
     const sections = normalizeStructuredSummary(result, references);

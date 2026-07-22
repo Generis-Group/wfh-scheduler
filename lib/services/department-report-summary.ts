@@ -1,6 +1,10 @@
 import "server-only";
 
-import { getGeminiClient, getGeminiModel } from "@/lib/integrations/gemini";
+import {
+  getGeminiClient,
+  getGeminiModel,
+  getGeminiThinkingConfig,
+} from "@/lib/integrations/gemini";
 import { HttpError } from "@/lib/http";
 import { summaryPlainText } from "@/lib/summary-format";
 
@@ -277,9 +281,7 @@ export async function generateDepartmentReportSummaries(
             },
             required: ["summary"],
           },
-          thinkingConfig: { thinkingBudget: 0 },
-          temperature: 0.2,
-          topP: 0.85,
+          thinkingConfig: getGeminiThinkingConfig(),
         },
       });
       const summary = parseGeneratedSummary(result, characterLimit);
