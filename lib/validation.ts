@@ -238,6 +238,11 @@ export const weeklyReportQuerySchema = z.object({
   userId: z.string().min(1),
 });
 
+export const departmentReportQuerySchema = z.object({
+  date: dateStringSchema,
+  period: z.enum(["DAILY", "WEEKLY"]),
+});
+
 export const weeklyReportListQuerySchema = z.object({
   userId: z.string().min(1),
 });

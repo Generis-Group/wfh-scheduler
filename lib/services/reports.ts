@@ -461,7 +461,9 @@ export async function getReportById(reportId: string) {
     throw new HttpError(404, "Report not found.");
   }
 
-  return reportWithActivitySourceLinks(reportWithNormalizedWorkLocation(report));
+  return reportWithActivitySourceLinks(
+    reportWithNormalizedWorkLocation(report),
+  );
 }
 
 export async function createReportRevision(
@@ -586,7 +588,9 @@ export async function updateReport(
   const fieldChanges = reportFieldChanges(report, normalizedInput);
   const hasFieldChanges = Object.values(fieldChanges).some(Boolean);
   const hasActivityChanges = activityUpdates.length > 0;
-  const hasDeletedActivities = Boolean(normalizedInput.deletedActivityIds?.length);
+  const hasDeletedActivities = Boolean(
+    normalizedInput.deletedActivityIds?.length,
+  );
   const hasManualActivities = Boolean(normalizedInput.manualActivities?.length);
 
   if (
@@ -970,6 +974,73 @@ export function reportWorkWeekRange(dateString: string) {
   const end = addReportDateDays(start, 6);
 
   return { start, end };
+}
+
+export async function getDepartmentReport(
+  dateString: string,
+  period: "DAILY" | "WEEKLY",
+  scope: ReviewScope,
+) {
+  const range =
+    period === "WEEKLY"
+      ? reportWorkWeekRange(dateString)
+      : { start: dateString, end: dateString };
+  const employeeWhere = await getReviewableEmployeeWhere(scope);
+  const employees = await prisma.user.findMany({
+    where: employeeWhere,
+    orderBy: [{ name: "asc" }, { email: "asc" }],
+    select: dashboardUserSelect,
+  });
+  const employeeIds = employees.map((employee) => employee.id);
+  const reports = employeeIds.length
+    ? await prisma.dailyReport.findMany({
+        where: {
+          userId: { in: employeeIds },
+          reportDate: {
+            gte: parseReportDate(range.start),
+            lte: parseReportDate(range.end),
+          },
+        },
+        orderBy: [{ reportDate: "asc" }, { userId: "asc" }],
+        include: dashboardReportInclude(scope),
+      })
+    : [];
+  const reportsByEmployee = new Map<string, WeeklyDashboardReport[]>();
+
+  for (const report of reports) {
+    const employeeReports = reportsByEmployee.get(report.userId) ?? [];
+    employeeReports.push(report);
+    reportsByEmployee.set(report.userId, employeeReports);
+  }
+
+  const serializedEmployees = employees.map((employee) => ({
+    user: serializeWeeklyDashboardUser(employee),
+    reports: (reportsByEmployee.get(employee.id) ?? []).map((report) =>
+      serializeWeeklyDashboardReport(report),
+    ),
+  }));
+  const submittedReports = serializedEmployees.flatMap((employee) =>
+    employee.reports.filter((report) => report.status === "SUBMITTED"),
+  );
+
+  return {
+    period,
+    startDate: range.start,
+    endDate: range.end,
+    generatedAt: new Date().toISOString(),
+    employeeCount: serializedEmployees.length,
+    submittedEmployeeCount: serializedEmployees.filter((employee) =>
+      employee.reports.some((report) => report.status === "SUBMITTED"),
+    ).length,
+    submittedReportCount: submittedReports.length,
+    activityCount: submittedReports.reduce(
+      (count, report) =>
+        count +
+        report.activities.filter((activity) => activity.selected).length,
+      0,
+    ),
+    employees: serializedEmployees,
+  };
 }
 
 function dateToReportString(value: Date) {
@@ -1484,8 +1555,9 @@ export async function listReportHistory(
     return {
       reports: reportsWithLinks,
       targetReport:
-        reportsWithLinks.find((report) => report.id === options.targetReportId) ??
-        null,
+        reportsWithLinks.find(
+          (report) => report.id === options.targetReportId,
+        ) ?? null,
       page: currentPage,
       pageSize: limit,
       totalCount,

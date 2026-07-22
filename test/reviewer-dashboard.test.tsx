@@ -61,6 +61,163 @@ afterEach(() => {
 });
 
 describe("ReviewerDashboard weekly reports", () => {
+  it("opens one department report and switches between daily and weekly", async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const request = JSON.parse(String(init?.body)) as {
+          period: "DAILY" | "WEEKLY";
+        };
+
+        return new Response(
+          JSON.stringify({
+            departmentReport: {
+              period: request.period,
+              startDate: "2026-05-11",
+              endDate:
+                request.period === "WEEKLY" ? "2026-05-17" : "2026-05-11",
+              generatedAt: "2026-05-13T21:00:00.000Z",
+              employeeCount: 1,
+              submittedEmployeeCount: 1,
+              submittedReportCount: 1,
+              activityCount: 0,
+              departmentSummaries: [
+                {
+                  department: "Operations",
+                  summary:
+                    "The Operations team completed its planning work and aligned on the next priorities.",
+                  employeeCount: 1,
+                  submittedReportCount: 1,
+                  characterLimit: request.period === "DAILY" ? 2400 : 3600,
+                },
+              ],
+              employees: [
+                {
+                  user: employee,
+                  reports: [
+                    {
+                      ...submittedReport,
+                      reportDate: "2026-05-11",
+                      summary: "Completed the department planning notes.",
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ReviewerDashboard
+        rows={[{ user: employee, report: submittedReport }]}
+        metrics={{ ...metrics, submitted: 1 }}
+        date="2026-05-13"
+        reviewerId="reviewer-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Department report" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "All Department Reports" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Operations" })).toBeTruthy();
+    expect(screen.getByText("Alex Employee")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "The Operations team completed its planning work and aligned on the next priorities.",
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Weekly" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        "/api/review/department-report",
+        expect.objectContaining({
+          body: JSON.stringify({
+            date: "2026-05-13",
+            period: "WEEKLY",
+          }),
+        }),
+      );
+    });
+    expect(await screen.findByText("May 11, 2026 - May 17, 2026")).toBeTruthy();
+  });
+
+  it("expands an AI department summary only when its rendered text overflows", async () => {
+    const scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollHeight", "get")
+      .mockReturnValue(420);
+    const clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, "clientHeight", "get")
+      .mockReturnValue(220);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            departmentReport: {
+              period: "DAILY",
+              startDate: "2026-05-13",
+              endDate: "2026-05-13",
+              generatedAt: "2026-05-13T21:00:00.000Z",
+              employeeCount: 1,
+              submittedEmployeeCount: 1,
+              submittedReportCount: 1,
+              activityCount: 0,
+              departmentSummaries: [
+                {
+                  department: "Operations",
+                  summary: "A detailed conversational department summary.",
+                  employeeCount: 1,
+                  submittedReportCount: 1,
+                  characterLimit: 2400,
+                },
+              ],
+              employees: [{ user: employee, reports: [submittedReport] }],
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }),
+    );
+
+    render(
+      <ReviewerDashboard
+        rows={[{ user: employee, report: submittedReport }]}
+        metrics={{ ...metrics, submitted: 1 }}
+        date="2026-05-13"
+        reviewerId="reviewer-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Department report" }));
+    const expandButton = await screen.findByRole("button", {
+      name: "Read full summary",
+    });
+    expect(expandButton.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(expandButton);
+    expect(
+      screen
+        .getByRole("button", { name: "Show less" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+
+    scrollHeightSpy.mockRestore();
+    clientHeightSpy.mockRestore();
+  });
+
   it("shows a filtered work location breakdown with WFH warnings", () => {
     const wfhReport = {
       ...submittedReport,

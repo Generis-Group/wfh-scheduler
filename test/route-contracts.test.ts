@@ -52,6 +52,17 @@ vi.mock("@/lib/services/reports", () => ({
     weekEnd: "2026-05-17",
     reports: [],
   })),
+  getDepartmentReport: vi.fn(async () => ({
+    period: "DAILY",
+    startDate: "2026-05-13",
+    endDate: "2026-05-13",
+    generatedAt: "2026-05-13T21:00:00.000Z",
+    employeeCount: 1,
+    submittedEmployeeCount: 1,
+    submittedReportCount: 1,
+    activityCount: 0,
+    employees: [],
+  })),
   listSavedWeeklyReportsForEmployee: vi.fn(async () => ({
     employee: { id: "user-1", name: "Employee", role: "EMPLOYEE" },
     reports: [
@@ -97,6 +108,18 @@ vi.mock("@/lib/services/ai-summary", () => ({
   generateDailyReportSummaryWithAI: vi.fn(async () => ({
     summary: "Summarized with AI.",
   })),
+}));
+
+vi.mock("@/lib/services/department-report-summary", () => ({
+  generateDepartmentReportSummaries: vi.fn(async () => [
+    {
+      department: "Operations",
+      summary: "The team completed its main priorities.",
+      employeeCount: 1,
+      submittedReportCount: 1,
+      characterLimit: 2400,
+    },
+  ]),
 }));
 
 vi.mock("@/lib/services/activity", () => ({
@@ -1210,6 +1233,51 @@ describe("route contracts", () => {
         weekStart: "2026-05-11",
         weekEnd: "2026-05-17",
         reports: [],
+      },
+    });
+  });
+
+  it("returns one scoped department report for a reviewer", async () => {
+    const reports = await import("@/lib/services/reports");
+    const summaries = await import("@/lib/services/department-report-summary");
+    const { POST } = await import("@/app/api/review/department-report/route");
+    vi.mocked(reports.getDepartmentReport).mockClear();
+    vi.mocked(summaries.generateDepartmentReportSummaries).mockClear();
+
+    const response = await POST(
+      new Request("http://localhost/api/review/department-report", {
+        method: "POST",
+        body: JSON.stringify({
+          date: "2026-05-13",
+          period: "DAILY",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(reports.getDepartmentReport).toHaveBeenCalledWith(
+      "2026-05-13",
+      "DAILY",
+      { userId: "reviewer-1", roles: ["REVIEWER"] },
+    );
+    expect(summaries.generateDepartmentReportSummaries).toHaveBeenCalledWith(
+      "reviewer-1",
+      expect.objectContaining({
+        period: "DAILY",
+        employeeCount: 1,
+      }),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      departmentReport: {
+        period: "DAILY",
+        employeeCount: 1,
+        submittedReportCount: 1,
+        departmentSummaries: [
+          {
+            department: "Operations",
+            summary: "The team completed its main priorities.",
+          },
+        ],
       },
     });
   });

@@ -22,6 +22,7 @@ import {
   MoreHorizontal,
   RotateCcw,
   ShieldCheck,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import type { FormEvent, MouseEvent, ReactNode } from "react";
@@ -183,6 +184,35 @@ type WeeklyReportArchiveState =
       employee: DashboardUser;
       message: string;
     };
+
+type DepartmentReportPeriod = "DAILY" | "WEEKLY";
+
+type DepartmentReportData = {
+  period: DepartmentReportPeriod;
+  startDate: string | Date;
+  endDate: string | Date;
+  generatedAt: string | Date;
+  employeeCount: number;
+  submittedEmployeeCount: number;
+  submittedReportCount: number;
+  activityCount: number;
+  departmentSummaries: Array<{
+    department: string;
+    summary: string | null;
+    employeeCount: number;
+    submittedReportCount: number;
+    characterLimit: number;
+  }>;
+  employees: Array<{
+    user: DashboardUser;
+    reports: DashboardReport[];
+  }>;
+};
+
+type DepartmentReportState =
+  | { status: "loading"; period: DepartmentReportPeriod }
+  | { status: "ready"; data: DepartmentReportData }
+  | { status: "error"; period: DepartmentReportPeriod; message: string };
 
 type EmployeeStatusFilter = "ALL" | "SUBMITTED" | "MISSING";
 type EmployeeRowStatus = DashboardReport["status"] | "MISSING";
@@ -508,12 +538,18 @@ function reportPdfStatusTone(status: string): ReportPdfStatusTone {
 }
 
 function userDepartmentLabel(user: DashboardUser) {
-  const departments =
+  return userDepartmentLabels(user).join(", ");
+}
+
+function userDepartmentLabels(user: DashboardUser) {
+  const departments = new Set(
     user.departments
       ?.filter((membership) => (membership.role ?? "EMPLOYEE") === "EMPLOYEE")
       ?.map((membership) => membership.department?.name)
-      .filter(Boolean) ?? [];
-  return departments.length ? departments.join(", ") : "No department";
+      .filter((name): name is string => Boolean(name)) ?? [],
+  );
+
+  return departments.size ? [...departments] : ["No department"];
 }
 
 function hasDashboardRole(user: DashboardUser, role: string) {
@@ -964,6 +1000,8 @@ export function ReviewerDashboard({
     useState<WeeklyReportState | null>(null);
   const [weeklyReportArchiveState, setWeeklyReportArchiveState] =
     useState<WeeklyReportArchiveState | null>(null);
+  const [departmentReportState, setDepartmentReportState] =
+    useState<DepartmentReportState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSendingDigest, setIsSendingDigest] = useState(false);
   const [remindingUserId, setRemindingUserId] = useState<string | null>(null);
@@ -1098,6 +1136,7 @@ export function ReviewerDashboard({
     unsavedReviewNoteRef.current = false;
     setWeeklyReportState(null);
     setWeeklyReportArchiveState(null);
+    setDepartmentReportState(null);
     setSelectedReportIds([]);
     setAdminReportAction(null);
     setRowActionMenu(null);
@@ -1448,6 +1487,43 @@ export function ReviewerDashboard({
     }
 
     setWeeklyReportState({ status: "ready", data: body.weeklyReport! });
+  }
+
+  async function openDepartmentReport(period: DepartmentReportPeriod) {
+    setNotice(null);
+    setActiveReportUserId(null);
+    updateOpenedReportParam(null);
+    setWeeklyReportState(null);
+    setWeeklyReportArchiveState(null);
+    setRowActionMenu(null);
+    setDepartmentReportState({ status: "loading", period });
+
+    let response: Response;
+    let body: { error?: string; departmentReport?: DepartmentReportData };
+
+    try {
+      response = await fetch("/api/review/department-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: currentReviewDate, period }),
+      });
+      body = await response.json().catch(() => ({}));
+    } catch {
+      const message =
+        "Unable to load the department report. Check your connection and try again.";
+      setDepartmentReportState({ status: "error", period, message });
+      setNotice(message);
+      return;
+    }
+
+    if (!response.ok || !body.departmentReport) {
+      const message = body.error ?? "Unable to load the department report.";
+      setDepartmentReportState({ status: "error", period, message });
+      setNotice(message);
+      return;
+    }
+
+    setDepartmentReportState({ status: "ready", data: body.departmentReport });
   }
 
   async function openWeeklyReportArchive(row: Row) {
@@ -1856,7 +1932,21 @@ export function ReviewerDashboard({
 
   return (
     <>
-      {weeklyReportArchiveState ? (
+      {departmentReportState ? (
+        <DepartmentReportPage
+          state={departmentReportState}
+          onBack={() => setDepartmentReportState(null)}
+          onPeriodChange={(period) => {
+            void openDepartmentReport(period);
+          }}
+          onPrint={() => {
+            window.print();
+            setNotice(
+              "Use the browser print dialog to save this department report as PDF.",
+            );
+          }}
+        />
+      ) : weeklyReportArchiveState ? (
         <WeeklyReportArchivePage
           state={weeklyReportArchiveState}
           onBack={() => setWeeklyReportArchiveState(null)}
@@ -1912,6 +2002,16 @@ export function ReviewerDashboard({
               />
 
               <div className="flex flex-wrap items-center gap-2 min-[760px]:flex-nowrap">
+                <Button
+                  variant="outline"
+                  className="h-10 min-w-[142px] shrink-0 justify-center rounded-lg bg-white px-3 text-xs shadow-none ring-1 ring-border dark:bg-background dark:ring-border"
+                  onClick={() => {
+                    void openDepartmentReport("DAILY");
+                  }}
+                >
+                  <ListChecks className="mr-1.5 h-3.5 w-3.5" />
+                  Department report
+                </Button>
                 <Button
                   variant="outline"
                   className="h-10 min-w-[118px] shrink-0 justify-center rounded-lg bg-white px-3 text-xs shadow-none ring-1 ring-border dark:bg-background dark:ring-border"
@@ -2200,7 +2300,9 @@ export function ReviewerDashboard({
                           <td className="hidden px-2 py-2.5 min-[1180px]:table-cell">
                             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                               {flags.length === 0 ? (
-                                <span className="text-muted-foreground-subtle">-</span>
+                                <span className="text-muted-foreground-subtle">
+                                  -
+                                </span>
                               ) : (
                                 flags.map((flag) => (
                                   <span
@@ -3101,6 +3203,339 @@ function WeeklyReportArchivePage({
           </div>
         )}
       </ReportSurface>
+    </main>
+  );
+}
+
+function ExpandableDepartmentSummary({ summary }: { summary: string }) {
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [canExpand, setCanExpand] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+
+    function measure() {
+      const content = contentRef.current;
+
+      if (content) {
+        setCanExpand(content.scrollHeight > content.clientHeight + 1);
+      }
+    }
+
+    const frame = window.requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", measure);
+    };
+  }, [summary]);
+
+  return (
+    <div className="relative">
+      <div
+        ref={contentRef}
+        className={cn(
+          "whitespace-pre-line text-sm leading-6 text-foreground print:max-h-none print:overflow-visible",
+          expanded ? "max-h-none" : "max-h-[220px] overflow-hidden",
+        )}
+      >
+        {summary}
+      </div>
+      {canExpand ? (
+        <button
+          type="button"
+          className="report-pdf-screen-only relative mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-subtle-foreground"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          {expanded ? "Show less" : "Read full summary"}
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 transition-transform",
+              expanded && "rotate-180",
+            )}
+            aria-hidden="true"
+          />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function DepartmentReportPage({
+  state,
+  onBack,
+  onPeriodChange,
+  onPrint,
+}: {
+  state: DepartmentReportState;
+  onBack: () => void;
+  onPeriodChange: (period: DepartmentReportPeriod) => void;
+  onPrint: () => void;
+}) {
+  const activePeriod =
+    state.status === "ready" ? state.data.period : state.period;
+
+  if (state.status !== "ready") {
+    return (
+      <main className="reference-page report-pdf-page min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col">
+        <button
+          className="report-pdf-back mb-3 inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-primary hover:text-primary-subtle-foreground"
+          onClick={onBack}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to review dashboard
+        </button>
+        <ReportSurface className="mx-auto flex min-h-[260px] w-full max-w-[980px] items-center justify-center">
+          <div className="text-center">
+            {state.status === "loading" ? (
+              <>
+                <Loader2 className="mx-auto h-7 w-7 animate-spin text-primary" />
+                <h1 className="mt-4 text-lg font-semibold text-foreground">
+                  Loading department report
+                </h1>
+              </>
+            ) : (
+              <>
+                <h1 className="text-lg font-semibold text-foreground">
+                  Unable to load department report
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {state.message}
+                </p>
+              </>
+            )}
+          </div>
+        </ReportSurface>
+      </main>
+    );
+  }
+
+  const { data } = state;
+  const groups = new Map<
+    string,
+    Array<{ user: DashboardUser; reports: DashboardReport[] }>
+  >();
+
+  for (const employee of data.employees) {
+    for (const department of userDepartmentLabels(employee.user)) {
+      const group = groups.get(department) ?? [];
+      group.push(employee);
+      groups.set(department, group);
+    }
+  }
+
+  const departments = [...groups.entries()].sort(([first], [second]) =>
+    first.localeCompare(second),
+  );
+  const missingCount = data.employeeCount - data.submittedEmployeeCount;
+  const reportLabel = data.period === "DAILY" ? "Daily" : "Weekly";
+  const periodLabel =
+    data.period === "DAILY"
+      ? formatShortDate(data.startDate)
+      : formatWeekRange(data.startDate, data.endDate);
+
+  return (
+    <main className="reference-page reference-page-contained report-pdf-page bg-surface-subtle min-[1024px]:flex min-[1024px]:h-full min-[1024px]:min-h-0 min-[1024px]:flex-col dark:bg-background">
+      <div className="reference-row-scroll min-[1024px]:min-h-0 min-[1024px]:w-full min-[1024px]:flex-1 min-[1024px]:pr-1">
+        <button
+          className="report-pdf-back mb-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary-subtle-foreground"
+          onClick={onBack}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to review dashboard
+        </button>
+
+        <article className="report-pdf-document mx-auto max-w-[1100px] rounded-xl border border-border bg-white p-5 shadow-[0_12px_38px_rgba(15,23,42,0.07)] dark:bg-card min-[760px]:p-7">
+          <header className="report-pdf-header flex flex-col gap-4 border-b border-border pb-5 min-[760px]:flex-row min-[760px]:items-start min-[760px]:justify-between">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary-subtle-foreground">
+                {reportLabel} reviewer report
+              </p>
+              <h1 className="mt-1 text-2xl font-semibold leading-tight text-foreground min-[760px]:text-[28px]">
+                All Department Reports
+              </h1>
+              <p className="mt-1 text-sm text-foreground-muted">
+                {periodLabel}
+              </p>
+            </div>
+
+            <div className="report-pdf-actions flex flex-wrap items-center gap-2">
+              <div
+                className="grid h-10 grid-cols-2 rounded-lg bg-background p-0.5 ring-1 ring-border"
+                role="group"
+                aria-label="Report period"
+              >
+                {(["DAILY", "WEEKLY"] as const).map((period) => (
+                  <button
+                    key={period}
+                    type="button"
+                    className={cn(
+                      "rounded-md px-3 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                      activePeriod === period &&
+                        "bg-primary-subtle text-primary shadow-sm",
+                    )}
+                    aria-pressed={activePeriod === period}
+                    onClick={() => {
+                      if (activePeriod !== period) {
+                        onPeriodChange(period);
+                      }
+                    }}
+                  >
+                    {titleCase(period)}
+                  </button>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                className="h-10 rounded-lg bg-white px-4 text-sm font-semibold text-primary ring-1 ring-border dark:bg-background"
+                onClick={onPrint}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download PDF
+              </Button>
+            </div>
+          </header>
+
+          <section
+            className="grid gap-px overflow-hidden border-b border-border bg-border min-[640px]:grid-cols-4"
+            aria-label="Department report overview"
+          >
+            {[
+              [
+                "Employees reporting",
+                String(data.submittedEmployeeCount) +
+                  " of " +
+                  String(data.employeeCount),
+              ],
+              ["Submitted reports", String(data.submittedReportCount)],
+              ["Work items", String(data.activityCount)],
+              ["No submission", String(missingCount)],
+            ].map(([label, value]) => (
+              <div key={label} className="bg-white px-3 py-4 dark:bg-card">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {label}
+                </p>
+                <p className="mt-1 text-xl font-semibold text-foreground">
+                  {value}
+                </p>
+              </div>
+            ))}
+          </section>
+
+          <div className="divide-y divide-border">
+            {departments.map(([department, employees]) => {
+              const departmentReports = employees.flatMap((employee) =>
+                employee.reports.filter(
+                  (report) => report.status === "SUBMITTED",
+                ),
+              );
+              const generatedSummary = data.departmentSummaries?.find(
+                (summary) => summary.department === department,
+              );
+
+              return (
+                <section key={department} className="py-5 first:pt-5">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h2 className="text-lg font-semibold text-foreground">
+                      {department}
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      {employees.length}{" "}
+                      {employees.length === 1 ? "employee" : "employees"} ·{" "}
+                      {departmentReports.length} submitted
+                    </p>
+                  </div>
+
+                  <div className="mt-4">
+                    {generatedSummary?.summary ? (
+                      <div>
+                        <p className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-primary-subtle-foreground">
+                          <Sparkles
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
+                          AI department summary
+                        </p>
+                        <ExpandableDepartmentSummary
+                          summary={generatedSummary.summary}
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No submitted reports to summarize for this period.
+                      </p>
+                    )}
+
+                    {departmentReports.length > 0 ? (
+                      <details className="report-pdf-screen-only mt-4 border-t border-border/80 pt-3">
+                        <summary className="cursor-pointer text-xs font-semibold text-primary hover:text-primary-subtle-foreground">
+                          Source reports ({departmentReports.length})
+                        </summary>
+                        <div className="mt-3 grid gap-3 min-[680px]:grid-cols-2">
+                          {employees.map((employee) => {
+                            const submittedReports = employee.reports.filter(
+                              (report) => report.status === "SUBMITTED",
+                            );
+
+                            return submittedReports.length > 0 ? (
+                              <div key={employee.user.id} className="min-w-0">
+                                <p className="text-xs font-semibold text-foreground">
+                                  {userLabel(employee.user)}
+                                </p>
+                                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                                  {submittedReports.map((report) => (
+                                    <a
+                                      key={report.id}
+                                      href={
+                                        "/review?date=" +
+                                        encodeURIComponent(
+                                          dateInputValue(
+                                            report.reportDate ?? data.startDate,
+                                          ),
+                                        ) +
+                                        "&reportId=" +
+                                        encodeURIComponent(report.id)
+                                      }
+                                      className="text-xs font-medium text-primary hover:text-primary-subtle-foreground"
+                                    >
+                                      {data.period === "WEEKLY"
+                                        ? formatWeekdayShortDate(
+                                            report.reportDate,
+                                          )
+                                        : "View report"}
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null;
+                          })}
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+
+          {departments.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              No employees are visible in your reviewer scope.
+            </div>
+          ) : null}
+
+          <footer className="report-pdf-footer flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+              Only visible to reviewers and admins
+            </span>
+            <span>Generated {formatTimestamp(data.generatedAt)}</span>
+          </footer>
+        </article>
+      </div>
     </main>
   );
 }
