@@ -43,6 +43,30 @@ export type GmailThreadEvidence = {
   messages: GmailMessageEvidence[];
 };
 
+export function gmailEvidenceSnapshotHash(threads: GmailThreadEvidence[]) {
+  const snapshot = [...threads]
+    .sort((first, second) => first.threadId.localeCompare(second.threadId))
+    .map((thread) => ({
+      threadId: thread.threadId,
+      subject: thread.subject,
+      messages: [...thread.messages]
+        .sort((first, second) => first.id.localeCompare(second.id))
+        .map((message) => ({
+          id: message.id,
+          date: message.date.toISOString(),
+          subject: message.subject,
+          text: message.text,
+          isSentByUser: message.isSentByUser === true,
+          senderDomains: [...message.senderDomains].sort(),
+          recipientDomains: [...message.recipientDomains].sort(),
+        })),
+    }));
+
+  return createHash("sha256")
+    .update(JSON.stringify(snapshot))
+    .digest("hex");
+}
+
 type GmailExtractionItem = {
   threadId: string;
   messageIds: string[];
@@ -774,6 +798,7 @@ function sourceIdForItem(item: GmailExtractionItem) {
 function activityFromItem(
   item: GmailExtractionItem,
   threadsById: Map<string, GmailThreadEvidence>,
+  evidenceSnapshotHash: string,
 ): NormalizedActivity | null {
   const thread = threadsById.get(item.threadId);
 
@@ -845,6 +870,7 @@ function activityFromItem(
       confidence: item.confidence,
       reason: item.reason,
       reviewRequired: !selected,
+      evidenceSnapshotHash,
     },
   };
 }
@@ -1437,9 +1463,12 @@ export async function extractGmailActivitiesWithAI(
   }
 
   const threadsById = threadEvidenceById(threads);
+  const evidenceSnapshotHash = gmailEvidenceSnapshotHash(threads);
 
   const activities = items
-    .map((item) => activityFromItem(item, threadsById))
+    .map((item) =>
+      activityFromItem(item, threadsById, evidenceSnapshotHash),
+    )
     .filter((activity): activity is NormalizedActivity => Boolean(activity));
 
   return collapseRepeatedGmailActivities(activities);

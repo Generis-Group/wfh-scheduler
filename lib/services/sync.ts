@@ -33,6 +33,7 @@ import { getCompanySettings } from "@/lib/services/company-settings";
 import {
   dedupeGmailActivities,
   extractGmailActivitiesWithAI,
+  gmailEvidenceSnapshotHash,
   gmailThreadEvidence,
   type GmailThreadEvidence,
 } from "@/lib/services/gmail-ai-import";
@@ -1589,20 +1590,7 @@ export async function syncGmail(
         const evidence = threads
           .map((thread) => gmailThreadEvidence(thread, start, end))
           .filter((thread): thread is GmailThreadEvidence => Boolean(thread));
-
-        await emitSyncProgress(options, {
-          stage: "finding",
-          message: `Classifying ${evidence.length} Gmail thread${evidence.length === 1 ? "" : "s"} with AI...`,
-          current: evidence.length,
-          total: evidence.length,
-        });
-        const extractedActivities = await extractGmailActivitiesWithAI(
-          userId,
-          dateString,
-          evidence,
-          start,
-          end,
-        );
+        const evidenceSnapshotHash = gmailEvidenceSnapshotHash(evidence);
         const existingActivities = await prisma.activityItem.findMany({
           where: {
             userId,
@@ -1617,10 +1605,72 @@ export async function syncGmail(
             sourceUrl: true,
             title: true,
             description: true,
+            status: true,
+            startedAt: true,
+            endedAt: true,
+            durationMinutes: true,
+            selected: true,
             metadata: true,
             staleAt: true,
           },
         });
+        const activeGmailActivities = existingActivities.filter(
+          (activity) => activity.source === "GMAIL" && activity.staleAt == null,
+        );
+        const canReuseGmailExtraction =
+          activeGmailActivities.length > 0 &&
+          activeGmailActivities.every((activity) => {
+            const metadata =
+              activity.metadata &&
+              typeof activity.metadata === "object" &&
+              !Array.isArray(activity.metadata)
+                ? (activity.metadata as Record<string, unknown>)
+                : null;
+
+            return metadata?.evidenceSnapshotHash === evidenceSnapshotHash;
+          });
+
+        await emitSyncProgress(options, {
+          stage: "finding",
+          message: canReuseGmailExtraction
+            ? "Reusing unchanged Gmail analysis..."
+            : `Classifying ${evidence.length} Gmail thread${evidence.length === 1 ? "" : "s"} with AI...`,
+          current: evidence.length,
+          total: evidence.length,
+        });
+        const extractedActivities = canReuseGmailExtraction
+          ? activeGmailActivities.flatMap((activity) =>
+              activity.sourceId
+                ? [
+                    {
+                      source: "GMAIL" as const,
+                      sourceId: activity.sourceId,
+                      sourceContainerId: activity.sourceContainerId,
+                      sourceUrl: activity.sourceUrl,
+                      title: activity.title,
+                      description: activity.description,
+                      status: activity.status,
+                      startedAt: activity.startedAt,
+                      endedAt: activity.endedAt,
+                      durationMinutes: activity.durationMinutes,
+                      selected: activity.selected,
+                      metadata:
+                        activity.metadata &&
+                        typeof activity.metadata === "object" &&
+                        !Array.isArray(activity.metadata)
+                          ? (activity.metadata as Record<string, unknown>)
+                          : undefined,
+                    },
+                  ]
+                : [],
+            )
+          : await extractGmailActivitiesWithAI(
+              userId,
+              dateString,
+              evidence,
+              start,
+              end,
+            );
         const activities = dedupeGmailActivities(
           extractedActivities,
           existingActivities,

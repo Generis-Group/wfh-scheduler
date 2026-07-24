@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { NormalizedActivity } from "@/lib/normalizers";
+import { gmailEvidenceSnapshotHash } from "@/lib/services/gmail-ai-import";
 
 vi.mock("server-only", () => ({}));
 
@@ -1663,6 +1664,118 @@ describe("sync service pagination", () => {
       "user-1",
       "2026-05-14",
       [gmailActivity],
+    );
+  });
+
+  it("reuses Gmail extraction when the source evidence has not changed", async () => {
+    const messageDate = new Date("2026-05-14T14:00:00.000Z");
+    const bodyText = "Drafted the client rollout follow-up.";
+    const bodyData = Buffer.from(bodyText).toString("base64url");
+    const evidenceSnapshotHash = gmailEvidenceSnapshotHash([
+      {
+        threadId: "thread-1",
+        subject: "Client rollout",
+        messages: [
+          {
+            id: "message-1",
+            threadId: "thread-1",
+            date: messageDate,
+            subject: "Client rollout",
+            text: bodyText,
+            isSentByUser: true,
+            senderDomains: ["generisgp.com"],
+            recipientDomains: ["example.com"],
+          },
+        ],
+      },
+    ]);
+    const existingGmailActivity = {
+      id: "gmail-activity-1",
+      source: "GMAIL",
+      sourceId: "thread:thread-1:candidate:stable",
+      sourceContainerId: "thread-1",
+      sourceUrl: "https://mail.google.com/mail/u/0/#all/thread-1",
+      title: "Draft client rollout follow-up",
+      description: "Drafted the client rollout follow-up.",
+      status: null,
+      startedAt: messageDate,
+      endedAt: messageDate,
+      durationMinutes: null,
+      selected: true,
+      metadata: {
+        threadId: "thread-1",
+        messageIds: ["message-1"],
+        evidenceSnapshotHash,
+      },
+      staleAt: null,
+    };
+    const threadsList = vi.fn(async () => ({
+      data: { threads: [{ id: "thread-1" }] },
+    }));
+    const threadsGet = vi.fn(async () => ({
+      data: {
+        id: "thread-1",
+        messages: [
+          {
+            id: "message-1",
+            threadId: "thread-1",
+            labelIds: ["SENT"],
+            internalDate: String(messageDate.getTime()),
+            payload: {
+              headers: [
+                { name: "Subject", value: "Client rollout" },
+                {
+                  name: "From",
+                  value: "Employee <employee@generisgp.com>",
+                },
+                { name: "To", value: "Client <client@example.com>" },
+              ],
+              parts: [{ mimeType: "text/plain", body: { data: bodyData } }],
+            },
+          },
+        ],
+      },
+    }));
+    mockActivityItemFindMany.mockResolvedValue([existingGmailActivity]);
+    mockGetGoogleServices.mockResolvedValue({
+      calendar: {},
+      gmail: {
+        users: {
+          threads: {
+            list: threadsList,
+            get: threadsGet,
+          },
+        },
+      },
+      tasks: {},
+    });
+
+    const { syncGmail } = await import("@/lib/services/sync");
+    await syncGmail("user-1", "2026-05-14");
+
+    expect(mockExtractGmailActivitiesWithAI).not.toHaveBeenCalled();
+    expect(mockDedupeGmailActivities).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          source: "GMAIL",
+          sourceId: "thread:thread-1:candidate:stable",
+          title: "Draft client rollout follow-up",
+        }),
+      ],
+      [existingGmailActivity],
+      expect.arrayContaining([
+        expect.objectContaining({ threadId: "thread-1" }),
+      ]),
+    );
+    expect(mockUpsertImportedActivities).toHaveBeenCalledWith(
+      "GMAIL",
+      "user-1",
+      "2026-05-14",
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceId: "thread:thread-1:candidate:stable",
+        }),
+      ]),
     );
   });
 
